@@ -1,0 +1,26 @@
+name: Release Assets
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  package-component:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Create component archive
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          zip -r "groq-${RELEASE_TAG}.zip" custom_components/groq
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v3
+        with:
+          files: groq-${{ github.ref_name }}.zip

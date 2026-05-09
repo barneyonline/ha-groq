@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest an improvement for the Groq integration.
+title: "[Feature]: "
+labels: ["enhancement", "status/needs-triage"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Setup, API key, reauthentication
+        - Model or voice selection
+        - Speech generation API request
+        - Audio normalization
+        - Diagnostics
+        - Documentation
+        - Developer workflow / repository tooling
+        - Other / unsure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What workflow or limitation should this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true

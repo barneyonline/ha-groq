@@ -1,0 +1,86 @@
+"""Custom integration for Groq."""
+
+from __future__ import annotations
+
+import logging
+
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.core import HomeAssistant
+
+from .const import DOMAIN, UNIQUE_ID
+from .runtime import GroqConfigEntry, build_runtime
+from .services import async_register_services, async_unregister_services
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool:
+    """Set up entities."""
+    runtime = build_runtime(hass, entry)
+    entry.runtime_data = runtime
+
+    # Reload the entry when options change so updates (like cache size)
+    # take effect immediately without requiring a restart.
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    if hasattr(hass, "services"):
+        await async_register_services(hass)
+    # Service subentries determine which HA platforms are needed; account-only
+    # entries do not create entities until the user adds at least one service.
+    await hass.config_entries.async_forward_entry_setups(
+        entry, runtime.feature_registry.enabled_platforms()
+    )
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool:
+    """Unload a config entry."""
+    runtime = getattr(entry, "runtime_data", None)
+    platforms = runtime.feature_registry.enabled_platforms() if runtime else []
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
+    if unload_ok:
+        if hasattr(hass, "services") and not _has_other_loaded_entries(hass, entry):
+            await async_unregister_services(hass)
+    return unload_ok
+
+
+def _has_other_loaded_entries(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Return whether another Groq config entry is still loaded."""
+    async_entries = getattr(hass.config_entries, "async_entries", None)
+    if async_entries is None:
+        return False
+    for other_entry in async_entries(DOMAIN):
+        if other_entry.entry_id == entry.entry_id:
+            continue
+        if (
+            getattr(other_entry, "state", ConfigEntryState.LOADED)
+            == ConfigEntryState.LOADED
+        ):
+            return True
+    return False
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update by reloading the entry."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate old entry data to new format.
+
+    - Move legacy UNIQUE_ID stored in data to entry.unique_id
+    """
+    # If the entry already has a unique_id, nothing to do
+    if entry.unique_id:
+        return True
+
+    # Migrate legacy unique id
+    if isinstance(entry.data, dict) and UNIQUE_ID in entry.data:
+        new_data = dict(entry.data)
+        unique_id = new_data.pop(UNIQUE_ID)
+        _LOGGER.debug("Migrating config entry to set unique_id and clean data")
+        hass.config_entries.async_update_entry(
+            entry, data=new_data, unique_id=unique_id
+        )
+        return True
+
+    return True

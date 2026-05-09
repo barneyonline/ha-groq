@@ -1,0 +1,70 @@
+levels:
+  bronze:
+    required:
+      - config-flow
+      - dependency-transparency
+      - docs-high-level-description
+      - docs-installation-instructions
+      - entity-unique-id
+      - has-entity-name
+      - reauthentication-flow
+      - test-coverage
+
+rules:
+  config-flow:
+    status: done
+    references:
+      code:
+        - custom_components/groq/config_flow.py
+      tests:
+        - tests/components/groq/test_groq.py
+      docs:
+        - README.md
+  dependency-transparency:
+    status: done
+    comment: The manifest has no third-party requirements; network I/O uses Home Assistant aiohttp sessions.
+    references:
+      code:
+        - custom_components/groq/manifest.json
+        - custom_components/groq/tts_engine.py
+      tests:
+        - tests/components/groq/test_manifest.py
+  docs-high-level-description:
+    status: done
+    references:
+      docs:
+        - README.md
+  docs-installation-instructions:
+    status: done
+    references:
+      docs:
+        - README.md
+  entity-unique-id:
+    status: done
+    references:
+      code:
+        - custom_components/groq/tts.py
+      tests:
+        - tests/components/groq/test_groq.py
+  has-entity-name:
+    status: done
+    references:
+      code:
+        - custom_components/groq/tts.py
+      tests:
+        - tests/components/groq/test_groq.py
+  reauthentication-flow:
+    status: done
+    references:
+      code:
+        - custom_components/groq/config_flow.py
+        - custom_components/groq/tts_engine.py
+      tests:
+        - tests/components/groq/test_groq.py
+  test-coverage:
+    status: done
+    references:
+      tests:
+        - tests/components/groq/test_groq.py
+        - tests/components/groq/test_manifest.py
+        - tests/scripts/test_validate_quality_scale.py

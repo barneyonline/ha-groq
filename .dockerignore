@@ -1,0 +1,14 @@
+.git
+.pytest_cache
+.ruff_cache
+.mypy_cache
+__pycache__
+*.pyc
+.coverage
+coverage.xml
+junit.xml
+.ha-config
+.DS_Store
+custom_components/.DS_Store
+custom_components/groq/.DS_Store
+devtools/docker/.pytest_cache

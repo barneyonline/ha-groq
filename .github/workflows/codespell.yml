@@ -1,0 +1,73 @@
+name: Codespell
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "custom_components/groq/**/*.py"
+      - "custom_components/groq/**/*.yaml"
+      - "custom_components/groq/**/*.yml"
+      - "custom_components/groq/strings.json"
+      - "custom_components/groq/translations/en*.json"
+      - "scripts/**/*.py"
+      - "tests/components/groq/**/*.py"
+      - "tests/scripts/**/*.py"
+      - ".codespellignore"
+      - ".pre-commit-config.yaml"
+      - "*.md"
+      - "*.yaml"
+      - "*.yml"
+      - "**/*.md"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - ".github/workflows/codespell.yml"
+  push:
+    branches:
+      - main
+      - "release/**"
+    paths:
+      - "custom_components/groq/**/*.py"
+      - "custom_components/groq/**/*.yaml"
+      - "custom_components/groq/**/*.yml"
+      - "custom_components/groq/strings.json"
+      - "custom_components/groq/translations/en*.json"
+      - "scripts/**/*.py"
+      - "tests/components/groq/**/*.py"
+      - "tests/scripts/**/*.py"
+      - ".codespellignore"
+      - ".pre-commit-config.yaml"
+      - "*.md"
+      - "*.yaml"
+      - "*.yml"
+      - "**/*.md"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - ".github/workflows/codespell.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codespell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Run codespell in Home Assistant Docker
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            changed_files="$(git diff --name-only "origin/${{ github.base_ref }}" HEAD)"
+            if printf '%s\n' "$changed_files" | grep -Eq '^(\.codespellignore|\.pre-commit-config\.yaml)$'; then
+              scripts/test pre-commit run codespell --all-files
+            else
+              scripts/test pre-commit run codespell --from-ref "origin/${{ github.base_ref }}" --to-ref HEAD
+            fi
+          else
+            scripts/test pre-commit run codespell --all-files
+          fi

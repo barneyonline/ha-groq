@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -eu
+
+cd "$(dirname "$0")/.."
+
+if [ "$#" -eq 0 ]; then
+  set -- python -m pytest -q
+fi
+
+docker compose -f devtools/docker/docker-compose.yml run --rm --remove-orphans --build ha-dev "$@"

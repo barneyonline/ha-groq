@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a problem with the Groq Home Assistant integration.
+title: "[Bug]: "
+labels: ["bug", "status/needs-triage"]
+body:
+  - type: dropdown
+    id: primary_area
+    attributes:
+      label: Primary affected area
+      options:
+        - Setup, API key, reauthentication
+        - Model or voice selection
+        - Speech generation API request
+        - Audio normalization
+        - Diagnostics
+        - Documentation
+        - Developer workflow / repository tooling
+        - Other / unsure
+    validations:
+      required: true
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Installation method
+      options:
+        - HACS
+        - Manual install in custom_components
+        - Development checkout
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: diagnostics_status
+    attributes:
+      label: Diagnostics attached?
+      options:
+        - Yes, config-entry diagnostics attached
+        - Not yet, but I can upload them
+        - I cannot capture diagnostics
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include the Home Assistant version, selected model/voice, and relevant logs.
+    validations:
+      required: true

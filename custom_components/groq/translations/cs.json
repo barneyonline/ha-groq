@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Přidat TTS engine",
+        "description": "Více informací naleznete v dokumentaci.",
+        "data": {
+          "api_key": "Zadejte Groq API klíč",
+          "model": "Model",
+          "voice": "Hlas",
+          "response_format": "Response format",
+          "vocal_directions": "Default vocal directions",
+          "url": "Zadejte Groq endpoint."
+        }
+      }
+    },
+    "error": {
+      "wrong_api_key": "Neplatný API klíč. Zadejte prosím platný API klíč."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Nastavte TTS možnosti",
+        "data": {
+          "voice": "Hlas",
+          "normalize_audio": "Povolte zvýšení hlasitosti generovaného audia (vyžaduje více CPU)",
+          "protect_free_tier": "Protect Groq free tier usage",
+          "response_format": "Response format",
+          "vocal_directions": "Default vocal directions"
+        }
+      }
+    }
+  }
+}

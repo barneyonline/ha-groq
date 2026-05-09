@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Text-to-Speech Engine hinzufügen",
+        "description": "Weitere Informationen finden Sie in der Dokumentation.",
+        "data": {
+          "api_key": "Geben Sie den Groq API-Schlüssel ein",
+          "model": "Modell",
+          "voice": "Stimme",
+          "response_format": "Response format",
+          "vocal_directions": "Default vocal directions",
+          "url": "Geben Sie den Groq Endpunkt ein."
+        }
+      }
+    },
+    "error": {
+      "wrong_api_key": "Ungültiger API-Schlüssel. Bitte geben Sie einen gültigen API-Schlüssel ein."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Konfigurieren Sie die TTS-Optionen",
+        "data": {
+          "voice": "Stimme",
+          "normalize_audio": "Aktivieren Sie die Lautstärkeerhöhung für das erzeugte Audio (verwendet mehr CPU)",
+          "protect_free_tier": "Protect Groq free tier usage",
+          "response_format": "Response format",
+          "vocal_directions": "Default vocal directions"
+        }
+      }
+    }
+  }
+}

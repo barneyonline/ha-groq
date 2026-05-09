@@ -1,0 +1,15 @@
+{
+  "domain": "groq",
+  "name": "Groq",
+  "codeowners": [
+    "@barneyonline"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/barneyonline/ha-groq",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/barneyonline/ha-groq/issues",
+  "requirements": [],
+  "version": "0.1"
+}

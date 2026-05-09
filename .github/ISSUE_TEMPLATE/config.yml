@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Groq TTS API documentation
+    url: https://console.groq.com/docs/text-to-speech
+    about: Check Groq's current TTS model and voice documentation.

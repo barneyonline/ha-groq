@@ -1,0 +1,19 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 25.9.0
+    hooks:
+      - id: black
+        args: [--check]
+        files: "^((custom_components/groq|tests/components/groq)/.*|scripts/(importtime_profile|issue_labeling|validate_quality_scale)|tests/scripts/.*)\\.py$"
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        files: "^((custom_components/groq|tests/components/groq)/.*|scripts/(importtime_profile|issue_labeling|validate_quality_scale)|tests/scripts/.*)\\.py$"
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
+    hooks:
+      - id: codespell
+        name: codespell docs, yaml, python, and user-facing strings
+        args: [--ignore-words=.codespellignore]
+        files: "^(.*\\.md|.*\\.ya?ml|(custom_components/groq|tests/components/groq|scripts|tests/scripts)/.*\\.py|custom_components/groq/(strings\\.json|translations/en.*\\.json))$"

@@ -1,0 +1,68 @@
+name: Auto Label Issues
+
+on:
+  issues:
+    types:
+      - opened
+      - reopened
+      - edited
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  label_issue:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.issue.title, '[Bug]:') ||
+      startsWith(github.event.issue.title, '[Feature]:')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Determine issue form
+        if: github.event_name == 'issues'
+        id: form
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = context.payload.issue.title ?? "";
+            const forms = {
+              "[Bug]:": {
+                kind: "bug",
+                template: ".github/ISSUE_TEMPLATE/bug_report.yml",
+              },
+              "[Feature]:": {
+                kind: "feature",
+                template: ".github/ISSUE_TEMPLATE/feature_request.yml",
+              },
+            };
+            for (const [prefix, config] of Object.entries(forms)) {
+              if (title.startsWith(prefix)) {
+                core.setOutput("kind", config.kind);
+                core.setOutput("template_path", config.template);
+                return;
+              }
+            }
+            core.setFailed(`Unsupported issue form title: ${title}`);
+
+      - name: Parse issue form
+        if: github.event_name == 'issues'
+        id: issue_parser
+        uses: stefanbuck/github-issue-parser@cb6e97157cbf851e3a393ff8d57c93a484cc323f
+        with:
+          template-path: ${{ steps.form.outputs.template_path }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Reconcile automation labels
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRIMARY_AREA: ${{ steps.issue_parser.outputs.issueparser_primary_area }}
+          FEATURE_AREA: ${{ steps.issue_parser.outputs.issueparser_area }}
+          INSTALL_METHOD: ${{ steps.issue_parser.outputs.issueparser_install_method }}
+          DIAGNOSTICS_STATUS: ${{ steps.issue_parser.outputs.issueparser_diagnostics_status }}
+        run: python scripts/issue_labeling.py

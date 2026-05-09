@@ -1,0 +1,46 @@
+name: Quality Scale
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "custom_components/groq/**"
+      - "tests/components/groq/**"
+      - "tests/scripts/test_validate_quality_scale.py"
+      - "README.md"
+      - "quality_scale.yaml"
+      - "scripts/validate_quality_scale.py"
+      - "devtools/docker/**"
+      - ".pre-commit-config.yaml"
+      - ".github/workflows/quality-scale.yml"
+  push:
+    branches:
+      - main
+      - "release/**"
+    paths:
+      - "custom_components/groq/**"
+      - "tests/components/groq/**"
+      - "tests/scripts/test_validate_quality_scale.py"
+      - "README.md"
+      - "quality_scale.yaml"
+      - "scripts/validate_quality_scale.py"
+      - "devtools/docker/**"
+      - ".pre-commit-config.yaml"
+      - ".github/workflows/quality-scale.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate quality scale evidence in Home Assistant Docker
+        run: |
+          scripts/test python scripts/validate_quality_scale.py
+          scripts/test python -m pytest -q tests/scripts/test_validate_quality_scale.py

@@ -1,0 +1,281 @@
+generate_text:
+  target:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        text:
+    service_id:
+      required: false
+      selector:
+        text:
+    prompt:
+      required: true
+      selector:
+        text:
+          multiline: true
+    model:
+      required: false
+      selector:
+        text:
+    system_prompt:
+      required: false
+      selector:
+        text:
+          multiline: true
+    temperature:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 2
+          step: 0.1
+          mode: slider
+    max_tokens:
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
+    top_p:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.01
+          mode: box
+    stop:
+      required: false
+      selector:
+        text:
+          multiline: true
+    seed:
+      required: false
+      selector:
+        number:
+          min: 0
+          mode: box
+    service_tier:
+      required: false
+      selector:
+        select:
+          options:
+            - auto
+            - on_demand
+            - flex
+            - performance
+    reasoning_effort:
+      required: false
+      selector:
+        select:
+          options:
+            - default
+            - none
+            - low
+            - medium
+            - high
+    reasoning_format:
+      required: false
+      selector:
+        select:
+          options:
+            - hidden
+            - raw
+            - parsed
+    include_reasoning:
+      required: false
+      selector:
+        boolean:
+    request_body_options:
+      required: false
+      selector:
+        object:
+    schema:
+      required: false
+      selector:
+        object:
+    schema_name:
+      required: false
+      selector:
+        text:
+    strict:
+      required: false
+      selector:
+        boolean:
+
+generate_structured:
+  target:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        text:
+    service_id:
+      required: false
+      selector:
+        text:
+    prompt:
+      required: true
+      selector:
+        text:
+          multiline: true
+    schema:
+      required: true
+      selector:
+        object:
+    schema_name:
+      required: false
+      selector:
+        text:
+    strict:
+      required: false
+      selector:
+        boolean:
+    model:
+      required: false
+      selector:
+        text:
+    system_prompt:
+      required: false
+      selector:
+        text:
+          multiline: true
+    temperature:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 2
+          step: 0.1
+          mode: slider
+    max_tokens:
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
+    top_p:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.01
+          mode: box
+    stop:
+      required: false
+      selector:
+        text:
+          multiline: true
+    seed:
+      required: false
+      selector:
+        number:
+          min: 0
+          mode: box
+    service_tier:
+      required: false
+      selector:
+        select:
+          options:
+            - auto
+            - on_demand
+            - flex
+            - performance
+    reasoning_effort:
+      required: false
+      selector:
+        select:
+          options:
+            - default
+            - none
+            - low
+            - medium
+            - high
+    reasoning_format:
+      required: false
+      selector:
+        select:
+          options:
+            - hidden
+            - raw
+            - parsed
+    include_reasoning:
+      required: false
+      selector:
+        boolean:
+    request_body_options:
+      required: false
+      selector:
+        object:
+
+analyze_image:
+  target:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        text:
+    service_id:
+      required: false
+      selector:
+        text:
+    prompt:
+      required: true
+      selector:
+        text:
+          multiline: true
+    image_url:
+      required: true
+      selector:
+        text:
+    model:
+      required: false
+      selector:
+        text:
+
+extract_text_from_image:
+  target:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        text:
+    service_id:
+      required: false
+      selector:
+        text:
+    image_url:
+      required: true
+      selector:
+        text:
+    prompt:
+      required: false
+      selector:
+        text:
+          multiline: true
+    model:
+      required: false
+      selector:
+        text:
+
+clear_cache:
+  target:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        text:
+
+list_models:
+  target:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        text:
+    refresh:
+      required: false
+      selector:
+        boolean:

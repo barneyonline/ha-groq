@@ -1,0 +1,141 @@
+name: Tests
+
+on:
+  pull_request:
+    paths:
+      - "custom_components/**"
+      - "tests/components/groq/**"
+      - "tests/scripts/**"
+      - ".pre-commit-config.yaml"
+      - ".ruff.toml"
+      - ".strict-typing"
+      - "devtools/docker/**"
+      - "quality_scale.yaml"
+      - "scripts/**"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/tests.yml"
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+
+concurrency:
+  group: ${{ format('{0}-{1}', github.workflow_ref || github.workflow, github.ref) }}
+  cancel-in-progress: true
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Run pre-commit in Home Assistant Docker
+        run: scripts/test pre-commit run --all-files
+
+  quality-scale:
+    runs-on: ubuntu-latest
+    needs: pre-commit
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate quality scale evidence in Home Assistant Docker
+        run: |
+          scripts/test python scripts/validate_quality_scale.py
+          scripts/test python -m pytest -q tests/scripts/test_validate_quality_scale.py
+
+  importtime:
+    runs-on: ubuntu-latest
+    needs: pre-commit
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Gate integration import deprecations in Home Assistant Docker
+        run: >
+          scripts/test python scripts/importtime_profile.py
+          --strict-integration-warnings
+          --output importtime-groq.log
+      - name: Upload import-time profile
+        uses: actions/upload-artifact@v7
+        with:
+          name: importtime-groq
+          path: importtime-groq.log
+
+  pytest:
+    runs-on: ubuntu-latest
+    needs: pre-commit
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run tests with coverage in Home Assistant Docker
+        id: pytest
+        continue-on-error: true
+        run: >
+          scripts/test python -m pytest
+          --cov=custom_components.groq
+          --cov-report=term-missing
+          --cov-report=xml
+          --cov-fail-under=80
+          --junitxml=junit.xml
+          -o junit_family=legacy
+      - name: Upload coverage to Codecov
+        if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          fail_ci_if_error: true
+      - name: Upload test results to Codecov
+        if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./junit.xml
+          report_type: test_results
+      - name: Fail if tests failed
+        if: ${{ steps.pytest.outcome == 'failure' }}
+        run: exit 1
+
+  targeted-coverage:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    needs: pre-commit
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Detect changed integration modules
+        id: changed
+        shell: bash
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          mapfile -t changed < <(
+            git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- "custom_components/groq/*.py" |
+            while IFS= read -r path; do
+              [ -f "$path" ] && printf '%s\n' "$path"
+            done
+          )
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo "No changed integration Python modules; skipping targeted coverage."
+            echo "include=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          include=$(IFS=,; echo "${changed[*]}")
+          echo "include=${include}" >> "$GITHUB_OUTPUT"
+      - name: Enforce 100% coverage on changed integration modules in Home Assistant Docker
+        if: ${{ steps.changed.outputs.include != '' }}
+        run: >
+          scripts/test bash -lc
+          "COVERAGE_FILE=/tmp/groq.coverage python -m coverage erase &&
+          COVERAGE_FILE=/tmp/groq.coverage python -m coverage run -m pytest tests/components/groq -q &&
+          COVERAGE_FILE=/tmp/groq.coverage python -m coverage report -m --include='${{ steps.changed.outputs.include }}' --fail-under=100"

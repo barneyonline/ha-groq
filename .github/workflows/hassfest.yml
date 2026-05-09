@@ -1,0 +1,32 @@
+name: Validate with hassfest
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "custom_components/**"
+      - "quality_scale.yaml"
+      - ".github/workflows/hassfest.yml"
+  push:
+    branches:
+      - main
+      - "release/**"
+    paths:
+      - "custom_components/**"
+      - "quality_scale.yaml"
+      - ".github/workflows/hassfest.yml"
+  schedule:
+    - cron: "0 0 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: home-assistant/actions/hassfest@master

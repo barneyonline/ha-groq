@@ -1,0 +1,1739 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import aiohttp
+import pytest
+import voluptuous as vol
+from homeassistant import data_entry_flow
+from homeassistant.components import stt
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+
+import custom_components.groq as integration
+from custom_components.groq import (
+    ai_task as ai_task_module,
+    config_flow,
+    conversation as conversation_module,
+    model_registry as model_registry_module,
+    text_generation as text_generation_module,
+)
+from custom_components.groq.ai_task import (
+    GroqAITaskEntity,
+    _strip_json_fence,
+    _structure_description,
+)
+from custom_components.groq.api import (
+    ChatCompletionResult,
+    GroqApiClient,
+    StructuredGenerationRequest,
+    TextGenerationRequest,
+    VisionRequest,
+    build_structured_generation_payload,
+    build_text_generation_payload,
+    build_vision_payload,
+    extract_chat_reasoning,
+    extract_chat_text,
+    extract_executed_tools,
+)
+from custom_components.groq.const import (
+    CONF_API_KEY,
+    CONF_ENABLED_FEATURES,
+    CONF_MODEL,
+    CONF_NAME,
+    CONF_SERVICE_TYPE,
+    FEATURE_IMAGE_RECOGNITION,
+    FEATURE_TEXT_GENERATION,
+    FEATURE_TEXT_TO_SPEECH,
+    UNIQUE_ID,
+    enabled_features_from_entry,
+    normalize_enabled_features,
+)
+from custom_components.groq.errors import GroqApiError, GroqRateLimitExceeded
+from custom_components.groq.feature_registry import (
+    GroqFeature,
+    GroqFeatureRegistry,
+    coerce_feature,
+)
+from custom_components.groq.flow_schemas import (
+    clean_service_input,
+    image_recognition_schema,
+    service_type_schema,
+    speech_to_text_schema,
+    text_generation_advanced_schema,
+    text_generation_basic_schema,
+    text_to_speech_schema,
+    validate_user_input,
+)
+from custom_components.groq.model_registry import (
+    GroqCapability,
+    GroqModel,
+    GroqModelRegistry,
+    infer_capabilities,
+    model_from_api,
+)
+from custom_components.groq.prompt_cache import GroqPromptCache
+from custom_components.groq.rate_limit import GroqRateLimitInfo, GroqRateLimiter
+from custom_components.groq.runtime import async_get_runtime, build_runtime
+from custom_components.groq.services import (
+    ATTR_CONFIG_ENTRY_ID,
+    ATTR_IMAGE_URL,
+    ATTR_PROMPT,
+    ATTR_REASONING_EFFORT,
+    ATTR_REFRESH,
+    ATTR_SCHEMA,
+    ATTR_SERVICE_ID,
+    SERVICE_ANALYZE_IMAGE,
+    SERVICE_CLEAR_CACHE,
+    SERVICE_EXTRACT_TEXT_FROM_IMAGE,
+    SERVICE_GENERATE_STRUCTURED,
+    SERVICE_GENERATE_TEXT,
+    SERVICE_LIST_MODELS,
+    _cache_get,
+    _cache_key,
+    _cache_set,
+    _entry_from_call,
+    _handle_analyze_image,
+    _handle_clear_cache,
+    _handle_extract_text_from_image,
+    _handle_generate_structured,
+    _handle_generate_text,
+    _handle_list_models,
+    _request_options,
+    _runtime_from_call,
+    _service_api_key,
+    _service_from_call,
+    _service_subentries,
+    async_register_services,
+    async_unregister_services,
+)
+from custom_components.groq.stt import GroqSTTEntity, async_setup_entry as stt_setup
+from custom_components.groq.subentries import service_data_by_type
+from custom_components.groq.text_generation import (
+    entry_value,
+    is_prompt_caching_model,
+    is_reasoning_model,
+    selector_to_json_schema,
+    service_include_reasoning,
+    service_request_body_options,
+    service_schema,
+    service_schema_name,
+    service_stop,
+    service_unique_id,
+    voluptuous_schema_to_json_schema,
+)
+from custom_components.groq.tts import GroqTTSEntity
+from custom_components.groq.tts_engine import GroqRateLimitError, GroqTTSEngine
+
+
+class DummyEntry:
+    def __init__(self, entry_id: str = "entry-id", *, state=ConfigEntryState.LOADED):
+        self.entry_id = entry_id
+        self.domain = "groq"
+        self.state = state
+        self.unique_id = "entry-uid"
+        self.data = {"api_key": "entry-key", "name": "Groq"}
+        self.options = {}
+        self.subentries = {}
+        self.reloads = []
+
+    def add_update_listener(self, listener):
+        self.listener = listener
+        return "unsub"
+
+    def async_on_unload(self, unsub):
+        self.unsub = unsub
+
+
+class DummyConfigEntries:
+    def __init__(self, entries=()):
+        self.entries = {entry.entry_id: entry for entry in entries}
+        self.forwarded = []
+        self.unloaded = []
+        self.updated = []
+        self.reloaded = []
+
+    def async_entries(self, domain):
+        return list(self.entries.values())
+
+    def async_get_entry(self, entry_id):
+        return self.entries.get(entry_id)
+
+    async def async_forward_entry_setups(self, entry, platforms):
+        self.forwarded.append((entry, platforms))
+
+    async def async_unload_platforms(self, entry, platforms):
+        self.unloaded.append((entry, platforms))
+        return True
+
+    async def async_reload(self, entry_id):
+        self.reloaded.append(entry_id)
+
+    def async_update_entry(self, entry, **kwargs):
+        self.updated.append((entry, kwargs))
+
+
+class DummyServices:
+    def __init__(self):
+        self.registered = []
+        self.removed = []
+
+    def async_register(self, domain, service, handler, **kwargs):
+        self.registered.append((domain, service, handler, kwargs))
+
+    def async_remove(self, domain, service):
+        self.removed.append((domain, service))
+
+
+class DummyHass:
+    def __init__(self, entries=(), *, services=None):
+        self.data = {}
+        self.config_entries = DummyConfigEntries(entries)
+        if services is not None:
+            self.services = services
+
+
+class JsonResponse:
+    def __init__(self, status: int, payload, headers: dict[str, str] | None = None):
+        self.status = status
+        self._payload = payload
+        self.headers = headers or {"content-type": "application/json"}
+
+    async def read(self):
+        if isinstance(self._payload, bytes):
+            return self._payload
+        return json.dumps(self._payload).encode()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class StreamContent:
+    def __init__(self, lines):
+        self._lines = [line.encode() for line in lines]
+
+    def __aiter__(self):
+        self._iter = iter(self._lines)
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._iter)
+        except StopIteration:
+            raise StopAsyncIteration
+
+
+class StreamResponse(JsonResponse):
+    def __init__(self, status: int, lines, headers: dict[str, str] | None = None):
+        super().__init__(status, {}, headers or {})
+        self.content = StreamContent(lines)
+
+
+class DummySession:
+    def __init__(self, responses):
+        if not isinstance(responses, list):
+            responses = [responses]
+        self.responses = list(responses)
+        self.calls = []
+
+    def request(self, *args, **kwargs):
+        self.calls.append({"args": args, "kwargs": kwargs})
+        return self.responses.pop(0)
+
+
+class PostResponse(JsonResponse):
+    def __init__(self, status: int, payload, headers: dict[str, str] | None = None):
+        super().__init__(status, payload, headers or {"content-type": "audio/wav"})
+
+
+class DummyPostSession:
+    def __init__(self, responses):
+        if not isinstance(responses, list):
+            responses = [responses]
+        self.responses = list(responses)
+        self.calls = []
+
+    def post(self, *args, **kwargs):
+        self.calls.append({"args": args, "kwargs": kwargs})
+        response = self.responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
+
+
+class DummyClient:
+    def __init__(self):
+        self.requests = []
+        self.text = "plain text"
+        self.structured = {
+            "text": '{"ok": true}',
+            "data": {"ok": True},
+            "cached": False,
+        }
+        self.image_text = "image text"
+        self.models = []
+
+    async def async_generate_text(self, request):
+        self.requests.append(request)
+        return SimpleNamespace(
+            text=self.text,
+            model=request.model,
+            usage={},
+            reasoning="because",
+            executed_tools=None,
+            usage_breakdown=None,
+        )
+
+    async def async_generate_structured(self, request):
+        self.requests.append(request)
+        return self.structured
+
+    async def async_analyze_image(self, request):
+        self.requests.append(request)
+        return SimpleNamespace(text=self.image_text, model=request.model, usage={})
+
+    async def async_list_models(self):
+        return self.models
+
+    async def async_transcribe_audio(self, **kwargs):
+        self.requests.append(kwargs)
+        return "transcribed"
+
+
+def service_call(data):
+    return SimpleNamespace(data=data)
+
+
+def test_api_payload_and_extractors_cover_optional_shapes():
+    result = ChatCompletionResult(text="content", model=None, usage={}, raw={})
+    assert result.content == "content"
+    assert TextGenerationRequest(prompt="p", model="m").prompt == "p"
+    assert (
+        build_text_generation_payload(
+            TextGenerationRequest(
+                prompt="p",
+                model="m",
+                include_reasoning=True,
+                stream=True,
+                extra_body={"metadata": {"a": 1}, "drop": None},
+            )
+        )["include_reasoning"]
+        is True
+    )
+    assert build_structured_generation_payload(
+        StructuredGenerationRequest(prompt="p", model="m")
+    )["response_format"] == {"type": "json_object"}
+    assert build_vision_payload(
+        VisionRequest(prompt="p", model="m", image_url="url", system_prompt="s")
+    )["messages"][0] == {"role": "system", "content": "s"}
+
+    payload = {"choices": [{"message": {"content": [{"text": "a"}, {"text": "b"}]}}]}
+    assert extract_chat_text(payload) == "a\nb"
+    assert (
+        extract_chat_reasoning(
+            {"choices": [{"message": {"reasoning_content": "trace"}}]}
+        )
+        == "trace"
+    )
+    assert extract_chat_reasoning({"choices": []}) is None
+    assert extract_chat_reasoning({"choices": ["bad"]}) is None
+    assert extract_executed_tools({"choices": []}) is None
+    assert (
+        extract_executed_tools({"choices": [{"message": {"executed_tools": "bad"}}]})
+        is None
+    )
+    assert extract_executed_tools(
+        {"choices": [{"message": {"executed_tools": [{"ok": True}, "bad"]}}]}
+    ) == [{"ok": True}]
+    assert result.text == "content"
+
+    for bad_payload, match in (
+        ({}, "choices"),
+        ({"choices": [{}]}, "message"),
+        ({"choices": [{"message": {"content": []}}]}, "text content"),
+    ):
+        with pytest.raises(GroqApiError, match=match):
+            extract_chat_text(bad_payload)
+
+
+@pytest.mark.asyncio
+async def test_api_client_covers_json_stream_and_error_paths():
+    client = GroqApiClient(
+        DummyHass(),
+        api_key="entry-key",
+        base_url="https://api.groq.com/openai/v1",
+        session=DummySession(
+            [
+                JsonResponse(
+                    200, {"choices": [{"message": {"content": '{"ok": true}'}}]}
+                ),
+                JsonResponse(200, {"choices": [{"message": {"content": "bad json"}}]}),
+                JsonResponse(200, {"choices": [{"message": {"content": "img"}}]}),
+                JsonResponse(200, {"text": "hello"}),
+                JsonResponse(200, {"data": "bad"}),
+                JsonResponse(200, []),
+                JsonResponse(500, {"error": {"message": "server", "type": "bad"}}),
+                JsonResponse(500, {"error": "plain"}),
+                JsonResponse(429, {"error": "rate"}, {"retry-after": "2"}),
+                JsonResponse(401, {"error": "auth"}),
+            ]
+        ),
+    )
+
+    assert client.base_url == "https://api.groq.com/openai/v1"
+    structured = await client.async_generate_structured(
+        StructuredGenerationRequest(prompt="p", model="openai/gpt-oss-20b")
+    )
+    assert structured["data"] == {"ok": True}
+    with pytest.raises(GroqApiError, match="valid JSON"):
+        await client.async_generate_structured(
+            StructuredGenerationRequest(prompt="p", model="openai/gpt-oss-20b")
+        )
+    assert (
+        await client.async_analyze_image(VisionRequest(prompt="p", model="m"))
+    ).text == "img"
+    assert (
+        await client.async_transcribe_audio(
+            audio=b"a", filename="a.wav", model="m", language="en-US", prompt="hint"
+        )
+    ) == "hello"
+    with pytest.raises(GroqApiError, match="data list"):
+        await client.async_list_models()
+    with pytest.raises(GroqApiError, match="non-object JSON"):
+        await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
+    with pytest.raises(GroqApiError, match="server"):
+        await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
+    with pytest.raises(GroqApiError, match="plain"):
+        await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
+    with pytest.raises(GroqRateLimitExceeded):
+        await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
+    with pytest.raises(ConfigEntryAuthFailed):
+        await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
+
+    stream_client = GroqApiClient(
+        DummyHass(),
+        api_key=None,
+        session=DummySession(
+            StreamResponse(
+                200,
+                [
+                    "",
+                    "event: ignored",
+                    'data: {"choices": []}',
+                    'data: {"choices": [{}]}',
+                    'data: {"choices": [{"delta": {}}]}',
+                    'data: {"choices": [{"delta": {"content": "Hi"}}]}',
+                    "data: [DONE]",
+                ],
+            )
+        ),
+    )
+    chunks = [
+        chunk
+        async for chunk in stream_client.async_stream_text(
+            TextGenerationRequest(prompt="p", model="m", api_key="service-key")
+        )
+    ]
+    assert chunks == ["Hi"]
+
+    with pytest.raises(GroqApiError, match="invalid JSON"):
+        GroqApiClient._decode_json(b"{")
+    assert isinstance(GroqApiClient._api_error(500, []), GroqApiError)
+
+
+@pytest.mark.asyncio
+async def test_api_stream_error_paths():
+    for response, error in (
+        (StreamResponse(401, []), ConfigEntryAuthFailed),
+        (JsonResponse(500, {"error": "bad"}), GroqApiError),
+        (
+            JsonResponse(429, {"error": "rate"}, {"retry-after": "1"}),
+            GroqRateLimitExceeded,
+        ),
+        (StreamResponse(200, ["data: {"]), GroqApiError),
+    ):
+        client = GroqApiClient(
+            DummyHass(), api_key=None, session=DummySession(response)
+        )
+        with pytest.raises(error):
+            async for _event in client._request_stream(
+                "POST", "/chat/completions", json_payload={}
+            ):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_api_client_network_error_paths():
+    class FailingSession:
+        def request(self, *args, **kwargs):
+            raise aiohttp.ClientError("boom")
+
+    client = GroqApiClient(DummyHass(), api_key=None, session=FailingSession())
+    with pytest.raises(GroqApiError, match="Network error"):
+        await client._request_json("GET", "/models")
+    with pytest.raises(GroqApiError, match="Network error"):
+        async for _event in client._request_stream(
+            "POST", "/chat/completions", json_payload={}
+        ):
+            pass
+
+
+@pytest.mark.asyncio
+async def test_api_client_cancel_and_transcription_shape_paths():
+    class CancelSession:
+        def request(self, *args, **kwargs):
+            raise asyncio.CancelledError
+
+    client = GroqApiClient(DummyHass(), api_key=None, session=CancelSession())
+    with pytest.raises(asyncio.CancelledError):
+        await client._request_json("GET", "/models")
+    with pytest.raises(asyncio.CancelledError):
+        async for _event in client._request_stream(
+            "POST", "/chat/completions", json_payload={}
+        ):
+            pass
+
+    transcribe_client = GroqApiClient(
+        DummyHass(),
+        api_key=None,
+        session=DummySession(JsonResponse(200, {"not_text": True})),
+    )
+    with pytest.raises(GroqApiError, match="transcription response"):
+        await transcribe_client.async_transcribe_audio(
+            audio=b"a",
+            filename="a.wav",
+            model="whisper-large-v3",
+        )
+
+    stream_client = GroqApiClient(
+        DummyHass(),
+        api_key=None,
+        session=DummySession(
+            StreamResponse(
+                200,
+                [
+                    'data: {"choices": ["bad"]}',
+                    'data: {"choices": [{"delta": {"content": "ok"}}]}',
+                    "data: [DONE]",
+                ],
+            )
+        ),
+    )
+    chunks = [
+        chunk
+        async for chunk in stream_client.async_stream_text(
+            TextGenerationRequest(prompt="p", model="m")
+        )
+    ]
+    assert chunks == ["ok"]
+
+
+def test_const_errors_features_cache_and_rate_limit_helpers():
+    assert normalize_enabled_features("text_generation") == ["text_generation"]
+    assert normalize_enabled_features(1) == list(("text_to_speech",))
+    entry = DummyEntry()
+    entry.options = {CONF_ENABLED_FEATURES: ["speech_to_text"]}
+    assert enabled_features_from_entry(entry) == ["speech_to_text"]
+    entry.options = {}
+    entry.data = {CONF_ENABLED_FEATURES: ["image_recognition"]}
+    assert enabled_features_from_entry(entry) == ["image_recognition"]
+    entry.data = {}
+    entry.subentries = {
+        "vision": SimpleNamespace(data={CONF_SERVICE_TYPE: FEATURE_IMAGE_RECOGNITION})
+    }
+    assert enabled_features_from_entry(entry) == [FEATURE_IMAGE_RECOGNITION]
+    entry.data = {"url": "u", "model": "m", "voice": "v"}
+    entry.subentries = {}
+    assert enabled_features_from_entry(entry) == [FEATURE_TEXT_TO_SPEECH]
+
+    err = GroqApiError("bad", status=500, error_type="server", payload={"x": 1})
+    assert err.status == 500
+    assert err.error_type == "server"
+    assert err.payload == {"x": 1}
+    rate = GroqRateLimitExceeded(
+        "limited",
+        retry_after="1",
+        reset_requests="2",
+        reset_tokens="3",
+        payload={"error": "rate"},
+    )
+    assert rate.status == 429
+    assert rate.retry_after == "1"
+    assert rate.reset_requests == "2"
+    assert rate.reset_tokens == "3"
+
+    assert coerce_feature(GroqFeature.TEXT_GENERATION) == GroqFeature.TEXT_GENERATION
+    with pytest.raises(Exception):
+        GroqFeatureRegistry([]).ensure_enabled(GroqFeature.TEXT_GENERATION)
+
+    cache = GroqPromptCache(max_size=0)
+    cache.set("x", {"value": 1})
+    assert cache.get("x") is None
+    expired = GroqPromptCache(max_size=2, default_ttl=0)
+    expired.set("x", {"value": 1})
+    assert expired.get("x") is None
+
+    info = GroqRateLimitInfo.from_headers(
+        {
+            "Retry-After": "1",
+            "x-ratelimit-limit-requests": "10",
+            "x-ratelimit-limit-tokens": "20",
+            "x-ratelimit-remaining-requests": "9",
+            "x-ratelimit-remaining-tokens": "19",
+            "x-ratelimit-reset-requests": "1s",
+            "x-ratelimit-reset-tokens": "2s",
+        }
+    )
+    assert info.as_dict()["limit_requests"] == "10"
+    assert GroqRateLimiter.from_headers({"retry-after": "1"}).retry_after == "1"
+    assert "retry after 1 seconds" in info.error_message()
+    with pytest.raises(GroqRateLimitExceeded):
+        GroqRateLimiter.raise_for_headers({"retry-after": "1"}, {"error": "rate"})
+
+
+def test_flow_schema_and_text_generation_helpers_cover_branches():
+    assert service_type_schema()({"service_type": FEATURE_TEXT_GENERATION})
+    assert speech_to_text_schema()({"name": "STT", "model": "whisper-large-v3"})
+    assert text_to_speech_schema()(
+        {
+            "name": "TTS",
+            "model": "canopylabs/orpheus-v1-english",
+            "voice": "troy",
+            "response_format": "wav",
+        }
+    )
+    assert image_recognition_schema()(
+        {
+            "name": "Vision",
+            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        }
+    )
+    assert text_generation_basic_schema()(
+        {"name": "Text", "model": "llama-3.1-8b-instant"}
+    )
+    assert text_generation_advanced_schema()
+    assert clean_service_input(
+        {
+            "api_key": "",
+            "advanced_options": False,
+            "reasoning_effort": "",
+            "request_body_options": {},
+            "schema": {},
+            "include_reasoning": False,
+        }
+    ) == {"advanced_options": False}
+    with pytest.raises(ValueError, match="invalid"):
+        asyncio.run(validate_user_input({"api_key": "key", "enabled_features": 1}))
+    asyncio.run(
+        validate_user_input(
+            {"api_key": "key", "enabled_features": FEATURE_TEXT_GENERATION}
+        )
+    )
+
+    entry = DummyEntry()
+    entry.unique_id = None
+    service_data = {
+        "api_key": "",
+        "stop": "A\nB",
+        "include_reasoning": True,
+        "request_body_options": {"user": "ha"},
+        "schema": {"type": "object"},
+        "schema_name": "bad name!",
+        "temperature": None,
+        "max_tokens": "",
+        "top_p": "",
+        "seed": "",
+        "service_tier": "",
+        "reasoning_effort": "low",
+        "reasoning_format": "parsed",
+        "stream": True,
+        "prompt_caching": True,
+        "structured_outputs": True,
+        "strict": True,
+    }
+    assert entry_value(entry, {}, "missing", "fallback") == "fallback"
+    assert text_generation_module.text_generation_service_data(entry) == []
+    assert text_generation_module.service_name(entry, {}) == "Groq"
+    assert text_generation_module.service_model(entry, {}) == "llama-3.3-70b-versatile"
+    assert text_generation_module.service_api_key(entry, service_data) is None
+    assert (
+        text_generation_module.service_api_key(entry, {"api_key": "service-key"})
+        == "service-key"
+    )
+    assert text_generation_module.service_system_prompt(entry, {"system_prompt": ""})
+    assert text_generation_module.service_temperature(entry, service_data) is None
+    assert text_generation_module.service_max_tokens(entry, service_data) is None
+    assert text_generation_module.service_max_tokens(entry, {"max_tokens": "10"}) == 10
+    assert text_generation_module.service_top_p(entry, service_data) is None
+    assert text_generation_module.service_top_p(entry, {"top_p": "0.5"}) == 0.5
+    assert service_stop(entry, service_data) == ["A", "B"]
+    assert service_stop(entry, {"stop": ["A", "", "B"]}) == ["A", "B"]
+    assert service_stop(entry, {"stop": "A"}) == "A"
+    assert service_stop(entry, {"stop": ""}) is None
+    assert text_generation_module.service_seed(entry, service_data) is None
+    assert text_generation_module.service_seed(entry, {"seed": "123"}) == 123
+    assert text_generation_module.service_service_tier(entry, service_data) is None
+    assert text_generation_module.service_reasoning_effort(entry, service_data) == "low"
+    assert (
+        text_generation_module.service_reasoning_format(entry, service_data) == "parsed"
+    )
+    assert service_include_reasoning(entry, service_data) is True
+    assert text_generation_module.service_stream(entry, service_data) is True
+    assert text_generation_module.service_prompt_caching(entry, service_data) is True
+    assert service_request_body_options(entry, service_data) == {"user": "ha"}
+    assert service_request_body_options(entry, {}) is None
+    assert service_schema(entry, service_data) == {"type": "object"}
+    assert service_schema(entry, {}) is None
+    assert service_schema_name(entry, service_data) == "bad_name"
+    assert (
+        text_generation_module.service_structured_outputs(entry, service_data) is True
+    )
+    assert text_generation_module.service_strict(entry, service_data) is True
+    assert service_unique_id(entry, {}) == "entry-id"
+    assert service_unique_id(DummyEntry(), {UNIQUE_ID: "service-id"}) == "service-id"
+    assert is_reasoning_model("openai/gpt-oss-20b")
+    assert is_prompt_caching_model("openai/gpt-oss-20b")
+
+    assert selector_to_json_schema(SimpleNamespace(selector_type="text")) == {
+        "type": "string"
+    }
+    assert selector_to_json_schema(SimpleNamespace(selector_type="boolean")) == {
+        "type": "boolean"
+    }
+    assert selector_to_json_schema(
+        SimpleNamespace(selector_type="number", config={"min": 1, "max": 5})
+    ) == {"type": "number", "minimum": 1, "maximum": 5}
+    assert selector_to_json_schema(
+        SimpleNamespace(
+            selector_type="select",
+            config={"options": [{"value": "a"}, "b"], "multiple": True},
+        )
+    ) == {"type": "array", "items": {"type": "string", "enum": ["a", "b"]}}
+    assert selector_to_json_schema(
+        SimpleNamespace(selector_type="select", config={"options": ["a"]})
+    ) == {"type": "string", "enum": ["a"]}
+    assert selector_to_json_schema(SimpleNamespace(selector_type="object")) == {
+        "type": "object"
+    }
+    assert selector_to_json_schema(SimpleNamespace(selector_type="unknown")) == {}
+    assert selector_to_json_schema(str) == {"type": "string"}
+    assert selector_to_json_schema(bool) == {"type": "boolean"}
+    assert selector_to_json_schema(int) == {"type": "integer"}
+    assert selector_to_json_schema(float) == {"type": "number"}
+    assert selector_to_json_schema(vol.Schema({vol.Required("a"): str})) == {
+        "type": "object",
+        "properties": {"a": {"type": "string"}},
+        "additionalProperties": False,
+        "required": ["a"],
+    }
+    assert (
+        voluptuous_schema_to_json_schema(
+            vol.Schema({vol.Required("a", description="A value"): str})
+        )["properties"]["a"]["description"]
+        == "A value"
+    )
+    assert voluptuous_schema_to_json_schema(vol.Schema(str)) == {}
+
+
+def test_model_registry_branches():
+    infer_capabilities.cache_clear()
+    assert infer_capabilities("custom-whisper") == frozenset(
+        {GroqCapability.SPEECH_TO_TEXT}
+    )
+    assert infer_capabilities("custom-tts") == frozenset(
+        {GroqCapability.TEXT_TO_SPEECH}
+    )
+    assert GroqCapability.VISION in infer_capabilities("custom-vision-model")
+    assert GroqCapability.COMPOUND in infer_capabilities("groq/compound-custom")
+    with (
+        patch.object(model_registry_module, "REASONING_MODELS", {"custom-reason"}),
+        patch.object(model_registry_module, "PROMPT_CACHING_MODELS", {"custom-cache"}),
+        patch.object(
+            model_registry_module,
+            "STRUCTURED_OUTPUTS_MODELS",
+            {"custom-structured"},
+        ),
+    ):
+        infer_capabilities.cache_clear()
+        assert GroqCapability.REASONING in infer_capabilities("custom-reason")
+        assert GroqCapability.PROMPT_CACHING in infer_capabilities("custom-cache")
+        assert GroqCapability.STRUCTURED_OUTPUTS in infer_capabilities(
+            "custom-structured"
+        )
+    infer_capabilities.cache_clear()
+    model = model_from_api(
+        {
+            "id": "custom-model",
+            "active": False,
+            "owned_by": "me",
+            "context_window": 10,
+            "max_completion_tokens": 5,
+        }
+    )
+    registry = GroqModelRegistry([model])
+    assert registry.get("custom-model") is model
+    assert registry.all_models()[0].model_id
+    assert registry.models_for_feature(GroqFeature.TEXT_GENERATION)
+    with patch.dict(
+        model_registry_module.FEATURE_CAPABILITIES,
+        {GroqFeature.TEXT_GENERATION: frozenset()},
+    ):
+        assert registry.models_for_feature(GroqFeature.TEXT_GENERATION)
+        assert registry.supports("custom-model", GroqFeature.TEXT_GENERATION)
+    assert registry.supports("custom-vision-model", GroqCapability.VISION)
+    assert registry.supports("whatever", GroqFeature.PROMPT_CACHING) is False
+
+
+@pytest.mark.asyncio
+async def test_runtime_and_integration_lifecycle_branches():
+    services = DummyServices()
+    entry = DummyEntry()
+    entry.subentries = {
+        "unsupported": SimpleNamespace(data={"service_type": "unknown"}),
+        "text": SimpleNamespace(data={"service_type": "text_generation"}),
+    }
+    hass = DummyHass([entry], services=services)
+    assert await integration.async_setup_entry(hass, entry) is True
+    assert entry.runtime_data is await async_get_runtime(hass, entry)
+    assert services.registered
+    assert await integration.async_unload_entry(hass, entry) is True
+    assert services.removed
+
+    other = DummyEntry("other")
+    services2 = DummyServices()
+    hass2 = DummyHass([entry, other], services=services2)
+    await integration.async_setup_entry(hass2, entry)
+    await integration.async_unload_entry(hass2, entry)
+    assert services2.removed == []
+
+    legacy = DummyEntry()
+    legacy.unique_id = None
+    legacy.data = {"unique_id": "old", "url": "u", "model": "m", "voice": "v"}
+    assert await integration.async_migrate_entry(hass, legacy)
+    assert hass.config_entries.updated[-1][1]["unique_id"] == "old"
+    assert await integration.async_migrate_entry(hass, entry)
+    no_legacy = DummyEntry()
+    no_legacy.unique_id = None
+    no_legacy.data = {}
+    assert await integration.async_migrate_entry(hass, no_legacy)
+    assert not integration._has_other_loaded_entries(
+        SimpleNamespace(config_entries=SimpleNamespace()),
+        entry,
+    )
+
+    no_runtime_entry = DummyEntry()
+    no_runtime_entry.data = {"url": "u", "model": "m", "voice": "v"}
+    runtime = build_runtime(DummyHass(), no_runtime_entry)
+    assert runtime.feature_registry.is_enabled(GroqFeature.TEXT_TO_SPEECH)
+
+    class RuntimeSetterRaises(DummyEntry):
+        @property
+        def runtime_data(self):
+            return None
+
+        @runtime_data.setter
+        def runtime_data(self, value):
+            raise AttributeError
+
+    assert isinstance(
+        await async_get_runtime(DummyHass(), RuntimeSetterRaises()),
+        type(runtime),
+    )
+
+
+@pytest.mark.asyncio
+async def test_config_flow_remaining_paths(monkeypatch):
+    assert config_flow.generate_entry_id()
+    assert isinstance(
+        config_flow.GroqConfigFlow.async_get_options_flow(DummyEntry()),
+        config_flow.GroqOptionsFlow,
+    )
+
+    flow = config_flow.GroqConfigFlow()
+    flow.hass = SimpleNamespace(config_entries=DummyConfigEntries([]))
+    flow.context = {"entry_id": "missing"}
+    monkeypatch.setattr(
+        flow, "async_abort", lambda **kwargs: {"type": "abort", **kwargs}
+    )
+    monkeypatch.setattr(
+        flow,
+        "async_show_form",
+        lambda **kwargs: {"type": "form", **kwargs},
+    )
+    monkeypatch.setattr(flow, "async_set_unique_id", lambda unique_id: asyncio.sleep(0))
+    monkeypatch.setattr(flow, "_abort_if_unique_id_configured", lambda: None)
+    monkeypatch.setattr(
+        flow,
+        "async_create_entry",
+        lambda **kwargs: {"type": "create_entry", **kwargs},
+    )
+
+    result = await flow.async_step_user({CONF_API_KEY: "key", CONF_NAME: "Name"})
+    assert result["type"] == "create_entry"
+
+    async def invalid_features(_user_input):
+        raise ValueError("Enabled features are invalid")
+
+    monkeypatch.setattr(config_flow, "validate_user_input", invalid_features)
+    result = await flow.async_step_user({CONF_API_KEY: "key"})
+    assert result["errors"][CONF_ENABLED_FEATURES] == "invalid_enabled_features"
+
+    async def unknown_value_error(_user_input):
+        raise ValueError("Something else")
+
+    monkeypatch.setattr(config_flow, "validate_user_input", unknown_value_error)
+    result = await flow.async_step_user({CONF_API_KEY: "key"})
+    assert result["errors"]["base"] == "unknown_error"
+
+    async def unexpected_error(_user_input):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(config_flow, "validate_user_input", unexpected_error)
+    result = await flow.async_step_user({CONF_API_KEY: "key"})
+    assert result["errors"]["base"] == "unknown_error"
+
+    async def aborting_validate(_user_input):
+        return None
+
+    monkeypatch.setattr(config_flow, "validate_user_input", aborting_validate)
+    monkeypatch.setattr(
+        flow,
+        "_abort_if_unique_id_configured",
+        lambda: (_ for _ in ()).throw(data_entry_flow.AbortFlow("already_configured")),
+    )
+    result = await flow.async_step_user({CONF_API_KEY: "key"})
+    assert result == {"type": "abort", "reason": "already_configured"}
+
+    assert await flow.async_step_reauth_confirm({"api_key": "new"}) == {
+        "type": "abort",
+        "reason": "unknown",
+    }
+    assert (await flow.async_step_reauth_confirm({}))["errors"][
+        CONF_API_KEY
+    ] == "required"
+
+    reauth_entry = DummyEntry()
+    flow._reauth_entry = reauth_entry
+    monkeypatch.setattr(
+        flow,
+        "async_update_reload_and_abort",
+        lambda entry, **kwargs: {"entry": entry, **kwargs},
+    )
+    updated = await flow.async_step_reauth_confirm({CONF_API_KEY: "updated"})
+    assert updated["data_updates"][CONF_API_KEY] == "updated"
+
+    options_flow = config_flow.GroqOptionsFlow()
+    monkeypatch.setattr(
+        options_flow,
+        "async_show_form",
+        lambda **kwargs: {"type": "form", **kwargs},
+    )
+    monkeypatch.setattr(
+        options_flow,
+        "async_create_entry",
+        lambda **kwargs: {"type": "create_entry", **kwargs},
+    )
+    assert (await options_flow.async_step_init())["type"] == "form"
+    assert (await options_flow.async_step_init({CONF_API_KEY: ""}))["data"] == {}
+
+    subflow = config_flow.GroqServiceSubentryFlow()
+    assert await subflow.async_step_user() == subflow.async_show_form(
+        step_id="init", data_schema=config_flow.service_type_schema()
+    )
+    bare_subflow = object.__new__(config_flow.GroqServiceSubentryFlow)
+    bare_subflow._service_type = None
+    assert bare_subflow._configured_service_type is None
+    with pytest.raises(ValueError):
+        subflow._existing_service_type()
+    subflow._service_type = FEATURE_TEXT_GENERATION
+    assert subflow._configured_service_type == FEATURE_TEXT_GENERATION
+
+    class TypeErrorSubentryFlow(config_flow.GroqServiceSubentryFlow):
+        @property
+        def _subentry_type(self):
+            raise TypeError
+
+    type_error_subflow = TypeErrorSubentryFlow()
+    type_error_subflow.handler = object()
+    assert type_error_subflow._configured_service_type is None
+
+    class UnsupportedSubentryFlow(config_flow.GroqServiceSubentryFlow):
+        @property
+        def _subentry_type(self):
+            return "unsupported"
+
+    unsupported_subflow = UnsupportedSubentryFlow()
+    unsupported_subflow.handler = object()
+    assert unsupported_subflow._configured_service_type is None
+
+    class TypedSubentryFlow(config_flow.GroqServiceSubentryFlow):
+        @property
+        def _subentry_type(self):
+            return FEATURE_IMAGE_RECOGNITION
+
+    typed_subflow = TypedSubentryFlow()
+    typed_subflow.handler = object()
+    assert typed_subflow._configured_service_type == FEATURE_IMAGE_RECOGNITION
+
+    async def fake_text_step(user_input=None):
+        return {"step": "text", "user_input": user_input}
+
+    typed_subflow.async_step_text_generation = fake_text_step
+    typed_subflow._service_type = FEATURE_TEXT_GENERATION
+    assert await typed_subflow.async_step_user({"x": 1}) == {
+        "step": "text",
+        "user_input": {"x": 1},
+    }
+
+    reconfigure_flow = config_flow.GroqServiceSubentryFlow()
+    reconfigure_flow.async_step_text_generation = fake_text_step
+    monkeypatch.setattr(
+        reconfigure_flow,
+        "_existing_service_type",
+        lambda: FEATURE_TEXT_GENERATION,
+    )
+    assert await reconfigure_flow.async_step_reconfigure({"y": 2}) == {
+        "step": "text",
+        "user_input": {"y": 2},
+    }
+
+    class ExistingTypeFlow(config_flow.GroqServiceSubentryFlow):
+        @property
+        def _is_reconfigure(self):
+            return True
+
+        def _get_reconfigure_subentry(self):
+            return SimpleNamespace(data={CONF_SERVICE_TYPE: FEATURE_TEXT_TO_SPEECH})
+
+    assert ExistingTypeFlow()._existing_service_type() == FEATURE_TEXT_TO_SPEECH
+
+    class ConfiguredTypeFlow(config_flow.GroqServiceSubentryFlow):
+        @property
+        def _is_reconfigure(self):
+            return True
+
+        def _get_reconfigure_subentry(self):
+            return SimpleNamespace(data={})
+
+    configured_type_flow = ConfiguredTypeFlow()
+    configured_type_flow._service_type = FEATURE_IMAGE_RECOGNITION
+    assert configured_type_flow._existing_service_type() == FEATURE_IMAGE_RECOGNITION
+
+    class ReconfigureTextFlow(config_flow.GroqServiceSubentryFlow):
+        @property
+        def _is_reconfigure(self):
+            return True
+
+        def _existing_service_data(self):
+            return {CONF_API_KEY: "kept"}
+
+        def _create_service_entry(self, service_type, user_input):
+            return {"service_type": service_type, "data": user_input}
+
+    reconfigure_text_flow = ReconfigureTextFlow()
+    merged = await reconfigure_text_flow.async_step_text_generation(
+        {CONF_NAME: "Text", CONF_MODEL: "llama-3.1-8b-instant"}
+    )
+    assert merged["data"][CONF_API_KEY] == "kept"
+
+    form_flow = config_flow.GroqServiceSubentryFlow()
+    monkeypatch.setattr(
+        form_flow,
+        "async_show_form",
+        lambda **kwargs: {"type": "form", **kwargs},
+    )
+    monkeypatch.setattr(
+        form_flow,
+        "_create_service_entry",
+        lambda service_type, user_input: {
+            "type": "create",
+            "service_type": service_type,
+            "data": user_input,
+        },
+    )
+    assert (await form_flow.async_step_init())[("step_id")] == "init"
+    assert (
+        await form_flow.async_step_init({CONF_SERVICE_TYPE: FEATURE_TEXT_TO_SPEECH})
+    )["step_id"] == FEATURE_TEXT_TO_SPEECH
+    assert (await form_flow.async_step_text_generation())[
+        "step_id"
+    ] == FEATURE_TEXT_GENERATION
+    assert (
+        await form_flow.async_step_text_generation(
+            {
+                CONF_NAME: "Text",
+                CONF_MODEL: "llama-3.1-8b-instant",
+                "reasoning_effort": "low",
+            }
+        )
+    )["errors"][CONF_MODEL]
+    advanced = await form_flow.async_step_text_generation(
+        {
+            CONF_NAME: "Text",
+            CONF_MODEL: "openai/gpt-oss-20b",
+            "advanced_options": True,
+        }
+    )
+    assert advanced["step_id"] == "text_generation_advanced"
+    assert (await form_flow.async_step_text_generation_advanced())[
+        "step_id"
+    ] == "text_generation_advanced"
+    assert (
+        await form_flow.async_step_text_generation_advanced(
+            {CONF_MODEL: "llama-3.1-8b-instant", "reasoning_effort": "low"}
+        )
+    )["errors"]["base"]
+    created = await form_flow.async_step_text_generation_advanced(
+        {CONF_MODEL: "openai/gpt-oss-20b"}
+    )
+    assert created["service_type"] == FEATURE_TEXT_GENERATION
+    assert (await form_flow.async_step_speech_to_text())["step_id"] == "speech_to_text"
+    assert (await form_flow.async_step_speech_to_text({CONF_NAME: "STT"}))[
+        "service_type"
+    ] == "speech_to_text"
+    assert (await form_flow.async_step_text_to_speech({CONF_NAME: "TTS"}))[
+        "service_type"
+    ] == FEATURE_TEXT_TO_SPEECH
+    assert (await form_flow.async_step_image_recognition())[
+        "step_id"
+    ] == FEATURE_IMAGE_RECOGNITION
+    assert (await form_flow.async_step_image_recognition({CONF_NAME: "Vision"}))[
+        "service_type"
+    ] == FEATURE_IMAGE_RECOGNITION
+
+
+@pytest.mark.asyncio
+async def test_services_handlers_and_registration_cover_remaining_paths():
+    entry = DummyEntry()
+    client = DummyClient()
+    runtime = build_runtime(DummyHass(), entry)
+    runtime.client = client
+    runtime.feature_registry = GroqFeatureRegistry(
+        [
+            GroqFeature.TEXT_GENERATION,
+            GroqFeature.STRUCTURED_OUTPUTS,
+            GroqFeature.VISION,
+            GroqFeature.OCR,
+            GroqFeature.PROMPT_CACHING,
+        ]
+    )
+    runtime.services_by_type = {
+        "text_generation": (
+            {
+                "unique_id": "text-id",
+                "name": "Text Service",
+                "service_type": "text_generation",
+                "model": "openai/gpt-oss-20b",
+                "structured_outputs": True,
+                "schema": {"type": "object"},
+            },
+        ),
+        "image_recognition": (
+            {
+                "unique_id": "vision-id",
+                "name": "Vision Service",
+                "service_type": "image_recognition",
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+            },
+        ),
+    }
+    entry.runtime_data = runtime
+    hass = DummyHass([entry], services=DummyServices())
+
+    assert (
+        _entry_from_call(hass, service_call({ATTR_CONFIG_ENTRY_ID: "entry-id"}))
+        is entry
+    )
+    with pytest.raises(Exception):
+        _entry_from_call(hass, service_call({ATTR_CONFIG_ENTRY_ID: "missing"}))
+    with pytest.raises(Exception):
+        _entry_from_call(DummyHass([]), service_call({}))
+    with pytest.raises(Exception):
+        _entry_from_call(DummyHass([entry, DummyEntry("other")]), service_call({}))
+    assert _entry_from_call(DummyHass([entry]), service_call({})) is entry
+    assert await _runtime_from_call(
+        hass, service_call({ATTR_CONFIG_ENTRY_ID: "entry-id"})
+    )
+    assert _service_subentries(entry, None, "text_generation") == []
+    assert (
+        _service_from_call(entry, runtime, service_call({}), "text_generation")[
+            "unique_id"
+        ]
+        == "text-id"
+    )
+    assert (
+        _service_from_call(
+            entry,
+            runtime,
+            service_call({ATTR_SERVICE_ID: "Text Service"}),
+            "text_generation",
+        )["unique_id"]
+        == "text-id"
+    )
+    with pytest.raises(Exception):
+        _service_from_call(
+            entry,
+            runtime,
+            service_call({ATTR_SERVICE_ID: "missing"}),
+            "text_generation",
+        )
+    assert _service_api_key({"api_key": "key"}) == "key"
+    assert _request_options({"include_reasoning": True})["include_reasoning"] is True
+
+    key = _cache_key("ns", {"b": 2, "a": 1})
+    _cache_set(runtime, "openai/gpt-oss-20b", key, {"text": "cached"})
+    assert _cache_get(runtime, "openai/gpt-oss-20b", key)["cached"] is True
+    assert _cache_get(runtime, "llama-3.1-8b-instant", "missing") is None
+
+    structured = await _handle_generate_structured(hass)(
+        service_call(
+            {
+                ATTR_CONFIG_ENTRY_ID: "entry-id",
+                ATTR_SERVICE_ID: "text-id",
+                ATTR_PROMPT: "p",
+                ATTR_SCHEMA: {"type": "object"},
+                ATTR_REASONING_EFFORT: "low",
+            }
+        )
+    )
+    assert structured["data"] == {"ok": True}
+    cached_structured = await _handle_generate_structured(hass)(
+        service_call(
+            {
+                ATTR_CONFIG_ENTRY_ID: "entry-id",
+                ATTR_SERVICE_ID: "text-id",
+                ATTR_PROMPT: "p",
+                ATTR_SCHEMA: {"type": "object"},
+                ATTR_REASONING_EFFORT: "low",
+            }
+        )
+    )
+    assert cached_structured["cached"] is True
+    generated = await _handle_generate_text(hass)(
+        service_call(
+            {
+                ATTR_CONFIG_ENTRY_ID: "entry-id",
+                ATTR_SERVICE_ID: "text-id",
+                ATTR_PROMPT: "p",
+            }
+        )
+    )
+    assert generated["data"] == {"ok": True}
+
+    runtime.model_registry.update(
+        [
+            GroqModel(
+                "vision-cache",
+                capabilities=frozenset(
+                    {GroqCapability.VISION, GroqCapability.PROMPT_CACHING}
+                ),
+            )
+        ]
+    )
+    runtime.services_by_type["image_recognition"][0]["model"] = "vision-cache"
+    analyzed = await _handle_analyze_image(hass)(
+        service_call(
+            {
+                ATTR_CONFIG_ENTRY_ID: "entry-id",
+                ATTR_SERVICE_ID: "vision-id",
+                ATTR_PROMPT: "p",
+                ATTR_IMAGE_URL: "url",
+            }
+        )
+    )
+    assert analyzed["text"] == "image text"
+    cached_analyzed = await _handle_analyze_image(hass)(
+        service_call(
+            {
+                ATTR_CONFIG_ENTRY_ID: "entry-id",
+                ATTR_SERVICE_ID: "vision-id",
+                ATTR_PROMPT: "p",
+                ATTR_IMAGE_URL: "url",
+            }
+        )
+    )
+    assert cached_analyzed["cached"] is True
+    ocr = await _handle_extract_text_from_image(hass)(
+        service_call(
+            {
+                ATTR_CONFIG_ENTRY_ID: "entry-id",
+                ATTR_SERVICE_ID: "vision-id",
+                ATTR_PROMPT: "p",
+                ATTR_IMAGE_URL: "url",
+            }
+        )
+    )
+    assert ocr["text"] == "image text"
+    cached_ocr = await _handle_extract_text_from_image(hass)(
+        service_call(
+            {
+                ATTR_CONFIG_ENTRY_ID: "entry-id",
+                ATTR_SERVICE_ID: "vision-id",
+                ATTR_PROMPT: "p",
+                ATTR_IMAGE_URL: "url",
+            }
+        )
+    )
+    assert cached_ocr["cached"] is True
+    assert (
+        await _handle_clear_cache(hass)(
+            service_call({ATTR_CONFIG_ENTRY_ID: "entry-id"})
+        )
+    )["cleared"] >= 0
+    client.models = [GroqModel("new-model")]
+    listed = await _handle_list_models(hass)(
+        service_call({ATTR_CONFIG_ENTRY_ID: "entry-id", ATTR_REFRESH: True})
+    )
+    assert any(model["id"] == "new-model" for model in listed["models"])
+
+    await async_register_services(hass)
+    await async_register_services(hass)
+    assert len(hass.services.registered) == 6
+    await async_unregister_services(hass)
+    assert {service for _, service in hass.services.removed} == {
+        SERVICE_GENERATE_TEXT,
+        SERVICE_GENERATE_STRUCTURED,
+        SERVICE_ANALYZE_IMAGE,
+        SERVICE_EXTRACT_TEXT_FROM_IMAGE,
+        SERVICE_CLEAR_CACHE,
+        SERVICE_LIST_MODELS,
+    }
+    await async_unregister_services(hass)
+
+    class RuntimeSetterRaises(DummyEntry):
+        @property
+        def runtime_data(self):
+            return None
+
+        @runtime_data.setter
+        def runtime_data(self, value):
+            raise AttributeError
+
+    entry_without_runtime_setter = RuntimeSetterRaises()
+    assert await _runtime_from_call(
+        DummyHass([entry_without_runtime_setter]),
+        service_call({ATTR_CONFIG_ENTRY_ID: "entry-id"}),
+    )
+
+    bad_subentry_entry = DummyEntry()
+    bad_subentry_entry.subentries = {"bad": SimpleNamespace(data={})}
+    assert service_data_by_type(bad_subentry_entry) == {}
+
+
+@pytest.mark.asyncio
+async def test_stt_setup_properties_wav_error_and_empty_results():
+    entry = DummyEntry()
+    entry.subentries = {
+        "skip": SimpleNamespace(data={"service_type": "other"}),
+        "stt": SimpleNamespace(
+            subentry_id="stt-id",
+            data={"service_type": "speech_to_text", "model": "whisper-large-v3"},
+        ),
+    }
+    runtime = build_runtime(DummyHass(), entry)
+    runtime.client = DummyClient()
+    entry.runtime_data = runtime
+    added = []
+    await stt_setup(DummyHass(), entry, lambda entities: added.extend(entities))
+    assert len(added) == 1
+    entity = added[0]
+    assert "en-US" in entity.supported_languages
+    assert stt.AudioFormats.WAV in entity.supported_formats
+    assert stt.AudioCodecs.PCM in entity.supported_codecs
+    assert stt.AudioBitRates.BITRATE_16 in entity.supported_bit_rates
+    assert stt.AudioSampleRates.SAMPLERATE_16000 in entity.supported_sample_rates
+    assert stt.AudioChannels.CHANNEL_MONO in entity.supported_channels
+    assert entity.device_info["model"] == "whisper-large-v3"
+
+    async def stream():
+        yield b"\x00\x00"
+
+    result = await entity.async_process_audio_stream(
+        stt.SpeechMetadata(
+            language="en-US",
+            format=stt.AudioFormats.WAV,
+            codec=stt.AudioCodecs.PCM,
+            bit_rate=stt.AudioBitRates.BITRATE_16,
+            sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
+            channel=stt.AudioChannels.CHANNEL_MONO,
+        ),
+        stream(),
+    )
+    assert result.result == stt.SpeechResultState.SUCCESS
+
+    class EmptyClient(DummyClient):
+        async def async_transcribe_audio(self, **kwargs):
+            return ""
+
+    class ErrorClient(DummyClient):
+        async def async_transcribe_audio(self, **kwargs):
+            raise GroqApiError("bad")
+
+    empty = GroqSTTEntity(entry, {"model": "whisper-large-v3"}, EmptyClient())
+    assert (
+        await empty.async_process_audio_stream(
+            stt.SpeechMetadata(
+                language="en-US",
+                format=stt.AudioFormats.OGG,
+                codec=stt.AudioCodecs.OPUS,
+                bit_rate=stt.AudioBitRates.BITRATE_16,
+                sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
+                channel=stt.AudioChannels.CHANNEL_MONO,
+            ),
+            stream(),
+        )
+    ).result == stt.SpeechResultState.ERROR
+    error = GroqSTTEntity(entry, {"model": "whisper-large-v3"}, ErrorClient())
+    assert (
+        await error.async_process_audio_stream(
+            stt.SpeechMetadata(
+                language="en-US",
+                format=stt.AudioFormats.OGG,
+                codec=stt.AudioCodecs.OPUS,
+                bit_rate=stt.AudioBitRates.BITRATE_16,
+                sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
+                channel=stt.AudioChannels.CHANNEL_MONO,
+            ),
+            stream(),
+        )
+    ).result == stt.SpeechResultState.ERROR
+
+
+@pytest.mark.asyncio
+async def test_ai_task_helpers_and_fallback_paths():
+    assert _strip_json_fence('```json\n{"a": 1}\n```') == '{"a": 1}'
+    assert "- name (required)" in _structure_description(
+        vol.Schema({vol.Required("name", description="Name"): str})
+    )
+    assert _structure_description(vol.Schema(str))
+
+    entry = DummyEntry()
+    service_data = {
+        "unique_id": "ai-id",
+        "name": "AI",
+        "model": "llama-3.1-8b-instant",
+        "structured_outputs": True,
+        "schema": {"type": "object"},
+    }
+    client = DummyClient()
+    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
+    assert entity.device_info["name"] == "AI"
+    task = SimpleNamespace(
+        name="task",
+        instructions="Return data",
+        structure=None,
+    )
+    result = await entity._async_generate_data(
+        task, SimpleNamespace(conversation_id="c")
+    )
+    assert result.data == {"ok": True}
+
+    plain_client = DummyClient()
+    plain_client.text = '```json\n{"name":"Kitchen"}\n```'
+    plain_entity = GroqAITaskEntity(
+        DummyHass(), entry, {"model": "llama-3.1-8b-instant"}, plain_client
+    )
+    task = SimpleNamespace(
+        name="task",
+        instructions="Return data",
+        structure=vol.Schema({vol.Required("name"): str}),
+    )
+    # Force fallback by disabling service-level structured outputs and monkeypatching
+    # the imported converter to return no schema for this specific branch.
+    with patch(
+        "custom_components.groq.ai_task.voluptuous_schema_to_json_schema",
+        return_value={},
+    ):
+        result = await plain_entity._async_generate_data(
+            task, SimpleNamespace(conversation_id="c")
+        )
+    assert result.data == {"name": "Kitchen"}
+
+    plain_client.text = "not json"
+    with patch(
+        "custom_components.groq.ai_task.voluptuous_schema_to_json_schema",
+        return_value={},
+    ):
+        with pytest.raises(HomeAssistantError):
+            await plain_entity._async_generate_data(
+                task, SimpleNamespace(conversation_id="c")
+            )
+
+    bad_structured = DummyClient()
+    bad_structured.structured = {"text": "{}", "data": {}, "cached": False}
+    bad_entity = GroqAITaskEntity(
+        DummyHass(), entry, {"model": "llama-3.1-8b-instant"}, bad_structured
+    )
+    with pytest.raises(HomeAssistantError):
+        await bad_entity._async_generate_data(
+            task, SimpleNamespace(conversation_id="c")
+        )
+
+
+@pytest.mark.asyncio
+async def test_ai_task_and_conversation_setup_properties():
+    entry = DummyEntry()
+    entry.subentries = {
+        "text": SimpleNamespace(
+            subentry_id="text-id",
+            data={
+                CONF_SERVICE_TYPE: FEATURE_TEXT_GENERATION,
+                CONF_NAME: "Assistant",
+                CONF_MODEL: "llama-3.1-8b-instant",
+            },
+        )
+    }
+    runtime = build_runtime(DummyHass(), entry)
+    runtime.client = DummyClient()
+    entry.runtime_data = runtime
+
+    ai_entities = []
+    await ai_task_module.async_setup_entry(
+        DummyHass(),
+        entry,
+        lambda entities: ai_entities.extend(entities),
+    )
+    assert len(ai_entities) == 1
+
+    conversation_entities = []
+    await conversation_module.async_setup_entry(
+        DummyHass(),
+        entry,
+        lambda entities: conversation_entities.extend(entities),
+    )
+    assert len(conversation_entities) == 1
+    entity = conversation_entities[0]
+    assert entity.supported_languages == "*"
+    assert entity.device_info["name"] == "Assistant"
+
+
+@pytest.mark.asyncio
+async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
+    entry = DummyEntry()
+    entry.data = {"unique_id": "entry-uid", "model": "m", "voice": "v", "url": "url"}
+    engine = SimpleNamespace(
+        calls=[],
+        get_supported_langs=lambda: ["en"],
+    )
+
+    async def async_get_tts(hass, text, **kwargs):
+        engine.calls.append((text, kwargs))
+        return SimpleNamespace(content=b"audio")
+
+    engine.async_get_tts = async_get_tts
+    entity = GroqTTSEntity(
+        DummyHass(), entry, engine, {"name": "tts", "unique_id": "tts-id"}
+    )
+    assert entity.default_language == "en"
+    assert entity.supported_languages == ["en"]
+    assert entity.device_info["identifiers"] == {("groq", "tts-id")}
+    assert entity.name == "TTS"
+    fmt, audio = await entity.async_get_tts_audio(
+        "hello",
+        "en",
+        {"vocal_directions": "warm", "normalize_audio": False},
+    )
+    assert fmt == "wav"
+    assert audio == b"audio"
+    assert engine.calls[0][0] == "[warm] hello"
+    assert await entity.async_get_tts_audio("x" * 201, "en") == (None, None)
+
+    async def cancelled_tts(hass, text, **kwargs):
+        raise asyncio.CancelledError
+
+    cancel_engine = SimpleNamespace(
+        async_get_tts=cancelled_tts,
+        get_supported_langs=lambda: ["en"],
+    )
+    cancel_entity = GroqTTSEntity(DummyHass(), entry, cancel_engine, {})
+    assert await cancel_entity.async_get_tts_audio("hello", "en") == (None, None)
+
+    async def missing_ffmpeg(*args, **kwargs):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(
+        "custom_components.groq.tts.asyncio.create_subprocess_exec",
+        missing_ffmpeg,
+    )
+    assert await entity.async_get_tts_audio(
+        "hello",
+        "en",
+        {"normalize_audio": True},
+    ) == (None, None)
+
+    tts_engine = GroqTTSEngine("key", "voice", "model", "url", cache_max=1)
+    assert tts_engine._estimate_token_usage("") == 1
+    assert tts_engine._free_tier_limits("missing") is None
+    tts_engine._protect_free_tier = False
+    assert tts_engine._check_local_free_tier_limit("text") == 4
+    tts_engine._record_local_usage(1)
+    assert tts_engine.close() is None
+    assert tts_engine.get_supported_langs() == ["ar", "en"]
+    assert "retry after 1 seconds" in tts_engine._rate_limit_message(
+        {"retry-after": "1"}
+    )
+    tts_engine._request_timestamps.extend([1.0, 100000.0])
+    tts_engine._token_timestamps.extend([(1.0, 1), (100000.0, 2)])
+    tts_engine._prune_local_usage(100000.0)
+    assert list(tts_engine._request_timestamps) == [100000.0]
+
+    limited = GroqTTSEngine(
+        "key",
+        "voice",
+        "canopylabs/orpheus-v1-english",
+        "url",
+        protect_free_tier=True,
+    )
+    monkeypatch.setattr(
+        limited,
+        "_free_tier_limits",
+        lambda model=None: {
+            "requests_per_minute": 0,
+            "requests_per_day": 10,
+            "tokens_per_minute": 10,
+            "tokens_per_day": 10,
+        },
+    )
+    with pytest.raises(GroqRateLimitError):
+        limited._check_local_free_tier_limit("text")
+
+    for limits in (
+        {
+            "requests_per_minute": 10,
+            "requests_per_day": 0,
+            "tokens_per_minute": 10,
+            "tokens_per_day": 10,
+        },
+        {
+            "requests_per_minute": 10,
+            "requests_per_day": 10,
+            "tokens_per_minute": 1,
+            "tokens_per_day": 10,
+        },
+        {
+            "requests_per_minute": 10,
+            "requests_per_day": 10,
+            "tokens_per_minute": 10,
+            "tokens_per_day": 1,
+        },
+    ):
+        guarded = GroqTTSEngine(
+            "key",
+            "voice",
+            "canopylabs/orpheus-v1-english",
+            "url",
+            protect_free_tier=True,
+        )
+        monkeypatch.setattr(
+            guarded, "_free_tier_limits", lambda model=None, limits=limits: limits
+        )
+        with pytest.raises(GroqRateLimitError):
+            guarded._check_local_free_tier_limit("text")
+
+    tts_http = GroqTTSEngine(
+        "key", "voice", "model", "url", cache_max=1, protect_free_tier=False
+    )
+    tts_http._session = DummyPostSession(PostResponse(200, b"audio"))
+    assert (await tts_http.async_get_tts(DummyHass(), "hello")).content == b"audio"
+    assert (await tts_http.async_get_tts(DummyHass(), "hello")).content == b"audio"
+
+    error_cases = [
+        (
+            PostResponse(401, {"error": "auth"}, {"content-type": "application/json"}),
+            ConfigEntryAuthFailed,
+        ),
+        (
+            PostResponse(
+                429,
+                {"error": "rate"},
+                {"retry-after": "1", "content-type": "application/json"},
+            ),
+            GroqRateLimitError,
+        ),
+        (
+            PostResponse(
+                500, {"error": {"message": "bad"}}, {"content-type": "application/json"}
+            ),
+            HomeAssistantError,
+        ),
+        (
+            PostResponse(500, b"{", {"content-type": "application/json"}),
+            HomeAssistantError,
+        ),
+        (
+            PostResponse(500, b"bad", {"content-type": "text/plain"}),
+            HomeAssistantError,
+        ),
+        (
+            PostResponse(
+                200,
+                {"error": {"message": "embedded"}},
+                {"content-type": "application/json"},
+            ),
+            HomeAssistantError,
+        ),
+        (
+            PostResponse(200, {"ok": True}, {"content-type": "application/json"}),
+            HomeAssistantError,
+        ),
+        (
+            PostResponse(200, b"{", {"content-type": "application/json"}),
+            HomeAssistantError,
+        ),
+        (
+            PostResponse(200, b"text", {"content-type": "text/plain"}),
+            HomeAssistantError,
+        ),
+    ]
+    for response, error_type in error_cases:
+        failing = GroqTTSEngine("key", "voice", "model", "url", protect_free_tier=False)
+        failing._session = DummyPostSession(response)
+        with pytest.raises(error_type):
+            await failing.async_get_tts(DummyHass(), "hello")
+
+    async def no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr("custom_components.groq.tts_engine.asyncio.sleep", no_sleep)
+    retry = GroqTTSEngine("key", "voice", "model", "url", protect_free_tier=False)
+    retry._session = DummyPostSession(
+        [aiohttp.ClientError("temporary"), PostResponse(200, b"retry-audio")]
+    )
+    assert (await retry.async_get_tts(DummyHass(), "retry")).content == b"retry-audio"
+
+    class AccessDenied(aiohttp.ClientError):
+        status = 403
+        message = "1010 denied"
+
+    denied = GroqTTSEngine("key", "voice", "model", "url", protect_free_tier=False)
+    denied._session = DummyPostSession([AccessDenied(), AccessDenied()])
+    with pytest.raises(HomeAssistantError, match="model access"):
+        await denied.async_get_tts(DummyHass(), "denied")
+
+    unknown_retry = GroqTTSEngine(
+        "key", "voice", "model", "url", protect_free_tier=False
+    )
+    unknown_retry._session = DummyPostSession(
+        [RuntimeError("temporary"), PostResponse(200, b"ok")]
+    )
+    assert (await unknown_retry.async_get_tts(DummyHass(), "unknown")).content == b"ok"
+
+    unknown_final = GroqTTSEngine(
+        "key", "voice", "model", "url", protect_free_tier=False
+    )
+    unknown_final._session = DummyPostSession(
+        [RuntimeError("first"), RuntimeError("second")]
+    )
+    with pytest.raises(HomeAssistantError, match="unknown error"):
+        await unknown_final.async_get_tts(DummyHass(), "unknown-final")
+
+    cancelled = GroqTTSEngine("key", "voice", "model", "url", protect_free_tier=False)
+    cancelled._session = DummyPostSession(asyncio.CancelledError())
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled.async_get_tts(DummyHass(), "cancel")

@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Προσθήκη μετατροπής κειμένου σε ομιλία",
+        "description": "Δείτε την τεκμηρίωση για περαιτέρω πληροφορίες.",
+        "data": {
+          "api_key": "Εισάγετε το Groq API key",
+          "model": "Μοντέλο",
+          "voice": "Φωνή",
+          "response_format": "Response format",
+          "vocal_directions": "Default vocal directions",
+          "url": "Εισάγετε το Groq endpoint."
+        }
+      }
+    },
+    "error": {
+      "wrong_api_key": "Μη έγκυρο API key. Εισάγετε ένα έγκυρο API key."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Διαμορφώστε τις επιλογές TTS",
+        "data": {
+          "voice": "Φωνή",
+          "normalize_audio": "Ενεργοποιήστε την αύξηση της έντασης για τον παραγόμενο ήχο (χρησιμοποιεί περισσότερη CPU)",
+          "protect_free_tier": "Protect Groq free tier usage",
+          "response_format": "Response format",
+          "vocal_directions": "Default vocal directions"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+name: Auto-Assign PRs
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  auto-assign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign and request review
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const login = 'barneyonline';
+
+            await github.rest.issues.addAssignees({
+              owner, repo, issue_number: pr.number, assignees: [login],
+            }).catch(() => {});
+
+            await github.rest.pulls.requestReviewers({
+              owner, repo, pull_number: pr.number, reviewers: [login],
+            }).catch(() => {});

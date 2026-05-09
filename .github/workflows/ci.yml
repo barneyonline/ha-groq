@@ -1,0 +1,29 @@
+name: CI
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+on:
+  push:
+    branches:
+      - main
+      - "release/**"
+    paths:
+      - "custom_components/**"
+      - "tests/components/groq/**"
+      - "tests/scripts/**"
+      - ".pre-commit-config.yaml"
+      - ".ruff.toml"
+      - ".github/workflows/tests.yml"
+      - ".github/workflows/ci.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: ./.github/workflows/tests.yml
+    secrets: inherit
