@@ -38,9 +38,7 @@ def test_translation_domain_matches_component_domain() -> None:
     """Guard against requesting translations for display name 'Groq'."""
     root = Path(__file__).resolve().parents[3]
     component_dir = root / "custom_components" / DOMAIN
-    manifest = json.loads(
-        (component_dir / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((component_dir / "manifest.json").read_text(encoding="utf-8"))
 
     assert component_dir.name == DOMAIN
     assert manifest["domain"] == DOMAIN

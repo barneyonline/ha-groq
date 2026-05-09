@@ -432,7 +432,7 @@ class GroqApiClient:
                 return payload
         except CancelledError:
             raise
-        except GroqApiError, ConfigEntryAuthFailed:
+        except (GroqApiError, ConfigEntryAuthFailed):
             raise
         except aiohttp.ClientError as err:
             raise GroqApiError(f"Network error calling Groq API: {err}") from err
@@ -483,7 +483,7 @@ class GroqApiClient:
                         yield event
         except CancelledError:
             raise
-        except GroqApiError, ConfigEntryAuthFailed:
+        except (GroqApiError, ConfigEntryAuthFailed):
             raise
         except aiohttp.ClientError as err:
             raise GroqApiError(f"Network error calling Groq API: {err}") from err
