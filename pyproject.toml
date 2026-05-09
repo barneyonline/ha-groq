@@ -4,7 +4,9 @@ version = "0.1.0"
 requires-python = ">=3.14"
 
 [tool.ruff]
-target-version = "py314"
+# Ruff does not expose a py314 target yet. The package still requires Python
+# 3.14; this parser target should move to py314 once Ruff adds it.
+target-version = "py313"
 
 [tool.black]
 target-version = ["py314"]

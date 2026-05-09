@@ -1,9 +1,7 @@
 {
     "config": {
-        "entry_type": "Groq account",
         "initiate_flow": {
-            "user": "Add Groq account",
-            "reconfigure": "Reconfigure Groq account"
+            "user": "Add Groq account"
         },
         "step": {
             "user": {
