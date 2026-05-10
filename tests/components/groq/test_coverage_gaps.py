@@ -17,6 +17,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
     HomeAssistantError,
     ServiceValidationError,
 )
@@ -25,10 +26,13 @@ from homeassistant.helpers.service import SERVICE_DESCRIPTION_CACHE
 import custom_components.groq as integration
 from custom_components.groq import (
     ai_task as ai_task_module,
+    api as api_module,
     config_flow,
     conversation as conversation_module,
     model_registry as model_registry_module,
+    repairs as repairs_module,
     text_generation as text_generation_module,
+    tts_engine as tts_engine_module,
 )
 from custom_components.groq.ai_task import (
     GroqAITaskEntity,
@@ -75,6 +79,7 @@ from custom_components.groq.feature_registry import (
 )
 from custom_components.groq.flow_schemas import (
     _model_default,
+    _requested_max_completion_tokens,
     clean_service_input,
     image_recognition_schema,
     sanitize_text_generation_service_data,
@@ -503,8 +508,10 @@ async def test_service_descriptions_include_dynamic_groq_service_options(monkeyp
             "value": "vision-id",
         }
     ]
-    with pytest.raises(ServiceValidationError, match="No loaded Groq"):
+    with pytest.raises(ServiceValidationError, match="No loaded Groq") as err:
         _entry_from_call(DummyHass([entry]), service_call({}))
+    assert err.value.translation_domain == DOMAIN
+    assert err.value.translation_key == "no_loaded_config_entry"
     entry.state = ConfigEntryState.LOADED
     assert (
         _entry_from_call(
@@ -525,12 +532,16 @@ async def test_service_descriptions_include_dynamic_groq_service_options(monkeyp
             },
         )
     }
-    with pytest.raises(ServiceValidationError, match="Multiple Groq services match"):
+    with pytest.raises(
+        ServiceValidationError, match="Multiple Groq services match"
+    ) as err:
         _entry_from_service_id(
             DummyHass([entry, duplicate]),
             FEATURE_TEXT_GENERATION,
             "text-id",
         )
+    assert err.value.translation_domain == DOMAIN
+    assert err.value.translation_key == "multiple_services_match"
     assert _apply_service_options({"fields": {}}, []) == {"fields": {}}
 
     # The updater exits quietly when service descriptions are unavailable or
@@ -880,6 +891,86 @@ async def test_api_client_network_error_paths():
 
 
 @pytest.mark.asyncio
+async def test_api_client_tracks_availability_and_logs_recovery(caplog):
+    client = GroqApiClient(
+        DummyHass(),
+        api_key="key",
+        session=DummySession(
+            [
+                JsonResponse(500, {"error": {"message": "server"}}),
+                JsonResponse(500, {"error": {"message": "server"}}),
+                JsonResponse(200, {"data": []}),
+            ]
+        ),
+    )
+
+    with pytest.raises(GroqApiError):
+        await client.async_list_models()
+    assert client.available is False
+
+    with pytest.raises(GroqApiError):
+        await client.async_list_models()
+    assert caplog.text.count("Groq API returned HTTP 500") == 1
+
+    assert await client.async_list_models() == []
+    assert client.available is True
+    assert "Groq API is reachable again" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_api_client_creates_repair_for_model_access_error(monkeypatch):
+    issues = []
+    monkeypatch.setattr(
+        "custom_components.groq.api.async_create_model_access_issue",
+        lambda hass, model: issues.append((hass, model)),
+    )
+    client = GroqApiClient(
+        DummyHass(),
+        api_key="key",
+        session=DummySession(
+            JsonResponse(
+                400,
+                {"error": {"message": "The model custom/missing is not available"}},
+            )
+        ),
+    )
+
+    with pytest.raises(GroqApiError):
+        await client.async_generate_text(
+            TextGenerationRequest(prompt="hello", model="custom/missing")
+        )
+
+    assert issues == [(client._hass, "custom/missing")]
+
+
+def test_api_client_internal_availability_and_model_access_branches(monkeypatch):
+    client = GroqApiClient(DummyHass(), api_key="key", session=DummySession([]))
+    client._handle_http_unavailable(408, {"error": "timeout"})
+    assert client.available is False
+    assert client._unavailable_reason == "Groq API request timed out"
+
+    issues = []
+    monkeypatch.setattr(
+        "custom_components.groq.api.async_create_model_access_issue",
+        lambda hass, model: issues.append((hass, model)),
+    )
+    client._create_model_access_issue(
+        400,
+        {"error": {"message": "model is not available"}},
+        {"model": 123},
+    )
+    assert issues == []
+
+    assert api_module._payload_mentions_model_access([]) is False
+    assert (
+        api_module._payload_mentions_model_access(
+            {"error": "Model custom/missing does not exist"}
+        )
+        is True
+    )
+
+
+@pytest.mark.asyncio
 async def test_api_client_cancel_and_transcription_shape_paths():
     class CancelSession:
         def request(self, *args, **kwargs):
@@ -943,6 +1034,12 @@ def test_const_errors_features_cache_and_rate_limit_helpers():
         "vision": SimpleNamespace(data={CONF_SERVICE_TYPE: FEATURE_IMAGE_RECOGNITION})
     }
     assert enabled_features_from_entry(entry) == [FEATURE_IMAGE_RECOGNITION]
+    assert (
+        _requested_max_completion_tokens(
+            {"request_body_options": {"max_completion_tokens": ["not", "scalar"]}}
+        )
+        == []
+    )
     entry.data = {"url": "u", "model": "m", "voice": "v"}
     entry.subentries = {}
     assert enabled_features_from_entry(entry) == [FEATURE_TEXT_TO_SPEECH]
@@ -1019,6 +1116,55 @@ def test_const_errors_features_cache_and_rate_limit_helpers():
     assert _duration_seconds("2h") == 7200
     assert _duration_seconds("bad") is None
     assert _duration_seconds("badms") is None
+
+
+def test_repair_issue_helpers_create_sanitized_issues(monkeypatch):
+    created = []
+    deleted = []
+    monkeypatch.setattr(
+        repairs_module.ir,
+        "async_create_issue",
+        lambda *args, **kwargs: created.append((args, kwargs)),
+    )
+    monkeypatch.setattr(
+        repairs_module.ir,
+        "async_delete_issue",
+        lambda *args, **kwargs: deleted.append((args, kwargs)),
+    )
+    entry = DummyEntry()
+
+    repairs_module.async_create_ffmpeg_missing_issue(DummyHass(), entry)
+    repairs_module.async_create_model_access_issue(
+        DummyHass(),
+        "m" * 200,
+        service_id="svc",
+    )
+    repairs_module.async_create_model_configuration_issue(
+        DummyHass(),
+        entry,
+        {UNIQUE_ID: "service-uid"},
+        "vision-model",
+        "image recognition",
+    )
+    repairs_module.async_delete_ffmpeg_missing_issue(
+        DummyHass(),
+        entry,
+        {UNIQUE_ID: "service-uid"},
+    )
+
+    assert [kwargs["translation_key"] for _args, kwargs in created] == [
+        repairs_module.ISSUE_FFMPEG_MISSING,
+        repairs_module.ISSUE_MODEL_ACCESS,
+        repairs_module.ISSUE_MODEL_CONFIGURATION,
+    ]
+    assert created[0][1]["translation_placeholders"] == {"service_name": "Groq"}
+    assert len(created[1][1]["translation_placeholders"]["model"]) == 128
+    assert created[2][1]["translation_placeholders"] == {
+        "service_name": "service-uid",
+        "model": "vision-model",
+        "feature": "image recognition",
+    }
+    assert deleted
 
 
 @pytest.mark.asyncio
@@ -1638,15 +1784,17 @@ async def test_runtime_and_integration_lifecycle_branches(monkeypatch):
         "text": SimpleNamespace(data={"service_type": "text_generation"}),
     }
     hass = DummyHass([entry], services=services)
+    assert await integration.async_setup(hass, {}) is True
+    assert services.registered
     assert await integration.async_setup_entry(hass, entry) is True
     assert entry.runtime_data is await async_get_runtime(hass, entry)
-    assert services.registered
     assert await integration.async_unload_entry(hass, entry) is True
-    assert services.removed
+    assert services.removed == []
 
     other = DummyEntry("other")
     services2 = DummyServices()
     hass2 = DummyHass([entry, other], services=services2)
+    await integration.async_setup(hass2, {})
     await integration.async_setup_entry(hass2, entry)
     await integration.async_unload_entry(hass2, entry)
     assert services2.removed == []
@@ -1663,6 +1811,15 @@ async def test_runtime_and_integration_lifecycle_branches(monkeypatch):
     assert await integration.async_migrate_entry(hass, no_legacy)
     assert not integration._has_other_loaded_entries(
         SimpleNamespace(config_entries=SimpleNamespace()),
+        entry,
+    )
+    assert not integration._has_other_loaded_entries(DummyHass([entry]), entry)
+    assert not integration._has_other_loaded_entries(
+        DummyHass([entry, DummyEntry("unloaded", state=ConfigEntryState.NOT_LOADED)]),
+        entry,
+    )
+    assert integration._has_other_loaded_entries(
+        DummyHass([entry, DummyEntry("loaded")]),
         entry,
     )
 
@@ -1684,6 +1841,16 @@ async def test_runtime_and_integration_lifecycle_branches(monkeypatch):
         await async_get_runtime(DummyHass(), RuntimeSetterRaises()),
         type(runtime),
     )
+
+    async def setup_unavailable(self, **_kwargs):
+        raise GroqApiError("Network error calling Groq API: down")
+
+    unavailable_entry = DummyEntry("unavailable")
+    monkeypatch.setattr(GroqApiClient, "async_list_models", setup_unavailable)
+    with pytest.raises(ConfigEntryNotReady):
+        await integration.async_setup_entry(
+            DummyHass([unavailable_entry]), unavailable_entry
+        )
 
 
 @pytest.mark.asyncio
@@ -1719,6 +1886,12 @@ async def test_runtime_model_registry_hydration_branches():
 
     runtime.client.async_list_models = cannot_connect
     await async_hydrate_runtime_model_registry(entry, runtime)
+    with pytest.raises(ConfigEntryNotReady):
+        await async_hydrate_runtime_model_registry(
+            entry,
+            runtime,
+            raise_not_ready=True,
+        )
 
     async def timed_out(**_kwargs):
         raise TimeoutError("slow")
@@ -2064,7 +2237,10 @@ async def test_config_flow_remaining_paths(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_services_handlers_and_registration_cover_remaining_paths(tmp_path):
+async def test_services_handlers_and_registration_cover_remaining_paths(
+    tmp_path,
+    monkeypatch,
+):
     entry = DummyEntry()
     client = DummyClient()
     runtime = build_runtime(DummyHass(), entry)
@@ -2227,6 +2403,28 @@ async def test_services_handlers_and_registration_cover_remaining_paths(tmp_path
                 }
             )
         )
+    model_configuration_issues = []
+    monkeypatch.setattr(
+        "custom_components.groq.services.async_create_model_configuration_issue",
+        lambda hass, entry, service_data, model, feature: model_configuration_issues.append(
+            (entry.entry_id, service_data["unique_id"], model, feature)
+        ),
+    )
+    runtime.services_by_type["text_generation"][0]["model"] = "whisper-large-v3"
+    with pytest.raises(ServiceValidationError, match="text_generation"):
+        await _handle_generate_text(hass)(
+            service_call(
+                {
+                    ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: "text-id",
+                    ATTR_PROMPT: "bad",
+                }
+            )
+        )
+    assert model_configuration_issues == [
+        ("entry-id", "text-id", "whisper-large-v3", "text_generation")
+    ]
+    runtime.services_by_type["text_generation"][0]["model"] = "openai/gpt-oss-20b"
     original_registry = runtime.model_registry
     runtime.model_registry = GroqModelRegistry(
         [
@@ -2673,7 +2871,8 @@ async def test_stt_setup_properties_wav_error_and_empty_results():
     assert stt.AudioChannels.CHANNEL_MONO in entity.supported_channels
     assert entity.device_info["model"] == "whisper-large-v3"
     assert entity.device_info["name"] == "Groq Speech-to-Text"
-    assert entity.name is None
+    assert entity.has_entity_name is True
+    assert entity.translation_key == "speech_to_text"
 
     async def stream():
         yield b"\x00\x00"
@@ -2748,7 +2947,8 @@ async def test_ai_task_helpers_and_fallback_paths():
     client = DummyClient()
     entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
     assert entity.device_info["name"] == "AI"
-    assert entity.name == "Data generation tasks"
+    assert entity.has_entity_name is True
+    assert entity.translation_key == "data_generation_tasks"
     task = SimpleNamespace(
         name="task",
         instructions="Return data",
@@ -2967,7 +3167,8 @@ async def test_ai_task_and_conversation_setup_properties():
     entity = conversation_entities[0]
     assert entity.supported_languages == "*"
     assert entity.device_info["name"] == "Assistant"
-    assert entity.name == "Assist"
+    assert entity.has_entity_name is True
+    assert entity.translation_key == "assist"
     tiny_registry = GroqModelRegistry(
         [
             GroqModel(
@@ -3039,7 +3240,8 @@ async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
     assert entity.supported_languages == ["en"]
     assert entity.device_info["identifiers"] == {("groq", "tts-id")}
     assert entity.device_info["name"] == "tts"
-    assert entity.name == "tts"
+    assert entity.has_entity_name is True
+    assert entity.translation_key == "text_to_speech"
     fmt, audio = await entity.async_get_tts_audio(
         "hello",
         "en",
@@ -3063,6 +3265,13 @@ async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
     async def missing_ffmpeg(*args, **kwargs):
         raise FileNotFoundError
 
+    ffmpeg_issues = []
+    monkeypatch.setattr(
+        "custom_components.groq.tts.async_create_ffmpeg_missing_issue",
+        lambda hass, entry, service_data: ffmpeg_issues.append(
+            (entry.entry_id, service_data.get("unique_id"))
+        ),
+    )
     monkeypatch.setattr(
         "custom_components.groq.tts.asyncio.create_subprocess_exec",
         missing_ffmpeg,
@@ -3072,8 +3281,17 @@ async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
         "en",
         {"normalize_audio": True},
     ) == (None, None)
+    assert ffmpeg_issues == [("entry-id", "tts-id")]
 
     tts_engine = GroqTTSEngine("key", "voice", "model", "url", cache_max=1)
+    assert tts_engine.available is True
+    assert tts_engine_module._payload_mentions_model_access([]) is False
+    assert (
+        tts_engine_module._payload_mentions_model_access(
+            {"error": "Model custom/missing not found"}
+        )
+        is True
+    )
     assert tts_engine._estimate_token_usage("") == 1
     assert tts_engine._free_tier_limits("missing") is None
     tts_engine._protect_free_tier = False
@@ -3202,6 +3420,25 @@ async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
         failing._session = DummyPostSession(response)
         with pytest.raises(error_type):
             await failing.async_get_tts(DummyHass(), "hello")
+
+    model_access_issues = []
+    monkeypatch.setattr(
+        "custom_components.groq.tts_engine.async_create_model_access_issue",
+        lambda hass, model: model_access_issues.append((hass, model)),
+    )
+    model_access = GroqTTSEngine(
+        "key", "voice", "model", "url", protect_free_tier=False
+    )
+    model_access._session = DummyPostSession(
+        PostResponse(
+            400,
+            {"error": {"message": "Model model is not available"}},
+            {"content-type": "application/json"},
+        )
+    )
+    with pytest.raises(HomeAssistantError, match="not available"):
+        await model_access.async_get_tts(DummyHass(), "hello")
+    assert model_access_issues == [(model_access_issues[0][0], "model")]
 
     async def no_sleep(_delay):
         return None

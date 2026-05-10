@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -103,6 +104,12 @@ class DummyEngine:
     @staticmethod
     def get_supported_langs():
         return ["ar", "en"]
+
+
+def test_unique_id_from_api_key_uses_sha256_fingerprint():
+    assert config_flow._unique_id_from_api_key("api-key") == (
+        f"groq_{hashlib.sha256(b'api-key').hexdigest()}"
+    )
 
 
 @pytest.mark.asyncio
@@ -333,7 +340,8 @@ def test_tts_entity_properties_use_options_over_data():
     assert entity.supported_languages == ["ar", "en"]
     assert entity.device_info["model"] == ORPHEUS_ENGLISH_MODEL
     assert entity.device_info["name"] == ORPHEUS_ENGLISH_MODEL
-    assert entity.name == ORPHEUS_ENGLISH_MODEL
+    assert entity.has_entity_name is True
+    assert entity.translation_key == "text_to_speech"
 
 
 class DummyProc:
@@ -484,7 +492,8 @@ async def test_tts_async_setup_entry_builds_entities_from_subentries():
     assert len(added) == 1
     assert subentry_ids == ["subentry-id"]
     assert added[0].unique_id == "subentry-id"
-    assert added[0].name == "Kitchen TTS"
+    assert added[0].has_entity_name is True
+    assert added[0].translation_key == "text_to_speech"
     assert added[0].device_info["name"] == "Kitchen TTS"
     assert added[0]._engine._url == DEFAULT_TTS_URL
     assert added[0]._engine._protect_free_tier is False
@@ -1139,6 +1148,51 @@ async def test_config_flow_reauth_confirm(monkeypatch):
         lambda _hass, _api_key: asyncio.sleep(0, result=None),
     )
     duplicate = await flow.async_step_reauth_confirm({"api_key": duplicate_key})
+    assert duplicate["type"] == "form"
+    assert duplicate["errors"] == {"base": "duplicate_api_key"}
+
+
+@pytest.mark.asyncio
+async def test_config_flow_reconfigure_updates_account(monkeypatch):
+    entry = DummyConfigEntry({"api_key": "old", "name": "Old Groq"}, {})
+    flow = config_flow.GroqConfigFlow()
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(flow, "_get_reconfigure_entry", lambda: entry)
+    monkeypatch.setattr(
+        flow,
+        "async_update_reload_and_abort",
+        lambda entry, **kwargs: {"type": "abort", "entry": entry, **kwargs},
+    )
+
+    form = await flow.async_step_reconfigure()
+    assert form["type"] == "form"
+    assert form["step_id"] == "reconfigure"
+
+    result = await flow.async_step_reconfigure(
+        {"name": "Production Groq", "api_key": "new-key"}
+    )
+
+    assert result["type"] == "abort"
+    assert result["entry"] is entry
+    assert result["title"] == "Production Groq"
+    assert result["data"]["name"] == "Production Groq"
+    assert result["data"]["api_key"] == "new-key"
+    assert result["options"] == {}
+    assert result["unique_id"] == config_flow._unique_id_from_api_key("new-key")
+    assert result["reason"] == "reconfigure_successful"
+
+    other = DummyConfigEntry({"api_key": "duplicate"}, {})
+    other.entry_id = "other-entry"
+    other.unique_id = config_flow._unique_id_from_api_key("duplicate")
+
+    class DuplicateConfigEntries(DummyConfigEntries):
+        def async_entries(self, _domain):
+            return [entry, other]
+
+    flow.hass = SimpleNamespace(config_entries=DuplicateConfigEntries())
+    duplicate = await flow.async_step_reconfigure(
+        {"name": "Production Groq", "api_key": "duplicate"}
+    )
     assert duplicate["type"] == "form"
     assert duplicate["errors"] == {"base": "duplicate_api_key"}
 

@@ -3,21 +3,37 @@ description: Suggest an improvement for the Groq integration.
 title: "[Feature]: "
 labels: ["enhancement", "status/needs-triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. For large features, include the Home Assistant workflow this would enable and any relevant Groq API documentation.
   - type: dropdown
     id: area
     attributes:
       label: Area
       options:
-        - Setup, API key, reauthentication
-        - Model or voice selection
-        - Speech generation API request
-        - Audio normalization
-        - Diagnostics
+        - Account setup, API key, reauthentication
+        - Service subentries and configuration
+        - Text generation, Assist, or AI Task
+        - Image analysis or vision actions
+        - Speech-to-text transcription
+        - Text-to-speech or voice selection
+        - Groq API, model access, or rate limits
+        - Audio processing or ffmpeg normalization
+        - Diagnostics or repair issues
         - Documentation
         - Developer workflow / repository tooling
         - Other / unsure
     validations:
       required: true
+  - type: input
+    id: related_docs
+    attributes:
+      label: Related Groq or Home Assistant documentation
+      description: Link to API docs, model docs, Home Assistant docs, or a related discussion if useful.
+      placeholder: https://console.groq.com/docs/
+    validations:
+      required: false
   - type: textarea
     id: problem
     attributes:
@@ -29,5 +45,13 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
+      description: Describe the behavior, configuration, action, entity, or documentation change you expect.
     validations:
       required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. Mention current workarounds or other designs you considered.
+    validations:
+      required: false

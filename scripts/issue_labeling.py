@@ -19,11 +19,15 @@ TITLE_PREFIX_TO_KIND = {
 NO_AREA_SELECTIONS = {"Other", "Other / unsure"}
 
 AREA_LABEL_MAP = {
-    "Setup, API key, reauthentication": "area/setup-auth",
-    "Model or voice selection": "area/models-voices",
-    "Speech generation API request": "area/api",
-    "Audio normalization": "area/audio-processing",
-    "Diagnostics": "area/diagnostics",
+    "Account setup, API key, reauthentication": "area/setup-auth",
+    "Service subentries and configuration": "area/configuration",
+    "Text generation, Assist, or AI Task": "area/text-generation",
+    "Image analysis or vision actions": "area/vision",
+    "Speech-to-text transcription": "area/stt",
+    "Text-to-speech or voice selection": "area/tts",
+    "Groq API, model access, or rate limits": "area/api",
+    "Audio processing or ffmpeg normalization": "area/audio-processing",
+    "Diagnostics or repair issues": "area/diagnostics-repairs",
     "Documentation": "area/docs",
     "Developer workflow / repository tooling": "area/tooling",
 }
@@ -52,23 +56,39 @@ LABEL_DEFINITIONS = {
     },
     "area/setup-auth": {
         "color": "1D76DB",
-        "description": "Setup, API key, MFA, or reauthentication",
+        "description": "Account setup, API key, or reauthentication",
     },
-    "area/models-voices": {
+    "area/configuration": {
         "color": "1D76DB",
-        "description": "Groq model and voice selection",
+        "description": "Config entries, service subentries, or options flow behavior",
+    },
+    "area/text-generation": {
+        "color": "1D76DB",
+        "description": "Text generation, Assist, or AI Task behavior",
+    },
+    "area/vision": {
+        "color": "1D76DB",
+        "description": "Image analysis, camera, or vision action behavior",
+    },
+    "area/stt": {
+        "color": "1D76DB",
+        "description": "Speech-to-text transcription behavior",
+    },
+    "area/tts": {
+        "color": "1D76DB",
+        "description": "Text-to-speech, model, or voice selection behavior",
     },
     "area/api": {
         "color": "1D76DB",
-        "description": "Groq speech API request or response behavior",
+        "description": "Groq API, model access, token limit, or rate limit behavior",
     },
     "area/audio-processing": {
         "color": "1D76DB",
         "description": "ffmpeg or normalization behavior",
     },
-    "area/diagnostics": {
+    "area/diagnostics-repairs": {
         "color": "1D76DB",
-        "description": "Diagnostics and troubleshooting output",
+        "description": "Diagnostics, repair issues, and troubleshooting output",
     },
     "area/docs": {
         "color": "1D76DB",

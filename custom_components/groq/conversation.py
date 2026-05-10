@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from typing import Any
+
 from homeassistant.components import conversation
 from homeassistant.components.conversation import (
     AssistantContent,
@@ -41,6 +44,8 @@ from .text_generation import (
     text_generation_service_data,
 )
 
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -70,13 +75,14 @@ class GroqConversationEntity(ConversationEntity):
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_supports_streaming = True
+    _attr_translation_key = "assist"
 
     def __init__(
         self,
         hass: HomeAssistant,
         config_entry: ConfigEntry,
-        service_data: dict,
-        client,
+        service_data: dict[str, Any],
+        client: Any,
         model_registry: GroqModelRegistry | None = None,
     ) -> None:
         """Initialize the conversation entity."""
@@ -86,7 +92,6 @@ class GroqConversationEntity(ConversationEntity):
         self._client = client
         self._model_registry = model_registry or GroqModelRegistry()
         self._service_name = service_name(config_entry, service_data)
-        self._attr_name = "Assist"
         self._attr_unique_id = f"{service_unique_id(config_entry, service_data)}_assist"
 
     @property
@@ -185,7 +190,7 @@ class GroqConversationEntity(ConversationEntity):
         """Stream an Assist response into Home Assistant's chat log."""
         chunks: list[str] = []
 
-        async def content_stream():
+        async def content_stream() -> AsyncIterator[dict[str, str]]:
             yield {"role": "assistant"}
             async for chunk in self._client.async_stream_text(request):
                 chunks.append(chunk)

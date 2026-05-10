@@ -3,6 +3,7 @@ Setting up TTS entity.
 """
 
 from __future__ import annotations
+from typing import Any
 import logging
 import time
 import asyncio
@@ -12,6 +13,7 @@ from homeassistant.components.tts import TextToSpeechEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.exceptions import HomeAssistantError
 from .const import (
     CONF_API_KEY,
     CONF_SERVICE_TYPE,
@@ -34,23 +36,33 @@ from .const import (
     FEATURE_TEXT_TO_SPEECH,
 )
 from .tts_engine import GroqTTSEngine
+from .repairs import (
+    async_create_ffmpeg_missing_issue,
+    async_delete_ffmpeg_missing_issue,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 MAX_TTS_INPUT_CHARS = 200
+PARALLEL_UPDATES = 1
 
 
-def _entry_value(config_entry: ConfigEntry, key: str, default=None, service_data=None):
+def _entry_value(
+    config_entry: ConfigEntry,
+    key: str,
+    default: Any = None,
+    service_data: dict[str, Any] | None = None,
+) -> Any:
     """Return the effective value, allowing options to override setup data."""
     if service_data and key in service_data:
         return service_data[key]
     return config_entry.options.get(key, config_entry.data.get(key, default))
 
 
-def _tts_service_data(config_entry: ConfigEntry) -> list[dict | None]:
+def _tts_service_data(config_entry: ConfigEntry) -> list[dict[str, Any] | None]:
     """Return TTS service subentry data for an entry."""
     subentries = getattr(config_entry, "subentries", None) or {}
-    services = []
+    services: list[dict[str, Any] | None] = []
     for subentry in subentries.values():
         data = dict(getattr(subentry, "data", {}))
         if data.get(CONF_SERVICE_TYPE) == FEATURE_TEXT_TO_SPEECH:
@@ -108,18 +120,19 @@ async def async_setup_entry(
 
 
 class GroqTTSEntity(TextToSpeechEntity):
-    # Home Assistant's TTS manager requires TextToSpeechEntity.name to be set
-    # before it will generate or stream audio. TTS entities therefore expose
-    # the configured service name directly instead of using device-only naming.
-    _attr_has_entity_name = False
+    # Home Assistant's TTS manager requires TextToSpeechEntity.name to resolve
+    # to a value before it will generate or stream audio, so this entity uses a
+    # translated data-point name instead of a device-only name.
+    _attr_has_entity_name = True
     _attr_should_poll = False
+    _attr_translation_key = "text_to_speech"
 
     def __init__(
         self,
         hass: HomeAssistant,
         config: ConfigEntry,
         engine: GroqTTSEngine,
-        service_data: dict | None = None,
+        service_data: dict[str, Any] | None = None,
     ) -> None:
         self.hass = hass
         self._engine = engine
@@ -142,7 +155,6 @@ class GroqTTSEntity(TextToSpeechEntity):
             _entry_value(config, CONF_MODEL, "", service_data=self._service_data),
             service_data=self._service_data,
         )
-        self._attr_name = self._service_name
 
     @property
     def default_language(self) -> str:
@@ -278,11 +290,14 @@ class GroqTTSEntity(TextToSpeechEntity):
                     _LOGGER.error(
                         "ffmpeg executable not found. Please install ffmpeg or adjust PATH."
                     )
-                    raise Exception("ffmpeg not found")
+                    async_create_ffmpeg_missing_issue(
+                        self.hass, self._config, self._service_data
+                    )
+                    raise HomeAssistantError("ffmpeg not found")
                 stdout, stderr = await process.communicate(input=input_bytes)
                 if process.returncode != 0:
                     _LOGGER.error("ffmpeg error: %s", stderr.decode())
-                    raise Exception("ffmpeg failed")
+                    raise HomeAssistantError("ffmpeg failed")
                 return stdout
 
             if normalize_audio:
@@ -310,6 +325,9 @@ class GroqTTSEntity(TextToSpeechEntity):
                     "pipe:1",
                 ]
                 audio_content = await run_ffmpeg(cmd, audio_content)
+                async_delete_ffmpeg_missing_issue(
+                    self.hass, self._config, self._service_data
+                )
 
             overall_duration = (time.monotonic() - overall_start) * 1000
             _LOGGER.debug("Overall TTS processing time: %.2f ms", overall_duration)

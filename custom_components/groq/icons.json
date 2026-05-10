@@ -1,0 +1,24 @@
+{
+    "entity": {
+        "ai_task": {
+            "data_generation_tasks": {
+                "default": "mdi:robot-outline"
+            }
+        },
+        "conversation": {
+            "assist": {
+                "default": "mdi:chat-processing-outline"
+            }
+        },
+        "stt": {
+            "speech_to_text": {
+                "default": "mdi:microphone-outline"
+            }
+        },
+        "tts": {
+            "text_to_speech": {
+                "default": "mdi:speaker-message"
+            }
+        }
+    }
+}

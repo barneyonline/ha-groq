@@ -131,6 +131,8 @@ def _requested_max_completion_tokens(data: dict[str, Any]) -> list[int]:
     for value in values:
         if value in (None, ""):
             continue
+        if not isinstance(value, str | int):
+            continue
         try:
             tokens.append(int(value))
         except (TypeError, ValueError):

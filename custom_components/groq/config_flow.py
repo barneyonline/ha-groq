@@ -80,7 +80,7 @@ def generate_entry_id() -> str:
 
 def _unique_id_from_api_key(api_key: str) -> str:
     """Return the stable account unique id derived from a Groq API key."""
-    uid_hash = hashlib.sha1(api_key.encode("utf-8")).hexdigest()
+    uid_hash = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
     return f"groq_{uid_hash}"
 
 
@@ -232,7 +232,7 @@ async def get_dynamic_options(hass, api_key: str | None) -> tuple[list[str], lis
     return models, VOICES
 
 
-class GroqConfigFlow(ConfigFlow, domain=DOMAIN):
+class GroqConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
     """Handle a config flow for Groq."""
 
     VERSION = 1
@@ -285,6 +285,66 @@ class GroqConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown_error"
         return self.async_show_form(
             step_id="user",
+            data_schema=schema,
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> data_entry_flow.FlowResult:
+        """Reconfigure a Groq account entry."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            new_name = str(
+                user_input.get(CONF_NAME) or getattr(entry, "title", None) or DOMAIN
+            )
+            api_key = user_input.get(CONF_API_KEY)
+            new_data = dict(entry.data)
+            new_options = dict(entry.options)
+            unique_id = entry.unique_id
+
+            if api_key:
+                validation_error = await async_validate_api_key(self.hass, api_key)
+                errors.update(_api_key_validation_errors(validation_error))
+                if not errors and (
+                    duplicate_error := _api_key_duplicate_error(
+                        self.hass,
+                        api_key,
+                        current_entry_id=entry.entry_id,
+                    )
+                ):
+                    errors["base"] = duplicate_error
+                if not errors:
+                    new_data[CONF_API_KEY] = api_key
+                    new_options.pop(CONF_API_KEY, None)
+                    unique_id = _unique_id_from_api_key(api_key)
+
+            if not errors:
+                new_data[CONF_NAME] = new_name
+                return self.async_update_reload_and_abort(
+                    entry,
+                    unique_id=unique_id,
+                    title=new_name,
+                    data=new_data,
+                    options=new_options,
+                    reason="reconfigure_successful",
+                )
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_NAME,
+                    default=entry.data.get(
+                        CONF_NAME,
+                        getattr(entry, "title", None) or "Groq",
+                    ),
+                ): str,
+                vol.Optional(CONF_API_KEY): api_key_selector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="reconfigure",
             data_schema=schema,
             errors=errors,
         )

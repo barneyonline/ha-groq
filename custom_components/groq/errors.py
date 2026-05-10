@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+
+from .const import DOMAIN
 
 
 class GroqError(HomeAssistantError):
@@ -65,3 +67,19 @@ class GroqUnsupportedCapability(GroqModelNotSupported):
 
 class GroqResponseError(GroqApiError):
     """Raised when Groq returns a response that cannot be parsed safely."""
+
+
+def translated_service_error(
+    fallback_message: str,
+    translation_key: str,
+    **placeholders: object,
+) -> ServiceValidationError:
+    """Return a translated Home Assistant service validation error."""
+    return ServiceValidationError(
+        fallback_message,
+        translation_domain=DOMAIN,
+        translation_key=translation_key,
+        translation_placeholders={
+            key: str(value) for key, value in placeholders.items()
+        },
+    )

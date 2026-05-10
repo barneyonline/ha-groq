@@ -11,11 +11,14 @@ on:
       - main
       - "release/**"
     paths:
-      - "custom_components/**"
+      - "custom_components/groq/**"
       - "tests/components/groq/**"
       - "tests/scripts/**"
       - ".pre-commit-config.yaml"
       - ".ruff.toml"
+      - "pyproject.toml"
+      - "devtools/docker/**"
+      - "scripts/**"
       - ".github/workflows/tests.yml"
       - ".github/workflows/ci.yml"
 

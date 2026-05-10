@@ -51,6 +51,8 @@ from .text_generation import (
     voluptuous_schema_to_json_schema,
 )
 
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -127,13 +129,14 @@ class GroqAITaskEntity(AITaskEntity):
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_supported_features = AITaskEntityFeature.GENERATE_DATA
+    _attr_translation_key = "data_generation_tasks"
 
     def __init__(
         self,
         hass: HomeAssistant,
         config_entry: ConfigEntry,
-        service_data: dict,
-        client,
+        service_data: dict[str, Any],
+        client: Any,
         model_registry: GroqModelRegistry | None = None,
     ) -> None:
         """Initialize the AI task entity."""
@@ -143,7 +146,6 @@ class GroqAITaskEntity(AITaskEntity):
         self._client = client
         self._model_registry = model_registry or GroqModelRegistry()
         self._service_name = service_name(config_entry, service_data)
-        self._attr_name = "Data generation tasks"
         self._attr_unique_id = (
             f"{service_unique_id(config_entry, service_data)}_ai_task"
         )

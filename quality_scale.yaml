@@ -1,34 +1,142 @@
 levels:
   bronze:
     required:
+      - action-setup
+      - appropriate-polling
+      - brands
+      - common-modules
+      - config-flow-test-coverage
       - config-flow
       - dependency-transparency
+      - docs-actions
       - docs-high-level-description
       - docs-installation-instructions
+      - docs-removal-instructions
+      - entity-event-setup
       - entity-unique-id
       - has-entity-name
+      - runtime-data
+      - test-before-configure
+      - test-before-setup
+      - unique-config-entry
+  silver:
+    required:
+      - action-exceptions
+      - config-entry-unloading
+      - docs-configuration-parameters
+      - docs-installation-parameters
+      - entity-unavailable
+      - integration-owner
+      - log-when-unavailable
+      - parallel-updates
       - reauthentication-flow
       - test-coverage
+  gold:
+    required:
+      - devices
+      - diagnostics
+      - discovery-update-info
+      - discovery
+      - docs-data-update
+      - docs-examples
+      - docs-known-limitations
+      - docs-supported-devices
+      - docs-supported-functions
+      - docs-troubleshooting
+      - docs-use-cases
+      - dynamic-devices
+      - entity-category
+      - entity-device-class
+      - entity-disabled-by-default
+      - entity-translations
+      - exception-translations
+      - icon-translations
+      - reconfiguration-flow
+      - repair-issues
+      - stale-devices
+  platinum:
+    required:
+      - async-dependency
+      - inject-websession
+      - strict-typing
 
 rules:
+  action-setup:
+    status: done
+    comment: Service actions are registered from async_setup; entry setup only refreshes the dynamic action descriptions.
+    references:
+      code:
+        - custom_components/groq/__init__.py
+        - custom_components/groq/services.py
+      tests:
+        - tests/components/groq/test_coverage_gaps.py
+  appropriate-polling:
+    status: n/a
+    comment: The integration does not poll entities or a coordinator; Groq calls are made during setup, explicit service actions, Assist, AI Task, STT, or TTS requests.
+    references:
+      code:
+        - custom_components/groq/__init__.py
+        - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
+      docs:
+        - README.md
+  brands:
+    status: done
+    references:
+      code:
+        - custom_components/groq/brand/icon.png
+        - custom_components/groq/brand/logo.png
+        - hacs.json
+  common-modules:
+    status: done
+    references:
+      code:
+        - custom_components/groq/api.py
+        - custom_components/groq/runtime.py
+        - custom_components/groq/subentries.py
+        - custom_components/groq/text_generation.py
+        - custom_components/groq/feature_registry.py
+      tests:
+        - tests/components/groq/test_foundation.py
+        - tests/components/groq/test_coverage_gaps.py
+  config-flow-test-coverage:
+    status: done
+    references:
+      code:
+        - custom_components/groq/config_flow.py
+        - custom_components/groq/flow_schemas.py
+      tests:
+        - tests/components/groq/test_integration_harness.py
+        - tests/components/groq/test_coverage_gaps.py
   config-flow:
     status: done
     references:
       code:
         - custom_components/groq/config_flow.py
+        - custom_components/groq/manifest.json
       tests:
-        - tests/components/groq/test_groq.py
+        - tests/components/groq/test_integration_harness.py
       docs:
         - README.md
   dependency-transparency:
     status: done
-    comment: The manifest has no third-party requirements; network I/O uses Home Assistant aiohttp sessions.
+    comment: The manifest has no third-party requirements; HTTP I/O uses Home Assistant aiohttp sessions.
     references:
       code:
         - custom_components/groq/manifest.json
+        - custom_components/groq/api.py
         - custom_components/groq/tts_engine.py
       tests:
         - tests/components/groq/test_manifest.py
+  docs-actions:
+    status: done
+    references:
+      code:
+        - custom_components/groq/services.yaml
+      docs:
+        - README.md
   docs-high-level-description:
     status: done
     references:
@@ -39,32 +147,329 @@ rules:
     references:
       docs:
         - README.md
+  docs-removal-instructions:
+    status: done
+    references:
+      docs:
+        - README.md
+  entity-event-setup:
+    status: n/a
+    comment: Groq entities do not subscribe to external event buses or dispatcher callbacks.
+    references:
+      code:
+        - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
   entity-unique-id:
     status: done
     references:
       code:
         - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
+        - custom_components/groq/text_generation.py
       tests:
-        - tests/components/groq/test_groq.py
+        - tests/components/groq/test_integration_harness.py
+        - tests/components/groq/test_coverage_gaps.py
   has-entity-name:
     status: done
     references:
       code:
         - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
+  runtime-data:
+    status: done
+    references:
+      code:
+        - custom_components/groq/__init__.py
+        - custom_components/groq/runtime.py
       tests:
-        - tests/components/groq/test_groq.py
+        - tests/components/groq/test_coverage_gaps.py
+  test-before-configure:
+    status: done
+    references:
+      code:
+        - custom_components/groq/config_flow.py
+        - custom_components/groq/api.py
+      tests:
+        - tests/components/groq/test_integration_harness.py
+        - tests/components/groq/test_coverage_gaps.py
+  test-before-setup:
+    status: done
+    comment: Setup hydrates model metadata and raises ConfigEntryAuthFailed for bad credentials or ConfigEntryNotReady for temporary Groq/API connectivity failures.
+    references:
+      code:
+        - custom_components/groq/__init__.py
+        - custom_components/groq/runtime.py
+      tests:
+        - tests/components/groq/test_coverage_gaps.py
+  unique-config-entry:
+    status: done
+    references:
+      code:
+        - custom_components/groq/config_flow.py
+      tests:
+        - tests/components/groq/test_integration_harness.py
+        - tests/components/groq/test_coverage_gaps.py
+  action-exceptions:
+    status: done
+    references:
+      code:
+        - custom_components/groq/services.py
+      tests:
+        - tests/components/groq/test_foundation.py
+        - tests/components/groq/test_coverage_gaps.py
+  config-entry-unloading:
+    status: done
+    references:
+      code:
+        - custom_components/groq/__init__.py
+      tests:
+        - tests/components/groq/test_integration_harness.py
+        - tests/components/groq/test_coverage_gaps.py
+  docs-configuration-parameters:
+    status: done
+    references:
+      docs:
+        - README.md
+  docs-installation-parameters:
+    status: done
+    references:
+      docs:
+        - README.md
+  entity-unavailable:
+    status: n/a
+    comment: The entities expose on-demand AI, STT, and TTS capabilities rather than periodically fetched state; request failures are returned through platform/service error paths.
+    references:
+      code:
+        - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
+      docs:
+        - README.md
+  integration-owner:
+    status: done
+    references:
+      code:
+        - custom_components/groq/manifest.json
+  log-when-unavailable:
+    status: done
+    comment: The shared API and TTS clients track availability transitions and log once when unavailable and once when reachable again.
+    references:
+      code:
+        - custom_components/groq/api.py
+        - custom_components/groq/runtime.py
+        - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+  parallel-updates:
+    status: done
+    references:
+      code:
+        - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
   reauthentication-flow:
     status: done
     references:
       code:
         - custom_components/groq/config_flow.py
+        - custom_components/groq/api.py
         - custom_components/groq/tts_engine.py
       tests:
         - tests/components/groq/test_groq.py
+        - tests/components/groq/test_integration_harness.py
   test-coverage:
     status: done
+    comment: Verified 100% coverage for custom_components.groq with the Home Assistant Docker harness.
     references:
       tests:
         - tests/components/groq/test_groq.py
-        - tests/components/groq/test_manifest.py
-        - tests/scripts/test_validate_quality_scale.py
+        - tests/components/groq/test_foundation.py
+        - tests/components/groq/test_integration_harness.py
+        - tests/components/groq/test_coverage_gaps.py
+        - tests/components/groq/test_diagnostics.py
+  devices:
+    status: done
+    references:
+      code:
+        - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
+      tests:
+        - tests/components/groq/test_foundation.py
+        - tests/components/groq/test_coverage_gaps.py
+  diagnostics:
+    status: done
+    references:
+      code:
+        - custom_components/groq/diagnostics.py
+      tests:
+        - tests/components/groq/test_diagnostics.py
+  discovery-update-info:
+    status: n/a
+    comment: Groq is configured from cloud API keys and user-created service subentries; there is no discovered network address or discovery payload to update.
+    references:
+      docs:
+        - README.md
+  discovery:
+    status: n/a
+    comment: Groq is a cloud API service account integration, not a discoverable local device or network service.
+    references:
+      docs:
+        - README.md
+  docs-data-update:
+    status: done
+    references:
+      docs:
+        - README.md
+  docs-examples:
+    status: done
+    references:
+      docs:
+        - README.md
+  docs-known-limitations:
+    status: done
+    references:
+      docs:
+        - README.md
+  docs-supported-devices:
+    status: done
+    comment: The README documents that this integration supports Groq cloud accounts and does not support or discover physical devices.
+    references:
+      docs:
+        - README.md
+  docs-supported-functions:
+    status: done
+    references:
+      docs:
+        - README.md
+  docs-troubleshooting:
+    status: done
+    references:
+      docs:
+        - README.md
+  docs-use-cases:
+    status: done
+    references:
+      docs:
+        - README.md
+  dynamic-devices:
+    status: done
+    references:
+      code:
+        - custom_components/groq/config_flow.py
+        - custom_components/groq/subentries.py
+        - custom_components/groq/__init__.py
+      tests:
+        - tests/components/groq/test_integration_harness.py
+        - tests/components/groq/test_coverage_gaps.py
+  entity-category:
+    status: n/a
+    comment: The integration currently exposes only primary AI, STT, TTS, and conversation capabilities; it has no diagnostic or configuration entities that need an EntityCategory.
+    references:
+      code:
+        - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
+  entity-device-class:
+    status: n/a
+    comment: Home Assistant device classes do not apply to the conversation, AI Task, STT, or TTS entities exposed by this integration.
+    references:
+      code:
+        - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
+  entity-disabled-by-default:
+    status: n/a
+    comment: The integration does not create noisy, diagnostic, or rarely used entities by default; users explicitly create each Groq service subentry they want.
+    references:
+      docs:
+        - README.md
+  entity-translations:
+    status: done
+    references:
+      code:
+        - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
+        - custom_components/groq/strings.json
+  exception-translations:
+    status: done
+    comment: Service/action validation errors are raised with translation_domain, translation_key, and placeholders while preserving fallback messages.
+    references:
+      code:
+        - custom_components/groq/services.py
+        - custom_components/groq/strings.json
+  icon-translations:
+    status: done
+    references:
+      code:
+        - custom_components/groq/tts.py
+        - custom_components/groq/stt.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
+        - custom_components/groq/icons.json
+  reconfiguration-flow:
+    status: done
+    comment: Account entries expose a reconfigure flow for renaming the account and replacing the API key; service subentries expose service-specific reconfigure flows.
+    references:
+      code:
+        - custom_components/groq/config_flow.py
+      tests:
+        - tests/components/groq/test_integration_harness.py
+  repair-issues:
+    status: done
+    comment: Repairs are created for missing ffmpeg when normalization is requested and for user-actionable model access/configuration issues.
+    references:
+      code:
+        - custom_components/groq/api.py
+        - custom_components/groq/repairs.py
+        - custom_components/groq/services.py
+        - custom_components/groq/tts.py
+        - custom_components/groq/tts_engine.py
+      tests:
+        - tests/components/groq/test_coverage_gaps.py
+      docs:
+        - README.md
+  stale-devices:
+    status: n/a
+    comment: The integration has no discovered physical device inventory. Devices correspond to user-managed Groq service subentries and are removed when those entries are removed.
+    references:
+      docs:
+        - README.md
+  async-dependency:
+    status: done
+    comment: There is no third-party API dependency; the Groq clients are implemented with async aiohttp and asyncio subprocess APIs.
+    references:
+      code:
+        - custom_components/groq/api.py
+        - custom_components/groq/tts_engine.py
+        - custom_components/groq/tts.py
+  inject-websession:
+    status: done
+    comment: GroqApiClient accepts an injected aiohttp ClientSession; TTS and config-flow paths use Home Assistant aiohttp sessions.
+    references:
+      code:
+        - custom_components/groq/api.py
+        - custom_components/groq/config_flow.py
+        - custom_components/groq/tts_engine.py
+      tests:
+        - tests/components/groq/test_foundation.py
+        - tests/components/groq/test_coverage_gaps.py
+  strict-typing:
+    status: done
+    comment: The Docker-backed strict typing script passes for custom_components/groq.
+    references:
+      code:
+        - pyproject.toml
+        - scripts/strict-typing

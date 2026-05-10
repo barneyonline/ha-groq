@@ -6,19 +6,22 @@ permissions:
 on:
   pull_request:
     paths:
-      - "custom_components/**"
+      - "custom_components/groq/**"
       - "quality_scale.yaml"
+      - "hacs.json"
       - ".github/workflows/hassfest.yml"
   push:
     branches:
       - main
       - "release/**"
     paths:
-      - "custom_components/**"
+      - "custom_components/groq/**"
       - "quality_scale.yaml"
+      - "hacs.json"
       - ".github/workflows/hassfest.yml"
   schedule:
     - cron: "0 0 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

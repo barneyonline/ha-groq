@@ -1,73 +1,191 @@
 # Groq - Home Assistant Custom Integration
 
-<!-- Badges -->
 [![Release](https://img.shields.io/github/v/release/barneyonline/ha-groq?display_name=tag&sort=semver)](https://github.com/barneyonline/ha-groq/releases)
 [![Stars](https://img.shields.io/github/stars/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/stargazers)
 [![License](https://img.shields.io/github/license/barneyonline/ha-groq)](LICENSE)
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/ci.yml?branch=main&label=tests)](https://github.com/barneyonline/ha-groq/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/barneyonline/ha-groq/branch/main/graph/badge.svg)](https://codecov.io/gh/barneyonline/ha-groq)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/hassfest.yml?branch=main&label=hassfest)](https://github.com/barneyonline/ha-groq/actions/workflows/hassfest.yml)
-[![Quality Scale](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/quality-scale.yml?branch=main&label=quality%20scale)](https://developers.home-assistant.io/docs/integration_quality_scale_index)
+[![Quality Scale](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/quality-scale.yml?branch=main&label=quality%20scale)](https://developers.home-assistant.io/docs/core/integration-quality-scale/)
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 [![Open Issues](https://img.shields.io/github/issues/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/issues)
 ![Development Status](https://img.shields.io/badge/development-active-success?style=flat-square)
 
-Cloud-based Home Assistant integration for Groq AI services.
+Groq is a cloud API service for fast language, speech, and vision models. This Home Assistant custom integration connects a Groq account to Assist, AI Tasks, speech-to-text, text-to-speech, image analysis, and response actions.
 
 > [!IMPORTANT]
 > This is an unofficial community project. It is not affiliated with, endorsed by, or supported by Groq.
 >
-> The integration uses Groq cloud APIs. Feature availability, model availability, rate limits, and request options can vary by Groq account, project, and model.
+> Feature availability, model availability, rate limits, token limits, and billing behavior are controlled by Groq and can vary by account, project, and model.
 
-## Supported service categories
+## Supported Functionality
 
-- Text Generation services for Home Assistant Assist, AI Tasks, response services, structured outputs, reasoning-capable models, prompt caching, and Groq Compound models
-- Speech-to-Text services for Home Assistant voice pipelines and audio transcription actions
-- Text-to-Speech services using Groq Orpheus models through Home Assistant `tts.speak`
-- Image Recognition services for camera snapshots, media images, local images, image URLs, and OCR-style prompts
+This integration supports Groq cloud accounts. It does not discover or control physical devices.
 
-## Key features
+Supported Home Assistant platforms:
 
-- Guided onboarding for Groq account setup with a friendly name and redacted API key storage
-- Service-specific subentry buttons for creating multiple named services under each Groq account
-- Groq model discovery during service setup, filtered to the selected service type
-- Text Generation entities for Home Assistant Assist conversations and AI Task data generation
-- Response services for text generation, structured output, image analysis, OCR-style extraction, audio transcription, cache clearing, and model listing
-- Text Generation options for system prompts, sampling controls, service tiers, streaming, structured outputs, reasoning, prompt caching, and advanced request-body options
-- Text-to-Speech entities with Orpheus voices, vocal direction presets, custom vocal directions, optional audio normalization, and local cache sizing
-- Per-service free-tier protection for Text Generation, Speech-to-Text, Text-to-Speech, and Image Recognition services
-- Diagnostics with Groq API keys redacted
+- `conversation`: Assist conversation agents backed by configured Groq text generation services.
+- `ai_task`: data generation tasks for services and automations that need structured output.
+- `stt`: speech-to-text entities for Home Assistant voice pipelines.
+- `tts`: text-to-speech entities for `tts.speak`.
 
-## Quick install (HACS)
+Provided response actions:
 
-1. HACS -> Integrations -> Custom repositories
-2. Add `https://github.com/barneyonline/ha-groq` as an Integration repository
-3. Install Groq and restart Home Assistant
-4. Add the integration and enter a friendly name and Groq API key
-5. Open the Groq integration page and add the service type you want to use
+- `groq.generate_text`: generate a text response.
+- `groq.generate_structured`: generate JSON or schema-shaped output.
+- `groq.analyze_image`: ask a question about a camera image, media image, local image, or image URL.
+- `groq.extract_text_from_image`: OCR-style text extraction from an image.
+- `groq.transcribe_audio`: transcribe a local or media-source audio file.
+- `groq.clear_cache`: clear the local prompt cache for a Groq account.
+- `groq.list_models`: list models visible to a Groq account.
 
-Manual install steps: see the wiki Installation page.
+Each configured Groq service creates its own Home Assistant device and the relevant entity for that platform. Text generation services can create Assist and AI Task entities. Speech-to-text and text-to-speech services create STT and TTS entities.
 
-## Compatibility
+## Installation
 
-- A recent Home Assistant version with config subentry support is required. The local development environment is tested with Home Assistant `2026.4.1`.
-- A Groq API key is required from [Groq Console](https://console.groq.com/).
-- Text-to-Speech audio normalization requires `ffmpeg` on the Home Assistant host.
-- The integration domain is `groq`.
-- This integration is cloud-based and requires network access to Groq APIs.
+### HACS
 
-## Authentication
+1. Open HACS.
+2. Go to Integrations, then Custom repositories.
+3. Add `https://github.com/barneyonline/ha-groq` as an Integration repository.
+4. Install Groq.
+5. Restart Home Assistant.
+6. Go to Settings -> Devices & services -> Add integration -> Groq.
 
-Enter a Groq API key during initial setup. The key is stored by Home Assistant and is redacted from diagnostics.
+### Manual
 
-You can add more Groq accounts from the integration page when you want separate API keys, Groq projects, billing pools, or production/testing services.
+1. Copy `custom_components/groq` into your Home Assistant `custom_components` directory.
+2. Restart Home Assistant.
+3. Go to Settings -> Devices & services -> Add integration -> Groq.
 
-## Documentation
+## Requirements
 
-Refer to the [Wiki](https://github.com/barneyonline/ha-groq/wiki) for installation, service setup, usage examples, troubleshooting, and development notes.
+- A recent Home Assistant version with config subentry support. Local development is tested with Home Assistant `2026.4.1`.
+- A Groq API key from [Groq Console](https://console.groq.com/).
+- Network access from Home Assistant to `https://api.groq.com`.
+- Optional: `ffmpeg` on the Home Assistant host if you enable TTS audio normalization.
 
-Useful links:
+This integration does not use Home Assistant application credentials or OAuth. Groq API keys act as account or project credentials. Use separate Groq keys when you want separate projects, billing pools, environments, or rate-limit isolation.
+
+## Configuration
+
+Initial account setup asks for:
+
+- Name: friendly name for this Groq account in Home Assistant.
+- Groq API key: secret key used for Groq API requests. The key is stored by Home Assistant and redacted from diagnostics.
+
+After adding an account, open the Groq integration page and add one or more services:
+
+- Text Generation: name, model, system prompt, temperature, free-tier protection, and optional advanced request options.
+- Speech-to-Text: name, model, language hint, and free-tier protection.
+- Text-to-Speech: name, model, voice, optional vocal directions, optional audio normalization, and free-tier protection.
+- Image Recognition: name, model, system prompt, and free-tier protection.
+
+Advanced Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, prompt caching, structured output schema, strict schema mode, and additional Groq request body options.
+
+You can add more than one Groq account. The integration prevents adding the same API key twice.
+
+## Data Updates
+
+Groq requests are made on demand:
+
+- During setup and reauthentication, Home Assistant validates the API key by listing available Groq models.
+- During integration setup, model metadata is refreshed when credentials are available. Built-in model metadata is used as a fallback if Groq is temporarily unreachable.
+- Service actions, Assist, AI Tasks, STT, and TTS call Groq only when used.
+- There is no periodic polling of Groq for entity state.
+
+Prompt caching is local to the Home Assistant process and bounded by the configured cache size and TTL. Groq account rate-limit headers are used for local free-tier protection when enabled.
+
+## Examples
+
+Generate a notification summary:
+
+```yaml
+action: groq.generate_text
+data:
+  service_id: Home Summary
+  prompt: >
+    Summarize the current home status in one sentence for a push notification.
+response_variable: groq_summary
+```
+
+Analyze a camera snapshot:
+
+```yaml
+action: groq.analyze_image
+target:
+  entity_id: camera.front_door
+data:
+  service_id: Front Door Vision
+  prompt: Is there a package visible?
+response_variable: package_check
+```
+
+Create structured data:
+
+```yaml
+action: groq.generate_structured
+data:
+  service_id: Planner
+  prompt: Extract a title and priority from "Water the garden before sunset".
+  schema:
+    type: object
+    properties:
+      title:
+        type: string
+      priority:
+        type: string
+        enum: [low, medium, high]
+    required: [title, priority]
+    additionalProperties: false
+  strict: true
+response_variable: task_data
+```
+
+Speak with a Groq TTS service:
+
+```yaml
+action: tts.speak
+target:
+  entity_id: tts.kitchen_groq
+data:
+  media_player_entity_id: media_player.kitchen
+  message: Dinner is ready.
+```
+
+## Known Limitations
+
+- This is a cloud integration and will not work without internet access to Groq.
+- Groq can change model availability, limits, and request option support outside this integration.
+- Some advanced options work only on models that support them. The setup flow validates known model capabilities where possible.
+- TTS input is limited by Groq Orpheus model limits; this integration locally blocks overly long TTS requests.
+- Audio normalization needs `ffmpeg` and uses extra CPU.
+- This integration does not discover devices. It supports Groq cloud accounts and user-created Groq service entries.
+
+## Troubleshooting
+
+- Invalid API key: create or copy a fresh key from Groq Console, then reauthenticate the Groq integration entry.
+- Cannot connect: check Home Assistant network/DNS access to `api.groq.com` and the [Groq status page](https://groqstatus.com/).
+- Model missing: use `groq.list_models` to see models visible to the selected account, or choose a known compatible model.
+- Multiple accounts or services: provide `config_entry_id` or `service_id` in the action data so Home Assistant can select the intended Groq account or service.
+- Rate-limit errors: wait for Groq's reset window, lower automation frequency, choose a smaller model, or use separate Groq projects/keys where appropriate.
+- TTS normalization fails: install `ffmpeg` on the Home Assistant host or disable audio normalization.
+- Local image or audio file fails: make sure the path is allowed by Home Assistant `allowlist_external_dirs`, or use a media-source file.
+- Diagnostics: download diagnostics from the integration page. API keys and prompt fields are redacted.
+
+## Removal
+
+1. Go to Settings -> Devices & services -> Groq.
+2. Delete any Groq service entries you no longer want.
+3. Delete the Groq account entry.
+4. Restart Home Assistant if you plan to remove the custom integration files.
+5. If installed through HACS, remove Groq from HACS. For a manual install, delete `custom_components/groq`.
+
+Removing the integration stops future Groq API calls from Home Assistant. It does not delete Groq projects, keys, billing data, or logs in Groq Console.
+
+## Useful Links
 
 - [Groq Console](https://console.groq.com/)
 - [Groq status page](https://groqstatus.com/)

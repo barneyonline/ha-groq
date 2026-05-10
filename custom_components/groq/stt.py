@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterable
 import io
 import logging
+from typing import Any
 import wave
 
 from homeassistant.components import stt
@@ -31,8 +32,10 @@ from .runtime import async_get_runtime
 
 _LOGGER = logging.getLogger(__name__)
 
+PARALLEL_UPDATES = 1
 
-def _stt_service_data(config_entry: ConfigEntry) -> list[dict]:
+
+def _stt_service_data(config_entry: ConfigEntry) -> list[dict[str, Any]]:
     """Return configured Speech-to-Text service subentry data."""
     services = []
     for subentry in (getattr(config_entry, "subentries", None) or {}).values():
@@ -65,19 +68,19 @@ class GroqSTTEntity(stt.SpeechToTextEntity):
 
     _attr_has_entity_name = True
     _attr_should_poll = False
+    _attr_translation_key = "speech_to_text"
 
     def __init__(
         self,
         config_entry: ConfigEntry,
-        service_data: dict,
-        client,
+        service_data: dict[str, Any],
+        client: Any,
     ) -> None:
         """Initialize the STT entity."""
         self._config_entry = config_entry
         self._service_data = service_data
         self._client = client
         self._service_name = service_data.get(CONF_NAME, "Groq Speech-to-Text")
-        self._attr_name = None
         self._service_unique_id = str(
             service_data.get(UNIQUE_ID)
             or getattr(config_entry, "unique_id", None)

@@ -3,6 +3,7 @@ TTS Engine for Groq.
 """
 
 from __future__ import annotations
+from collections.abc import Mapping
 import json
 import logging
 import asyncio
@@ -10,17 +11,44 @@ from urllib.error import HTTPError, URLError
 from collections import OrderedDict, deque
 
 import aiohttp
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from asyncio import CancelledError
 
 from homeassistant.exceptions import HomeAssistantError, ConfigEntryAuthFailed
 from .const import GROQ_FREE_TIER_LIMITS, VERSION
+from .repairs import async_create_model_access_issue
 
 _LOGGER = logging.getLogger(__name__)
 
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_DAY_SECONDS = 24 * 60 * 60
 TTS_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+
+
+def _payload_mentions_model_access(payload: object) -> bool:
+    """Return whether an API error looks like an unavailable model problem."""
+    if not isinstance(payload, dict):
+        return False
+    error = payload.get("error")
+    if isinstance(error, dict):
+        message = str(error.get("message", ""))
+        error_type = str(error.get("type", ""))
+    else:
+        message = str(error or payload)
+        error_type = ""
+    text = f"{message} {error_type}".lower()
+    return "model" in text and any(
+        phrase in text
+        for phrase in (
+            "not found",
+            "does not exist",
+            "not available",
+            "not accessible",
+            "not enabled",
+            "access",
+        )
+    )
 
 
 class AudioResponse:
@@ -44,7 +72,7 @@ class GroqTTSEngine:
         cache_max: int | None = None,
         protect_free_tier: bool = True,
         response_format: str = "wav",
-    ):
+    ) -> None:
         self._api_key = api_key
         self._voice = voice
         self._model = model
@@ -56,6 +84,29 @@ class GroqTTSEngine:
         self._protect_free_tier = protect_free_tier
         self._request_timestamps: deque[float] = deque()
         self._token_timestamps: deque[tuple[float, int]] = deque()
+        self._available = True
+        self._unavailable_reason: str | None = None
+
+    @property
+    def available(self) -> bool:
+        """Return whether the last TTS API interaction succeeded."""
+        return self._available
+
+    def _mark_unavailable(self, reason: str) -> None:
+        """Log the transition to unavailable once per outage."""
+        if not self._available and self._unavailable_reason == reason:
+            return
+        self._available = False
+        self._unavailable_reason = reason
+        _LOGGER.warning("%s; Groq TTS calls will be retried by Home Assistant", reason)
+
+    def _mark_available(self) -> None:
+        """Log recovery once after an outage."""
+        if self._available:
+            return
+        self._available = True
+        self._unavailable_reason = None
+        _LOGGER.info("Groq TTS API is reachable again")
 
     @staticmethod
     def _estimate_token_usage(text: str) -> int:
@@ -144,13 +195,13 @@ class GroqTTSEngine:
         self._prune_local_usage(now)
 
     @staticmethod
-    def _rate_limit_message(headers: dict[str, str]) -> str:
+    def _rate_limit_message(headers: Mapping[str, str]) -> str:
         """Build a user-facing message from Groq rate-limit response headers."""
         retry_after = headers.get("retry-after")
         reset_requests = headers.get("x-ratelimit-reset-requests")
         remaining_requests = headers.get("x-ratelimit-remaining-requests")
         remaining_tokens = headers.get("x-ratelimit-remaining-tokens")
-        details = []
+        details: list[str] = []
         if retry_after:
             details.append(f"retry after {retry_after} seconds")
         if reset_requests:
@@ -164,7 +215,7 @@ class GroqTTSEngine:
 
     async def async_get_tts(
         self,
-        hass,
+        hass: HomeAssistant,
         text: str,
         voice: str | None = None,
         model: str | None = None,
@@ -223,10 +274,16 @@ class GroqTTSEngine:
                             raise GroqRateLimitError(
                                 self._rate_limit_message(resp.headers)
                             )
+                        if resp.status >= 500:
+                            self._mark_unavailable(
+                                f"Groq TTS API returned HTTP {resp.status}"
+                            )
                         try:
                             if ctype.startswith("application/json"):
                                 payload = json.loads(content)
                                 detail = payload.get("error") or payload
+                                if _payload_mentions_model_access(payload):
+                                    async_create_model_access_issue(hass, model)
                                 raise HomeAssistantError(
                                     f"Groq API error (HTTP {resp.status}): {detail}"
                                 )
@@ -263,6 +320,7 @@ class GroqTTSEngine:
                         raise HomeAssistantError(
                             f"Unexpected content-type from Groq API: {ctype}"
                         )
+                    self._mark_available()
                     # Cache successful audio payloads with LRU eviction. Failed
                     # responses are intentionally excluded so retries can recover.
                     self._cache[cache_key] = content
@@ -282,10 +340,11 @@ class GroqTTSEngine:
                     net_err, "code", None
                 )
                 error_body = getattr(net_err, "message", None)
-                _LOGGER.error("Groq API network error: %s", net_err)
+                self._mark_unavailable("Network error calling Groq TTS API")
                 error_hint = ""
                 if error_body and "1010" in str(error_body):
                     error_hint = " (Check model access in the Groq Console and confirm the selected TTS model is enabled for your account.)"
+                    async_create_model_access_issue(hass, model)
                 if attempt < max_retries:
                     attempt += 1
                     await asyncio.sleep(1)
@@ -307,12 +366,12 @@ class GroqTTSEngine:
                     "An unknown error occurred while fetching TTS audio"
                 ) from exc
 
-    def close(self):
+    def close(self) -> None:
         # Use HA-managed session; do not close here to avoid impacting other integrations
         return None
 
     @staticmethod
-    def get_supported_langs() -> list:
+    def get_supported_langs() -> list[str]:
         """Return supported language codes for Groq."""
         return [
             "ar",

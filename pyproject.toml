@@ -1,6 +1,6 @@
 [project]
 name = "ha-groq"
-version = "0.1.0"
+version = "1.0"
 requires-python = ">=3.14"
 
 [tool.ruff]
@@ -12,3 +12,21 @@ target-version = "py313"
 # Keep Black aligned with Ruff until Ruff exposes py314; otherwise Black emits
 # Python 3.14 syntax that Ruff cannot parse yet.
 target-version = ["py313"]
+
+[tool.mypy]
+python_version = "3.14"
+files = ["custom_components/groq"]
+strict = true
+warn_unused_configs = true
+show_error_codes = true
+follow_imports = "skip"
+# Home Assistant's runtime package is intentionally skipped for speed in this
+# custom-component repo, so HA base classes and selector helpers are `Any`.
+# Keep strict checking for local typed code while avoiding noise from skipped
+# framework imports.
+disallow_subclassing_any = false
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_any_generics = false
+warn_return_any = false

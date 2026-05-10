@@ -3,16 +3,24 @@ description: Report a problem with the Groq Home Assistant integration.
 title: "[Bug]: "
 labels: ["bug", "status/needs-triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Do not include Groq API keys, full unredacted prompts, or private audio/image content.
   - type: dropdown
     id: primary_area
     attributes:
       label: Primary affected area
       options:
-        - Setup, API key, reauthentication
-        - Model or voice selection
-        - Speech generation API request
-        - Audio normalization
-        - Diagnostics
+        - Account setup, API key, reauthentication
+        - Service subentries and configuration
+        - Text generation, Assist, or AI Task
+        - Image analysis or vision actions
+        - Speech-to-text transcription
+        - Text-to-speech or voice selection
+        - Groq API, model access, or rate limits
+        - Audio processing or ffmpeg normalization
+        - Diagnostics or repair issues
         - Documentation
         - Developer workflow / repository tooling
         - Other / unsure
@@ -29,6 +37,30 @@ body:
         - Other
     validations:
       required: true
+  - type: input
+    id: homeassistant_version
+    attributes:
+      label: Home Assistant version
+      description: "Example: 2026.3.0"
+      placeholder: "2026.3.0"
+    validations:
+      required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: Groq integration version
+      description: Use the HACS version, release tag, or manifest version.
+      placeholder: "1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: affected_service
+    attributes:
+      label: Affected service, entity, model, or action
+      description: Include service name, entity ID, action name, model, voice, and relevant options.
+      placeholder: "Example: groq.generate_text using service \"Planner\" with model llama-3.3-70b-versatile"
+    validations:
+      required: false
   - type: dropdown
     id: diagnostics_status
     attributes:
@@ -43,6 +75,14 @@ body:
     id: description
     attributes:
       label: What happened?
-      description: Include the Home Assistant version, selected model/voice, and relevant logs.
+      description: Describe the expected behavior, actual behavior, and when it started.
     validations:
       required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or tracebacks
+      description: Paste redacted Home Assistant logs, repair issue text, or service call errors.
+      render: text
+    validations:
+      required: false

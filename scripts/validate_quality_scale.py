@@ -17,7 +17,20 @@ except Exception:  # pragma: no cover
 
 DOMAIN = "groq"
 QUALITY_LEVEL_ORDER = ("bronze", "silver", "gold", "platinum")
-NA_ALLOWED_RULES = {"discovery", "discovery-update-info"}
+NA_ALLOWED_RULES = {
+    "appropriate-polling",
+    "discovery",
+    "discovery-update-info",
+    "entity-category",
+    "entity-device-class",
+    "entity-disabled-by-default",
+    "entity-event-setup",
+    "entity-unavailable",
+    "icon-translations",
+    "repair-issues",
+    "stale-devices",
+}
+VALID_STATUSES = {"done", "n/a", "todo"}
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -31,14 +44,19 @@ def _manifest(root: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _claimed_level(root: Path) -> str:
-    level = str(_manifest(root).get("quality_scale") or "bronze").strip().lower()
+def _claimed_level(root: Path) -> str | None:
+    raw_level = _manifest(root).get("quality_scale")
+    if raw_level is None:
+        return None
+    level = str(raw_level).strip().lower()
     if level not in QUALITY_LEVEL_ORDER:
         raise ValueError(f"Unsupported manifest quality_scale value: {level!r}")
     return level
 
 
-def _required_levels_for_claim(level: str) -> tuple[str, ...]:
+def _required_levels_for_claim(level: str | None) -> tuple[str, ...]:
+    if level is None:
+        return ()
     claimed_index = QUALITY_LEVEL_ORDER.index(level)
     return QUALITY_LEVEL_ORDER[: claimed_index + 1]
 
@@ -94,14 +112,17 @@ def validate_quality_scale(root: Path) -> tuple[int, list[str]]:
         messages.append(f"ERROR: Missing rule evidence: {', '.join(missing_rules)}")
 
     incomplete_rules = []
+    unknown_status_rules = []
     bad_na_rules = []
     missing_na_comments = []
     broken_references = []
 
-    for rule in required_rules:
-        entry = rules.get(rule)
+    for rule, entry in rules.items():
         status = _status_for_rule(entry)
-        if status not in {"done", "n/a"}:
+        if status not in VALID_STATUSES:
+            unknown_status_rules.append(str(rule))
+
+        if rule in required_rules and status not in {"done", "n/a"}:
             incomplete_rules.append(rule)
             continue
         if status == "n/a":
@@ -117,6 +138,11 @@ def validate_quality_scale(root: Path) -> tuple[int, list[str]]:
                 if not _reference_path_exists(root, reference):
                     broken_references.append(f"{rule}: {reference}")
 
+    if unknown_status_rules:
+        messages.append(
+            "ERROR: Rules have an unsupported status: "
+            + ", ".join(unknown_status_rules)
+        )
     if incomplete_rules:
         messages.append(
             f"ERROR: Rules not marked done or n/a: {', '.join(incomplete_rules)}"

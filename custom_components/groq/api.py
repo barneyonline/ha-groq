@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 import json
 import logging
 from asyncio import CancelledError
@@ -19,6 +20,7 @@ from .const import VERSION
 from .errors import GroqApiError, GroqResponseError
 from .model_registry import GroqModel, model_from_api
 from .rate_limit import GroqRateLimiter
+from .repairs import async_create_model_access_issue
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -261,11 +263,18 @@ class GroqApiClient:
         self._rate_limiter = rate_limiter or GroqRateLimiter()
         self._request_timeout = request_timeout or JSON_REQUEST_TIMEOUT
         self._stream_timeout = stream_timeout or STREAM_REQUEST_TIMEOUT
+        self._available = True
+        self._unavailable_reason: str | None = None
 
     @property
     def base_url(self) -> str:
         """Return the normalized API base URL."""
         return self._base_url
+
+    @property
+    def available(self) -> bool:
+        """Return whether the last Groq API interaction succeeded."""
+        return self._available
 
     async def async_list_models(self, *, hydrate: bool = True) -> list[GroqModel]:
         """Return models visible to the configured Groq API key."""
@@ -319,9 +328,10 @@ class GroqApiClient:
         if not models:
             return []
         semaphore = asyncio.Semaphore(MODEL_DETAIL_CONCURRENCY)
-        raw_models = (
-            raw_models if raw_models is not None else [None for _model in models]
-        )
+        if raw_models is None:
+            raw_model_items: list[dict[str, Any] | None] = [None for _model in models]
+        else:
+            raw_model_items = list(raw_models)
 
         async def hydrate(
             model: GroqModel,
@@ -334,7 +344,7 @@ class GroqApiClient:
             await asyncio.gather(
                 *(
                     hydrate(model, raw_model)
-                    for model, raw_model in zip(models, raw_models)
+                    for model, raw_model in zip(models, raw_model_items)
                 )
             )
         )
@@ -459,12 +469,11 @@ class GroqApiClient:
 
     def _chat_result(self, payload: dict[str, Any]) -> ChatCompletionResult:
         """Normalize a chat completion response."""
+        usage = payload.get("usage")
         return ChatCompletionResult(
             text=extract_chat_text(payload),
             model=payload.get("model"),
-            usage=(
-                payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
-            ),
+            usage=usage if isinstance(usage, dict) else {},
             raw=payload,
             reasoning=extract_chat_reasoning(payload),
             executed_tools=extract_executed_tools(payload),
@@ -517,16 +526,23 @@ class GroqApiClient:
                     )
                 if response.status < 200 or response.status >= 300:
                     payload = self._try_decode_json(body) or {}
+                    self._handle_http_unavailable(response.status, payload)
+                    self._create_model_access_issue(
+                        response.status, payload, json_payload
+                    )
                     raise self._api_error(response.status, payload)
                 payload = self._decode_json(body)
                 if not isinstance(payload, dict):
+                    self._mark_unavailable("Groq API returned non-object JSON")
                     raise GroqResponseError("Groq API returned non-object JSON")
+                self._mark_available()
                 return payload
         except CancelledError:
             raise
         except (GroqApiError, ConfigEntryAuthFailed):
             raise
         except (aiohttp.ClientError, TimeoutError) as err:
+            self._mark_unavailable("Network error calling Groq API")
             raise GroqApiError(f"Network error calling Groq API: {err}") from err
 
     async def _request_stream(
@@ -557,8 +573,13 @@ class GroqApiClient:
                     payload = self._decode_json(body)
                     if response.status == 429 and isinstance(payload, dict):
                         GroqRateLimiter.raise_for_headers(response.headers, payload)
+                    self._handle_http_unavailable(response.status, payload)
+                    self._create_model_access_issue(
+                        response.status, payload, json_payload
+                    )
                     raise self._api_error(response.status, payload)
 
+                self._mark_available()
                 async for raw_line in response.content:
                     line = raw_line.decode("utf-8").strip()
                     if not line or not line.startswith("data:"):
@@ -581,7 +602,50 @@ class GroqApiClient:
         except (GroqApiError, ConfigEntryAuthFailed):
             raise
         except (aiohttp.ClientError, TimeoutError) as err:
+            self._mark_unavailable("Network error calling Groq API")
             raise GroqApiError(f"Network error calling Groq API: {err}") from err
+
+    def _handle_http_unavailable(
+        self,
+        status: int,
+        payload: dict[str, Any] | list[Any],
+    ) -> None:
+        """Track Groq API availability for transient service-side failures."""
+        if status >= 500:
+            self._mark_unavailable(f"Groq API returned HTTP {status}")
+        elif isinstance(payload, dict) and status == 408:
+            self._mark_unavailable("Groq API request timed out")
+
+    def _mark_unavailable(self, reason: str) -> None:
+        """Log the transition to unavailable once per outage."""
+        if not self._available and self._unavailable_reason == reason:
+            return
+        self._available = False
+        self._unavailable_reason = reason
+        _LOGGER.warning("%s; Groq API calls will be retried by Home Assistant", reason)
+
+    def _mark_available(self) -> None:
+        """Log recovery once after an outage."""
+        if self._available:
+            return
+        self._available = True
+        self._unavailable_reason = None
+        _LOGGER.info("Groq API is reachable again")
+
+    def _create_model_access_issue(
+        self,
+        status: int,
+        payload: dict[str, Any] | list[Any],
+        json_payload: dict[str, Any] | None,
+    ) -> None:
+        """Create a repair for model errors that require user action."""
+        if status not in (400, 404):
+            return
+        model = json_payload.get("model") if isinstance(json_payload, dict) else None
+        if not isinstance(model, str) or not _payload_mentions_model_access(payload):
+            return
+        with suppress(Exception):
+            async_create_model_access_issue(self._hass, model)
 
     def _headers(
         self,
@@ -644,3 +708,28 @@ class GroqApiClient:
             )
         _LOGGER.debug("Unexpected Groq error payload type: %s", type(payload))
         return GroqApiError(f"Groq API error (HTTP {status})", status=status)
+
+
+def _payload_mentions_model_access(payload: dict[str, Any] | list[Any]) -> bool:
+    """Return whether an API error looks like an unavailable model problem."""
+    if not isinstance(payload, dict):
+        return False
+    error = payload.get("error")
+    if isinstance(error, dict):
+        message = str(error.get("message", ""))
+        error_type = str(error.get("type", ""))
+    else:
+        message = str(error or payload)
+        error_type = ""
+    text = f"{message} {error_type}".lower()
+    return "model" in text and any(
+        phrase in text
+        for phrase in (
+            "not found",
+            "does not exist",
+            "not available",
+            "not accessible",
+            "not enabled",
+            "access",
+        )
+    )

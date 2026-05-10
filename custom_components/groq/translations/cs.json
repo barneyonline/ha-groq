@@ -1,35 +1,341 @@
 {
   "config": {
+    "initiate_flow": {
+      "user": "Přidat účet Groq"
+    },
     "step": {
       "user": {
-        "title": "Přidat TTS engine",
-        "description": "Více informací naleznete v dokumentaci.",
+        "title": "Přidejte Groq",
+        "description": "Další informace naleznete v dokumentaci.",
         "data": {
-          "api_key": "Zadejte Groq API klíč",
-          "model": "Model",
-          "voice": "Hlas",
-          "response_format": "Response format",
-          "vocal_directions": "Default vocal directions",
-          "url": "Zadejte Groq endpoint."
+          "name": "Jméno",
+          "api_key": "Zadejte klíč API Groq"
+        },
+        "data_description": {
+          "name": "Popisný název pro tento účet Groq. Použijte toto k identifikaci klíče API nebo fakturačního projektu.",
+          "api_key": "Klíč API Groq pro tento účet. Pokud chcete použít jiný klíč pro samostatnou sadu služeb, přidejte další účet Groq."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Znovu ověřte Groq",
+        "description": "Vaše přihlašovací údaje již nejsou platné. Zadejte nový klíč API.",
+        "data": {
+          "api_key": "Klíč API Groq"
+        }
+      },
+      "reconfigure": {
+        "title": "Překonfigurujte Groq",
+        "description": "Aktualizujte název účtu Groq nebo nahraďte klíč API.",
+        "data": {
+          "name": "Jméno",
+          "api_key": "Klíč API Groq"
+        },
+        "data_description": {
+          "name": "Popisný název pro tento účet Groq.",
+          "api_key": "Volitelný náhradní klíč API. Chcete-li zachovat aktuální klíč API, ponechte prázdné."
         }
       }
     },
+    "abort": {
+      "reconfigure_successful": "Účet Groq byl úspěšně aktualizován."
+    },
     "error": {
-      "wrong_api_key": "Neplatný API klíč. Zadejte prosím platný API klíč."
+      "cannot_connect": "Nelze se připojit k Groq. Zkontrolujte prosím připojení k síti a zkuste to znovu.",
+      "duplicate_api_key": "Tento klíč API již používá jiný účet Groq.",
+      "invalid_auth": "Neplatný klíč API Groq. Zadejte prosím platný klíč.",
+      "wrong_api_key": "Neplatný klíč API. Zadejte prosím platný klíč API.",
+      "invalid_url": "Neplatná adresa URL. Zadejte prosím platnou adresu URL.",
+      "invalid_enabled_features": "Jedna nebo více vybraných funkcí není podporováno.",
+      "invalid_response_format": "Neplatný formát odpovědi.",
+      "unsupported_reasoning_model": "Vybraný model nepodporuje možnosti uvažování.",
+      "unsupported_prompt_caching_model": "Vybraný model nepodporuje ukládání výzev do mezipaměti Groq.",
+      "unsupported_structured_outputs_model": "Vybraný model nepodporuje strukturované výstupy.",
+      "reserved_request_body_option": "Další možnosti těla požadavku nemohou přepsat model, zprávy nebo stream. Místo toho použijte vyhrazená pole.",
+      "max_completion_tokens_exceeded": "Vybraný model nepodporuje tolik žetonů maximálního dokončení.",
+      "invalid_voice": "Vybraný hlas není pro vybraný model dostupný.",
+      "select_voice_for_model": "Vyberte hlas pro vybraný model.",
+      "required": "Toto pole je povinné.",
+      "unknown": "Neočekávaná chyba při ověřování klíče API. Zkuste to prosím znovu.",
+      "unknown_error": "Neočekávaná chyba – zkuste to prosím znovu."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Nastavte TTS možnosti",
+        "title": "Nakonfigurujte možnosti Groq",
         "data": {
-          "voice": "Hlas",
-          "normalize_audio": "Povolte zvýšení hlasitosti generovaného audia (vyžaduje více CPU)",
-          "protect_free_tier": "Free-Tier Protection",
-          "response_format": "Response format",
-          "vocal_directions": "Default vocal directions"
+          "api_key": "Klíč API Groq"
+        },
+        "data_description": {
+          "api_key": "Volitelný náhradní klíč API pro tento účet Groq."
         }
       }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Služba generování textu",
+      "initiate_flow": {
+        "user": "Přidat generování textu",
+        "reconfigure": "Překonfigurujte generování textu"
+      },
+      "abort": {
+        "reconfigure_successful": "Služba generování textu byla úspěšně aktualizována."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Generování textu",
+          "description": "Vybrané možnosti modelu: {model_capabilities}",
+          "data": {
+            "name": "Jméno",
+            "model": "Model",
+            "system_prompt": "Systémová výzva",
+            "temperature": "Teplota",
+            "advanced_options": "Nakonfigurujte pokročilé možnosti požadavku",
+            "protect_free_tier": "Bezplatná ochrana"
+          },
+          "data_description": {
+            "name": "Popisný název pro tuto službu generování textu. Home Assistant to používá pro entity úloh Assist a AI.",
+            "model": "Chatovací model Groq používaný pro textové odpovědi, asistované konverzace a úlohy generování dat.",
+            "system_prompt": "Pokyny, které vedou model. Výchozí nastavení odpovídá výzvě úlohy AI Home Assistant.",
+            "temperature": "Řídí variace odezvy. Nižší hodnoty jsou předvídatelnější; vyšší hodnoty jsou kreativnější.",
+            "advanced_options": "Otevře pokročilé ovládací prvky pro méně obvyklé možnosti žádosti o chat Groq.",
+            "protect_free_tier": "Když Groq oznámí, že tato služba dosáhla limitu požadavku nebo tokenu, Home Assistant pozastaví pouze tuto službu do doby resetování Groq před odesláním dalších požadavků."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Pokročilé generování textu",
+          "data": {
+            "max_tokens": "Maximální počet žetonů dokončení",
+            "top_p": "Nahoru P",
+            "stop": "Zastavte sekvence",
+            "seed": "Semínko",
+            "service_tier": "Úroveň služeb",
+            "stream": "Odpovědi služby Stream Assist",
+            "reasoning_effort": "Rozumné úsilí",
+            "reasoning_format": "Formát odůvodnění",
+            "include_reasoning": "Zahrňte zdůvodnění",
+            "prompt_caching": "Okamžité ukládání do mezipaměti",
+            "structured_outputs": "Používejte strukturované výstupy",
+            "schema_name": "Název schématu",
+            "schema": "schéma JSON",
+            "strict": "Režim přísného schématu",
+            "request_body_options": "Další možnosti těla požadavku"
+          },
+          "data_description": {
+            "max_tokens": "Omezuje počet tokenů, které může Groq vygenerovat v odpovědi.",
+            "top_p": "Alternativní řízení odběru vzorků. Nižší hodnoty omezují generování na pravděpodobnější tokeny.",
+            "stop": "Jedna stop sekvence na řádek. Generování se zastaví, když je vytvořena jakákoli sekvence.",
+            "seed": "Deterministické vzorkování s nejlepším úsilím pro opakovatelné odezvy.",
+            "service_tier": "Volitelná úroveň zpracování Groq pro požadavek.",
+            "stream": "Streamuje odpovědi Assist do protokolu chatu Home Assistant, pokud je podporován.",
+            "reasoning_effort": "Rozpočet zdůvodnění pouze pro podporované modely zdůvodnění.",
+            "reasoning_format": "Jak podporované modely uvažování odhalují obsah uvažování.",
+            "include_reasoning": "Vyžaduje obsah odůvodnění na podporovaných modelech, když není nastaven žádný formát odůvodnění.",
+            "prompt_caching": "Povoluje ukládání do mezipaměti příkazů Groq pro podporované modely. Groq automaticky aplikuje ukládání do mezipaměti pro obsah s opakovanými předponami.",
+            "structured_outputs": "Když se tato služba používá pro generování dat, požaduje JSON, který se řídí nakonfigurovaným schématem.",
+            "schema_name": "Krátký identifikátor odeslaný do Groq se schématem.",
+            "schema": "Objekt schématu JSON odeslaný jako response_format.json_schema.schema.",
+            "strict": "Používá omezené dekódování Groq, když vybraný model podporuje přísně strukturované výstupy.",
+            "request_body_options": "Objekt JSON sloučen do těla žádosti o dokončení chatu. Toto je pokročilý průchod pro každou možnost vytvoření těla chatu Groq, která není zobrazena jako vyhrazené pole, including citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Služba převodu řeči na text",
+      "initiate_flow": {
+        "user": "Přidejte převod řeči na text",
+        "reconfigure": "Překonfigurujte převod řeči na text"
+      },
+      "abort": {
+        "reconfigure_successful": "Služba převodu řeči na text byla úspěšně aktualizována."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Převod řeči na text",
+          "data": {
+            "name": "Jméno",
+            "model": "Model",
+            "language": "Jazyk",
+            "protect_free_tier": "Bezplatná ochrana"
+          },
+          "data_description": {
+            "name": "Popisný název pro tuto instanci služby Speech-to-Text.",
+            "model": "Model Groq Whisper používaný k přepisu zvuku.",
+            "language": "Jazyková nápověda byla odeslána do Groq k přepisu. Výchozí jazyk nakonfigurovaný v Home Assistant, pokud je k dispozici.",
+            "protect_free_tier": "Když Groq oznámí, že tato služba dosáhla limitu požadavku nebo tokenu, Home Assistant pozastaví pouze tuto službu do doby resetování Groq před odesláním dalších požadavků."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Služba převodu textu na řeč",
+      "initiate_flow": {
+        "user": "Přidejte převod textu na řeč",
+        "reconfigure": "Překonfigurujte převod textu na řeč"
+      },
+      "abort": {
+        "reconfigure_successful": "Služba převodu textu na řeč byla úspěšně aktualizována."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Převod textu na řeč",
+          "data": {
+            "name": "Jméno",
+            "model": "Model",
+            "voice": "Hlas",
+            "vocal_directions": "Výchozí hlasové směry",
+            "normalize_audio": "Povolit hlasitost pro generovaný zvuk (využívá více CPU)",
+            "protect_free_tier": "Bezplatná ochrana"
+          },
+          "data_description": {
+            "name": "Popisný název pro tuto instanci služby Text-to-Speech.",
+            "model": "Model řeči Groq používaný ke generování zvuku.",
+            "voice": "Osobní hlas používaný vybraným modelem řeči. Změna modelu vymaže hlasy, které nejsou pro nový model dostupné.",
+            "vocal_directions": "Volitelný styl přednesu připojený k řeči, jako je veselý nebo šepot. Můžete si vybrat předvolbu nebo zadat vlastní.",
+            "normalize_audio": "Převádí výstup na normalizované MP3 pomocí ffmpeg pro konzistentnější hlasitost na malých reproduktorech.",
+            "protect_free_tier": "Když Groq ohlásí, že tato služba dosáhla požadavku, tokenu nebo známého limitu počtu znaků pro převod textu na řeč, Home Assistant pozastaví pouze tuto službu do doby resetování před odesláním dalších požadavků."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Služba rozpoznávání obrazu",
+      "initiate_flow": {
+        "user": "Přidat rozpoznávání obrázků",
+        "reconfigure": "Překonfigurujte rozpoznávání obrazu"
+      },
+      "abort": {
+        "reconfigure_successful": "Služba rozpoznávání obrázků byla úspěšně aktualizována."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Rozpoznávání obrazu",
+          "data": {
+            "name": "Jméno",
+            "model": "Model",
+            "system_prompt": "Systémová výzva",
+            "protect_free_tier": "Bezplatná ochrana"
+          },
+          "data_description": {
+            "name": "Popisný název pro tuto instanci služby rozpoznávání obrázků.",
+            "model": "Model vidění Groq používaný ke kontrole snímků.",
+            "system_prompt": "Volitelné pokyny, které vedou, jak jsou zodpovězeny obrázkové otázky.",
+            "protect_free_tier": "Když Groq oznámí, že tato služba dosáhla limitu požadavku nebo tokenu, Home Assistant pozastaví pouze tuto službu do doby resetování Groq před odesláním dalších požadavků."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Úlohy generování dat"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Asistujte"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Převod řeči na text"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Převod textu na řeč"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "Pro normalizaci zvuku Groq je vyžadován ffmpeg",
+      "description": "Služba Groq Text-to-Speech {service_name} je nakonfigurována tak, aby normalizovala generovaný zvuk, ale Home Assistant nemohl spustit ffmpeg. Nainstalujte ffmpeg na hostitele Home Assistant nebo vypněte normalizaci zvuku pro tuto službu Groq Text-to-Speech."
+    },
+    "model_access": {
+      "title": "Model Groq není k dispozici",
+      "description": "Groq oznámil, že model {model} není pro tento účet dostupný. Zkontrolujte název modelu v konzole Groq, potvrďte, že je model pro účet povolen, nebo v této integraci vyberte jiný model Groq."
+    },
+    "model_configuration": {
+      "title": "Konfigurace servisního modelu Groq je neplatná",
+      "description": "Služba Groq {service_name} je nakonfigurována pro použití modelu {model}, ale není známo, že by tento model podporoval {feature}. Vyberte model, který podporuje tento typ služby."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Více služeb Groq odpovídá service_id: {service_id}"
+    },
+    "config_entry_not_found": {
+      "message": "Záznam konfigurace Groq nebyl nalezen: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Nebyla nalezena žádná načtená položka konfigurace Groq"
+    },
+    "multiple_config_entries": {
+      "message": "Je načteno více položek konfigurace Groq; poskytnout config_entry_id nebo service_id"
+    },
+    "service_not_found": {
+      "message": "Služba Groq {service_type} nebyla nalezena: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Je nakonfigurováno více služeb Groq {service_type}; poskytnout service_id"
+    },
+    "unsupported_model": {
+      "message": "Není známo, že by model Groq {model} podporoval {feature}"
+    },
+    "completion_token_limit": {
+      "message": "Model Groq {model} podporuje maximálně tokenů dokončení {limit}"
+    },
+    "select_one_camera": {
+      "message": "Vyberte pouze jednu entitu kamery"
+    },
+    "camera_capture_failed": {
+      "message": "Nelze zachytit obraz z entity kamery {entity_id}"
+    },
+    "local_image_path_not_allowed": {
+      "message": "Místní cesta obrazu není v allowlist_external_dirs Home Assistant"
+    },
+    "local_image_not_found": {
+      "message": "Místní soubor obrázku nebyl nalezen: {path}"
+    },
+    "local_file_not_image": {
+      "message": "Místní soubor není obrázek: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Nelze vyřešit soubor obrázku: {path}"
+    },
+    "selected_media_not_image": {
+      "message": "Vybrané médium není obrázek: {path}"
+    },
+    "image_source_required": {
+      "message": "Vyberte entitu fotoaparátu, soubor obrázku, cestu k místnímu obrázku nebo adresu URL obrázku"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "Místní zvuková cesta není v allowlist_external_dirs Home Assistant"
+    },
+    "local_audio_not_found": {
+      "message": "Místní zvukový soubor nebyl nalezen: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "Místní soubor není zvuk: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Nelze přeložit zvukový soubor: {path}"
+    },
+    "audio_media_local_required": {
+      "message": "Vybraný zvuk se musí přeložit do místního souboru"
+    },
+    "selected_media_not_audio": {
+      "message": "Vybrané médium není zvuk: {path}"
+    },
+    "audio_source_required": {
+      "message": "Vyberte zvukový soubor nebo místní zvukovou cestu"
+    },
+    "request_invalid": {
+      "message": "{message}"
     }
   }
 }

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 DOMAIN = "groq"
-VERSION = "0.1"
+VERSION = "1.0"
 CONF_API_KEY = "api_key"
 CONF_MODEL = "model"
 CONF_INPUT = "input"

@@ -1,35 +1,341 @@
 {
   "config": {
+    "initiate_flow": {
+      "user": "Groq-Konto hinzufügen"
+    },
     "step": {
       "user": {
-        "title": "Text-to-Speech Engine hinzufügen",
+        "title": "Fügen Sie Groq hinzu",
         "description": "Weitere Informationen finden Sie in der Dokumentation.",
         "data": {
-          "api_key": "Geben Sie den Groq API-Schlüssel ein",
-          "model": "Modell",
-          "voice": "Stimme",
-          "response_format": "Response format",
-          "vocal_directions": "Default vocal directions",
-          "url": "Geben Sie den Groq Endpunkt ein."
+          "name": "Name",
+          "api_key": "Geben Sie den API-Schlüssel Groq ein"
+        },
+        "data_description": {
+          "name": "Ein benutzerfreundlicher Name für dieses Groq-Konto. Verwenden Sie dies, um den API-Schlüssel oder das Abrechnungsprojekt zu identifizieren.",
+          "api_key": "Groq API-Schlüssel für dieses Konto. Fügen Sie ein weiteres Groq-Konto hinzu, wenn Sie einen anderen Schlüssel für einen separaten Satz von Diensten verwenden möchten."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Authentifizieren Sie Groq erneut",
+        "description": "Ihre Anmeldedaten sind nicht mehr gültig. Bitte geben Sie einen neuen API-Schlüssel ein.",
+        "data": {
+          "api_key": "Groq API-Schlüssel"
+        }
+      },
+      "reconfigure": {
+        "title": "Konfigurieren Sie Groq neu",
+        "description": "Aktualisieren Sie den Groq-Kontonamen oder ersetzen Sie den API-Schlüssel.",
+        "data": {
+          "name": "Name",
+          "api_key": "Groq API-Schlüssel"
+        },
+        "data_description": {
+          "name": "Ein benutzerfreundlicher Name für dieses Groq-Konto.",
+          "api_key": "Optionaler Ersatz-API-Schlüssel. Lassen Sie das Feld leer, um den aktuellen API-Schlüssel beizubehalten."
         }
       }
     },
+    "abort": {
+      "reconfigure_successful": "Groq-Konto erfolgreich aktualisiert."
+    },
     "error": {
-      "wrong_api_key": "Ungültiger API-Schlüssel. Bitte geben Sie einen gültigen API-Schlüssel ein."
+      "cannot_connect": "Es konnte keine Verbindung zu Groq hergestellt werden. Bitte überprüfen Sie Ihre Netzwerkverbindung und versuchen Sie es erneut.",
+      "duplicate_api_key": "Ein anderes Groq-Konto verwendet diesen API-Schlüssel bereits.",
+      "invalid_auth": "Ungültiger Groq-API-Schlüssel. Bitte geben Sie einen gültigen Schlüssel ein.",
+      "wrong_api_key": "Ungültiger API-Schlüssel. Bitte geben Sie einen gültigen API-Schlüssel ein.",
+      "invalid_url": "Ungültige URL. Bitte geben Sie eine gültige URL ein.",
+      "invalid_enabled_features": "Eine oder mehrere ausgewählte Funktionen werden nicht unterstützt.",
+      "invalid_response_format": "Ungültiges Antwortformat.",
+      "unsupported_reasoning_model": "Das ausgewählte Modell unterstützt keine Argumentationsoptionen.",
+      "unsupported_prompt_caching_model": "Das ausgewählte Modell unterstützt kein Groq-Eingabeaufforderungs-Caching.",
+      "unsupported_structured_outputs_model": "Das ausgewählte Modell unterstützt keine strukturierten Ausgaben.",
+      "reserved_request_body_option": "Zusätzliche Optionen für den Anforderungstext können Modell, Nachrichten oder Stream nicht überschreiben. Verwenden Sie stattdessen die dafür vorgesehenen Felder.",
+      "max_completion_tokens_exceeded": "Das ausgewählte Modell unterstützt nicht so viele maximale Abschlusstoken.",
+      "invalid_voice": "Die ausgewählte Stimme ist für das ausgewählte Modell nicht verfügbar.",
+      "select_voice_for_model": "Wählen Sie eine Stimme für das ausgewählte Modell.",
+      "required": "Dieses Feld ist erforderlich.",
+      "unknown": "Unerwarteter Fehler beim Validieren des API-Schlüssels. Bitte versuchen Sie es erneut.",
+      "unknown_error": "Unerwarteter Fehler – bitte versuchen Sie es erneut."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Konfigurieren Sie die TTS-Optionen",
+        "title": "Konfigurieren Sie die Groq-Optionen",
         "data": {
-          "voice": "Stimme",
-          "normalize_audio": "Aktivieren Sie die Lautstärkeerhöhung für das erzeugte Audio (verwendet mehr CPU)",
-          "protect_free_tier": "Free-Tier Protection",
-          "response_format": "Response format",
-          "vocal_directions": "Default vocal directions"
+          "api_key": "Groq API-Schlüssel"
+        },
+        "data_description": {
+          "api_key": "Optionaler Ersatz-API-Schlüssel für dieses Groq-Konto."
         }
       }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Textgenerierungsdienst",
+      "initiate_flow": {
+        "user": "Textgenerierung hinzufügen",
+        "reconfigure": "Textgenerierung neu konfigurieren"
+      },
+      "abort": {
+        "reconfigure_successful": "Der Textgenerierungsdienst wurde erfolgreich aktualisiert."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Textgenerierung",
+          "description": "Ausgewählte Modellfunktionen: {model_capabilities}",
+          "data": {
+            "name": "Name",
+            "model": "Modell",
+            "system_prompt": "Systemaufforderung",
+            "temperature": "Temperatur",
+            "advanced_options": "Konfigurieren Sie erweiterte Anfrageoptionen",
+            "protect_free_tier": "Free-Tier-Schutz"
+          },
+          "data_description": {
+            "name": "Ein benutzerfreundlicher Name für diesen Textgenerierungsdienst. Home Assistant verwendet dies für Assist- und AI-Aufgabeneinheiten.",
+            "model": "Das Groq-Chat-Modell, das für Textantworten, Assist-Gespräche und Datengenerierungsaufgaben verwendet wird.",
+            "system_prompt": "Anweisungen, die das Modell leiten. Die Standardeinstellung entspricht der KI-Aufgabenaufforderung von Home Assistant.",
+            "temperature": "Steuert Antwortvariationen. Niedrigere Werte sind vorhersehbarer; Höhere Werte sind kreativer.",
+            "advanced_options": "Öffnet erweiterte Steuerelemente für weniger häufige Groq-Chat-Anfrageoptionen.",
+            "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs- oder Token-Limit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit von Groq, bevor weitere Anforderungen gesendet werden."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Erweiterte Textgenerierung",
+          "data": {
+            "max_tokens": "Maximale Anzahl an Abschlusstokens",
+            "top_p": "Top P",
+            "stop": "Stoppsequenzen",
+            "seed": "Samen",
+            "service_tier": "Serviceebene",
+            "stream": "Streamen Sie Assist-Antworten",
+            "reasoning_effort": "Argumentationsaufwand",
+            "reasoning_format": "Argumentationsformat",
+            "include_reasoning": "Fügen Sie eine Begründung hinzu",
+            "prompt_caching": "Sofortiges Caching",
+            "structured_outputs": "Verwenden Sie strukturierte Ausgaben",
+            "schema_name": "Schemaname",
+            "schema": "JSON-Schema",
+            "strict": "Strikter Schemamodus",
+            "request_body_options": "Zusätzliche Optionen für den Anforderungstext"
+          },
+          "data_description": {
+            "max_tokens": "Begrenzt die Anzahl der Token, die Groq in der Antwort generieren kann.",
+            "top_p": "Alternative Probenahmekontrolle. Niedrigere Werte beschränken die Generierung auf wahrscheinlichere Token.",
+            "stop": "Eine Stoppsequenz pro Zeile. Die Generierung stoppt, wenn eine Sequenz erstellt wird.",
+            "seed": "Deterministisches Sampling-Seed mit bestmöglichem Aufwand für wiederholbare Antworten.",
+            "service_tier": "Optionale Groq-Verarbeitungsebene für die Anfrage.",
+            "stream": "Streamt Assist-Antworten in das Home Assistant-Chatprotokoll, sofern unterstützt.",
+            "reasoning_effort": "Reasoning-Budget nur für unterstützte Reasoning-Modelle.",
+            "reasoning_format": "Wie unterstützte Argumentationsmodelle Argumentationsinhalte offenlegen.",
+            "include_reasoning": "Fordert Begründungsinhalte zu unterstützten Modellen an, wenn kein Begründungsformat festgelegt ist.",
+            "prompt_caching": "Aktiviert Groq-Prompt-Caching für unterstützte Modelle. Groq wendet Caching automatisch für wiederholte Präfixinhalte an.",
+            "structured_outputs": "Fordert JSON an, das dem konfigurierten Schema folgt, wenn dieser Dienst zur Datengenerierung verwendet wird.",
+            "schema_name": "Eine kurze Kennung, die mit dem Schema an Groq gesendet wird.",
+            "schema": "JSON-Schemaobjekt, gesendet als response_format.json_schema.schema.",
+            "strict": "Verwendet die eingeschränkte Groq-Dekodierung, wenn das ausgewählte Modell streng strukturierte Ausgaben unterstützt.",
+            "request_body_options": "Das JSON-Objekt wurde in den Text der Chat-Abschlussanforderung eingefügt. Dies ist der erweiterte Passthrough für jede Groq-Chat-Textkörper-Erstellungsoption, die nicht als eigenes Feld angezeigt wird, including citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Speech-to-Text-Dienst",
+      "initiate_flow": {
+        "user": "Fügen Sie Speech-to-Text hinzu",
+        "reconfigure": "Speech-to-Text neu konfigurieren"
+      },
+      "abort": {
+        "reconfigure_successful": "Der Speech-to-Text-Dienst wurde erfolgreich aktualisiert."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Speech-to-Text",
+          "data": {
+            "name": "Name",
+            "model": "Modell",
+            "language": "Sprache",
+            "protect_free_tier": "Free-Tier-Schutz"
+          },
+          "data_description": {
+            "name": "Ein benutzerfreundlicher Name für diese Speech-to-Text-Dienstinstanz.",
+            "model": "Das Groq Whisper-Modell, das zum Transkribieren von Audio verwendet wird.",
+            "language": "Sprachhinweis zur Transkription an Groq gesendet. Standardmäßig wird die in Home Assistant konfigurierte Sprache verwendet, sofern verfügbar.",
+            "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs- oder Token-Limit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit von Groq, bevor weitere Anforderungen gesendet werden."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Text-to-Speech-Dienst",
+      "initiate_flow": {
+        "user": "Fügen Sie Text-to-Speech hinzu",
+        "reconfigure": "Konfigurieren Sie Text-to-Speech neu"
+      },
+      "abort": {
+        "reconfigure_successful": "Der Text-to-Speech-Dienst wurde erfolgreich aktualisiert."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Text-to-Speech",
+          "data": {
+            "name": "Name",
+            "model": "Modell",
+            "voice": "Stimme",
+            "vocal_directions": "Standard-Stimmrichtungen",
+            "normalize_audio": "Aktivieren Sie die Lautstärke für generiertes Audio (verbraucht mehr CPU)",
+            "protect_free_tier": "Free-Tier-Schutz"
+          },
+          "data_description": {
+            "name": "Ein benutzerfreundlicher Name für diese Text-to-Speech-Dienstinstanz.",
+            "model": "Das Groq-Sprachmodell, das zum Generieren von Audio verwendet wird.",
+            "voice": "Die vom ausgewählten Sprachmodell verwendete Sprachpersona. Beim Ändern des Modells werden Stimmen gelöscht, die für das neue Modell nicht verfügbar sind.",
+            "vocal_directions": "Optionaler Übermittlungsstil, der der Sprache vorangestellt wird, z. B. fröhlich oder flüstern. Sie können eine Voreinstellung auswählen oder Ihre eigene eingeben.",
+            "normalize_audio": "Konvertiert die Ausgabe mit ffmpeg in normalisiertes MP3 für eine gleichmäßigere Lautstärke auf kleinen Lautsprechern.",
+            "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst eine Anforderung, ein Token oder ein bekanntes Text-to-Speech-Zeichenlimit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit, bevor weitere Anforderungen gesendet werden."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Bilderkennungsdienst",
+      "initiate_flow": {
+        "user": "Bilderkennung hinzufügen",
+        "reconfigure": "Bilderkennung neu konfigurieren"
+      },
+      "abort": {
+        "reconfigure_successful": "Der Bilderkennungsdienst wurde erfolgreich aktualisiert."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Bilderkennung",
+          "data": {
+            "name": "Name",
+            "model": "Modell",
+            "system_prompt": "Systemaufforderung",
+            "protect_free_tier": "Free-Tier-Schutz"
+          },
+          "data_description": {
+            "name": "Ein benutzerfreundlicher Name für diese Bilderkennungsdienstinstanz.",
+            "model": "Das Vision-Modell Groq, das zur Inspektion von Bildern verwendet wird.",
+            "system_prompt": "Optionale Anweisungen zur Beantwortung von Bildfragen.",
+            "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs- oder Token-Limit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit von Groq, bevor weitere Anforderungen gesendet werden."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Aufgaben zur Datengenerierung"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Helfen"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Speech-to-Text"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Text-to-Speech"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "ffmpeg ist für die Audionormalisierung Groq erforderlich",
+      "description": "Der Groq Text-to-Speech-Dienst {service_name} ist so konfiguriert, dass generiertes Audio normalisiert wird, aber Home Assistant konnte ffmpeg nicht starten. Installieren Sie ffmpeg auf dem Home Assistant-Host oder deaktivieren Sie die Audionormalisierung für diesen Groq Text-to-Speech-Dienst."
+    },
+    "model_access": {
+      "title": "Das Modell Groq ist nicht verfügbar",
+      "description": "Groq hat gemeldet, dass das Modell {model} für dieses Konto nicht verfügbar ist. Überprüfen Sie den Modellnamen in der Groq-Konsole, bestätigen Sie, dass das Modell für das Konto aktiviert ist, oder wählen Sie ein anderes Groq-Modell in dieser Integration aus."
+    },
+    "model_configuration": {
+      "title": "Die Konfiguration des Groq-Dienstmodells ist ungültig",
+      "description": "Der Groq-Dienst {service_name} ist für die Verwendung des Modells {model} konfiguriert, es ist jedoch nicht bekannt, dass dieses Modell {feature} unterstützt. Wählen Sie ein Modell aus, das diesen Servicetyp unterstützt."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Mehrere Groq-Dienste stimmen mit service_id: {service_id} überein"
+    },
+    "config_entry_not_found": {
+      "message": "Groq-Konfigurationseintrag nicht gefunden: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Kein geladener Groq-Konfigurationseintrag gefunden"
+    },
+    "multiple_config_entries": {
+      "message": "Es werden mehrere Groq-Konfigurationseinträge geladen. Geben Sie config_entry_id oder service_id an"
+    },
+    "service_not_found": {
+      "message": "Groq {service_type}-Dienst nicht gefunden: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Es sind mehrere Groq {service_type}-Dienste konfiguriert. bieten service_id"
+    },
+    "unsupported_model": {
+      "message": "Es ist nicht bekannt, dass das Modell Groq {model} {feature} unterstützt"
+    },
+    "completion_token_limit": {
+      "message": "Das Groq-Modell {model} unterstützt höchstens {limit}-Abschlusstoken"
+    },
+    "select_one_camera": {
+      "message": "Wählen Sie nur eine Kameraeinheit aus"
+    },
+    "camera_capture_failed": {
+      "message": "Das Bild von der Kameraentität {entity_id} konnte nicht erfasst werden"
+    },
+    "local_image_path_not_allowed": {
+      "message": "Der lokale Bildpfad befindet sich nicht in Home Assistants allowlist_external_dirs"
+    },
+    "local_image_not_found": {
+      "message": "Lokale Bilddatei nicht gefunden: {path}"
+    },
+    "local_file_not_image": {
+      "message": "Lokale Datei ist kein Bild: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Bilddatei konnte nicht aufgelöst werden: {path}"
+    },
+    "selected_media_not_image": {
+      "message": "Ausgewähltes Medium ist kein Bild: {path}"
+    },
+    "image_source_required": {
+      "message": "Wählen Sie eine Kameraentität, eine Bilddatei, einen lokalen Bildpfad oder eine Bild-URL aus"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "Der lokale Audiopfad befindet sich nicht im allowlist_external_dirs von Home Assistant"
+    },
+    "local_audio_not_found": {
+      "message": "Lokale Audiodatei nicht gefunden: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "Die lokale Datei ist kein Audio: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Audiodatei konnte nicht aufgelöst werden: {path}"
+    },
+    "audio_media_local_required": {
+      "message": "Ausgewähltes Audio muss in eine lokale Datei aufgelöst werden"
+    },
+    "selected_media_not_audio": {
+      "message": "Ausgewähltes Medium ist kein Audio: {path}"
+    },
+    "audio_source_required": {
+      "message": "Wählen Sie eine Audiodatei oder einen lokalen Audiopfad aus"
+    },
+    "request_invalid": {
+      "message": "{message}"
     }
   }
 }

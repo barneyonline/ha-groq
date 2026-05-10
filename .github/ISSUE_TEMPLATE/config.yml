@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Groq TTS API documentation
-    url: https://console.groq.com/docs/text-to-speech
-    about: Check Groq's current TTS model and voice documentation.
+  - name: Groq API documentation
+    url: https://console.groq.com/docs/
+    about: Check Groq's current model, speech, vision, rate limit, and API behavior.
+  - name: Groq status page
+    url: https://groqstatus.com/
+    about: Check for Groq service incidents before reporting connectivity or API availability problems.

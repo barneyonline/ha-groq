@@ -38,20 +38,20 @@ def test_bug_issue_uses_parser_area_install_method_and_diagnostics() -> None:
         ),
         action="opened",
         parser_outputs={
-            "primary_area": "Model or voice selection",
+            "primary_area": "Text-to-speech or voice selection",
             "install_method": "HACS",
             "diagnostics_status": "Not yet, but I can upload them",
         },
     )
 
     assert decision.desired_labels == {
-        "area/models-voices",
+        "area/tts",
         "source/hacs",
         "status/needs-diagnostics",
         "status/needs-triage",
     }
     assert decision.to_add == [
-        "area/models-voices",
+        "area/tts",
         "source/hacs",
         "status/needs-diagnostics",
     ]
@@ -83,14 +83,14 @@ def test_managed_labels_are_removed_when_no_longer_desired() -> None:
         _issue(
             "[Feature]: Improve docs",
             "### Area\n\nDocumentation",
-            labels=["status/needs-triage", "area/api", "source/hacs"],
+            labels=["status/needs-triage", "area/text-generation", "source/hacs"],
         ),
         action="edited",
         parser_outputs={},
     )
 
     assert decision.to_add == ["area/docs"]
-    assert decision.to_remove == ["area/api", "source/hacs"]
+    assert decision.to_remove == ["area/text-generation", "source/hacs"]
 
 
 def test_validate_template_mappings_for_repository() -> None:

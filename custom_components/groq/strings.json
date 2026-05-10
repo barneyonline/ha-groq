@@ -22,7 +22,22 @@
                 "data": {
                     "api_key": "Groq API key"
                 }
+            },
+            "reconfigure": {
+                "title": "Reconfigure Groq",
+                "description": "Update the Groq account name or replace the API key.",
+                "data": {
+                    "name": "Name",
+                    "api_key": "Groq API key"
+                },
+                "data_description": {
+                    "name": "A friendly name for this Groq account.",
+                    "api_key": "Optional replacement API key. Leave empty to keep the current API key."
+                }
             }
+        },
+        "abort": {
+            "reconfigure_successful": "Groq account updated successfully."
         },
         "error": {
             "cannot_connect": "Could not connect to Groq. Please check your network connection and try again.",
@@ -211,6 +226,116 @@
                     }
                 }
             }
+        }
+    },
+    "entity": {
+        "ai_task": {
+            "data_generation_tasks": {
+                "name": "Data generation tasks"
+            }
+        },
+        "conversation": {
+            "assist": {
+                "name": "Assist"
+            }
+        },
+        "stt": {
+            "speech_to_text": {
+                "name": "Speech-to-Text"
+            }
+        },
+        "tts": {
+            "text_to_speech": {
+                "name": "Text-to-Speech"
+            }
+        }
+    },
+    "issues": {
+        "ffmpeg_missing": {
+            "title": "ffmpeg is required for Groq audio normalization",
+            "description": "The Groq Text-to-Speech service {service_name} is configured to normalize generated audio, but Home Assistant could not start ffmpeg. Install ffmpeg on the Home Assistant host or turn off audio normalization for this Groq Text-to-Speech service."
+        },
+        "model_access": {
+            "title": "Groq model is not available",
+            "description": "Groq reported that the model {model} is not available to this account. Check the model name in the Groq Console, confirm the model is enabled for the account, or select a different Groq model in this integration."
+        },
+        "model_configuration": {
+            "title": "Groq service model configuration is invalid",
+            "description": "The Groq service {service_name} is configured to use model {model}, but that model is not known to support {feature}. Select a model that supports this service type."
+        }
+    },
+    "exceptions": {
+        "multiple_services_match": {
+            "message": "Multiple Groq services match service_id: {service_id}"
+        },
+        "config_entry_not_found": {
+            "message": "Groq config entry not found: {entry_id}"
+        },
+        "no_loaded_config_entry": {
+            "message": "No loaded Groq config entry found"
+        },
+        "multiple_config_entries": {
+            "message": "Multiple Groq config entries are loaded; provide config_entry_id or service_id"
+        },
+        "service_not_found": {
+            "message": "Groq {service_type} service not found: {service_id}"
+        },
+        "multiple_services_configured": {
+            "message": "Multiple Groq {service_type} services are configured; provide service_id"
+        },
+        "unsupported_model": {
+            "message": "Groq model {model} is not known to support {feature}"
+        },
+        "completion_token_limit": {
+            "message": "Groq model {model} supports at most {limit} completion tokens"
+        },
+        "select_one_camera": {
+            "message": "Select only one camera entity"
+        },
+        "camera_capture_failed": {
+            "message": "Could not capture image from camera entity {entity_id}"
+        },
+        "local_image_path_not_allowed": {
+            "message": "Local image path is not in Home Assistant's allowlist_external_dirs"
+        },
+        "local_image_not_found": {
+            "message": "Local image file not found: {path}"
+        },
+        "local_file_not_image": {
+            "message": "Local file is not an image: {path}"
+        },
+        "image_media_unresolvable": {
+            "message": "Could not resolve image file: {path}"
+        },
+        "selected_media_not_image": {
+            "message": "Selected media is not an image: {path}"
+        },
+        "image_source_required": {
+            "message": "Select a camera entity, image file, local image path, or image URL"
+        },
+        "local_audio_path_not_allowed": {
+            "message": "Local audio path is not in Home Assistant's allowlist_external_dirs"
+        },
+        "local_audio_not_found": {
+            "message": "Local audio file not found: {path}"
+        },
+        "local_file_not_audio": {
+            "message": "Local file is not audio: {path}"
+        },
+        "audio_media_unresolvable": {
+            "message": "Could not resolve audio file: {path}"
+        },
+        "audio_media_local_required": {
+            "message": "Selected audio must resolve to a local file"
+        },
+        "selected_media_not_audio": {
+            "message": "Selected media is not audio: {path}"
+        },
+        "audio_source_required": {
+            "message": "Select an audio file or local audio path"
+        },
+        "request_invalid": {
+            "message": "{message}"
         }
     }
 }

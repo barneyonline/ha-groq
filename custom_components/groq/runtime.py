@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
 from .api import GroqApiClient, normalize_base_url
 from .const import (
@@ -149,6 +149,7 @@ async def async_hydrate_runtime_model_registry(
     runtime: GroqRuntimeData,
     *,
     hydrate_details: bool = False,
+    raise_not_ready: bool = False,
 ) -> None:
     """Hydrate runtime model metadata from Groq when credentials are available."""
     if not entry_value(entry, CONF_API_KEY):
@@ -160,6 +161,8 @@ async def async_hydrate_runtime_model_registry(
     except ConfigEntryAuthFailed:
         raise
     except (GroqApiError, GroqResponseError, TimeoutError) as err:
+        if raise_not_ready:
+            raise ConfigEntryNotReady("Could not connect to Groq API") from err
         # Built-in model metadata keeps setup usable when Groq is temporarily
         # unreachable; users can still refresh model data from the integration.
         _LOGGER.debug("Could not hydrate Groq model metadata during setup: %s", err)

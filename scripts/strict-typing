@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -eu
+
+cd "$(dirname "$0")/.."
+
+scripts/test python -m mypy custom_components/groq

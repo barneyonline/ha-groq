@@ -15,11 +15,30 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Validate release tag matches manifest version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          version = json.loads(
+              Path("custom_components/groq/manifest.json").read_text(encoding="utf-8")
+          )["version"]
+          tag = os.environ["RELEASE_TAG"].removeprefix("v")
+          if version != tag:
+              raise SystemExit(
+                  f"Release tag {os.environ['RELEASE_TAG']} does not match manifest version {version}"
+              )
+          PY
       - name: Create component archive
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          zip -r "groq-${RELEASE_TAG}.zip" custom_components/groq
+          zip -r "groq-${RELEASE_TAG}.zip" custom_components/groq \
+            -x "*/__pycache__/*" "*/.mypy_cache/*" "*/.pytest_cache/*"
       - name: Upload release asset
         uses: softprops/action-gh-release@v3
         with:

@@ -21,11 +21,14 @@ def _load_module():
 validate_quality_scale = _load_module()
 
 
-def _write_manifest(root: Path, quality_scale: str = "bronze") -> None:
+def _write_manifest(root: Path, quality_scale: str | None = "bronze") -> None:
     manifest_dir = root / "custom_components" / "groq"
     manifest_dir.mkdir(parents=True)
+    manifest = {"domain": "groq"}
+    if quality_scale is not None:
+        manifest["quality_scale"] = quality_scale
     (manifest_dir / "manifest.json").write_text(
-        json.dumps({"domain": "groq", "quality_scale": quality_scale}),
+        json.dumps(manifest),
         encoding="utf-8",
     )
 
@@ -71,6 +74,29 @@ rules:
     assert "test-coverage" in "\n".join(messages)
 
 
+def test_unclaimed_manifest_allows_tracked_todo_rules(tmp_path: Path) -> None:
+    _write_manifest(tmp_path, None)
+    _write_reference(tmp_path, "README.md")
+    _write_quality_scale(
+        tmp_path,
+        """
+levels:
+  bronze:
+    required: [config-flow]
+rules:
+  config-flow:
+    status: todo
+    comment: Tracked gap before a manifest quality claim is made.
+    references:
+      docs: [README.md]
+""",
+    )
+
+    exit_code, messages = validate_quality_scale.validate_quality_scale(tmp_path)
+
+    assert exit_code == 0, "\n".join(messages)
+
+
 def test_na_rules_need_explanatory_comments(tmp_path: Path) -> None:
     _write_manifest(tmp_path, "bronze")
     _write_reference(tmp_path, "README.md")
@@ -92,6 +118,33 @@ rules:
 
     assert exit_code == 1
     assert "n/a rules missing explanatory comments" in "\n".join(messages)
+
+
+def test_documented_integration_exceptions_may_be_na(tmp_path: Path) -> None:
+    _write_manifest(tmp_path, "gold")
+    _write_reference(tmp_path, "README.md")
+    _write_quality_scale(
+        tmp_path,
+        """
+levels:
+  bronze:
+    required: []
+  silver:
+    required: []
+  gold:
+    required: [entity-device-class]
+rules:
+  entity-device-class:
+    status: n/a
+    comment: Device classes do not apply to this entity platform.
+    references:
+      docs: [README.md]
+""",
+    )
+
+    exit_code, messages = validate_quality_scale.validate_quality_scale(tmp_path)
+
+    assert exit_code == 0, "\n".join(messages)
 
 
 def test_na_status_is_restricted_to_allowlisted_rules(tmp_path: Path) -> None:
@@ -116,6 +169,29 @@ rules:
 
     assert exit_code == 1
     assert "Rules marked n/a without an allowlist exception" in "\n".join(messages)
+
+
+def test_unknown_status_is_reported(tmp_path: Path) -> None:
+    _write_manifest(tmp_path, None)
+    _write_reference(tmp_path, "README.md")
+    _write_quality_scale(
+        tmp_path,
+        """
+levels:
+  bronze:
+    required: [config-flow]
+rules:
+  config-flow:
+    status: partial
+    references:
+      docs: [README.md]
+""",
+    )
+
+    exit_code, messages = validate_quality_scale.validate_quality_scale(tmp_path)
+
+    assert exit_code == 1
+    assert "unsupported status" in "\n".join(messages)
 
 
 def test_broken_references_are_reported(tmp_path: Path) -> None:

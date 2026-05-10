@@ -57,6 +57,8 @@ jobs:
               "2. Select `Groq`",
               "3. Use `Download diagnostics`",
               "4. Attach the generated file to this issue",
+              "",
+              "Also include the affected Groq service, Home Assistant entity or action, selected model or voice, and redacted logs if the issue involves a service call. Do not include Groq API keys or private prompt/media content.",
             ].join("\n");
 
             if (existing) {
