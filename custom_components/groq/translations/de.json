@@ -25,7 +25,7 @@
         "data": {
           "voice": "Stimme",
           "normalize_audio": "Aktivieren Sie die Lautstärkeerhöhung für das erzeugte Audio (verwendet mehr CPU)",
-          "protect_free_tier": "Protect this service's free-tier usage",
+          "protect_free_tier": "Free-Tier Protection",
           "response_format": "Response format",
           "vocal_directions": "Default vocal directions"
         }

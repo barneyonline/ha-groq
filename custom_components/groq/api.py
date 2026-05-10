@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from asyncio import CancelledError
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 import aiohttp
 from homeassistant.core import HomeAssistant
@@ -27,6 +28,8 @@ MODELS_PATH = "/models"
 AUDIO_TRANSCRIPTIONS_PATH = "/audio/transcriptions"
 JSON_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
 STREAM_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
+MODEL_DETAIL_CONCURRENCY = 5
+RESERVED_CHAT_BODY_OPTIONS = frozenset({"messages", "model", "stream"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,11 +137,13 @@ def build_text_generation_payload(request: TextGenerationRequest) -> dict[str, A
     if request.extra_body:
         # Merge last so the advanced passthrough can cover newly added Groq
         # chat-create options without changing the integration schema first.
+        # Keep integration-managed fields out of the passthrough so a raw body
+        # option cannot bypass model, prompt, or streaming validation.
         payload.update(
             {
                 key: value
                 for key, value in request.extra_body.items()
-                if value is not None
+                if value is not None and key not in RESERVED_CHAT_BODY_OPTIONS
             }
         )
     return payload
@@ -246,25 +251,88 @@ class GroqApiClient:
         base_url: str | None = None,
         session: aiohttp.ClientSession | None = None,
         rate_limiter: GroqRateLimiter | None = None,
+        request_timeout: aiohttp.ClientTimeout | None = None,
+        stream_timeout: aiohttp.ClientTimeout | None = None,
     ) -> None:
         self._hass = hass
         self._api_key = api_key
         self._base_url = normalize_base_url(base_url)
         self._session = session
         self._rate_limiter = rate_limiter or GroqRateLimiter()
+        self._request_timeout = request_timeout or JSON_REQUEST_TIMEOUT
+        self._stream_timeout = stream_timeout or STREAM_REQUEST_TIMEOUT
 
     @property
     def base_url(self) -> str:
         """Return the normalized API base URL."""
         return self._base_url
 
-    async def async_list_models(self) -> list[GroqModel]:
+    async def async_list_models(self, *, hydrate: bool = True) -> list[GroqModel]:
         """Return models visible to the configured Groq API key."""
         payload = await self._request_json("GET", MODELS_PATH)
-        data = payload.get("data", [])
+        data = payload.get("data")
         if not isinstance(data, list):
             raise GroqResponseError("Groq models response did not include a data list")
-        return [model_from_api(item) for item in data if isinstance(item, dict)]
+        model_items = [item for item in data if isinstance(item, dict)]
+        models = [model_from_api(item) for item in model_items]
+        if not hydrate:
+            return models
+        return await self._async_hydrate_models(models, model_items)
+
+    async def async_retrieve_model(self, model_id: str) -> GroqModel:
+        """Return detailed metadata for one Groq model."""
+        payload = await self._request_json(
+            "GET",
+            f"{MODELS_PATH}/{quote(model_id, safe='')}",
+        )
+        return model_from_api(payload)
+
+    async def _async_hydrate_model(
+        self,
+        model: GroqModel,
+        raw_model: dict[str, Any] | None = None,
+    ) -> GroqModel:
+        """Fetch model detail when the list response lacks token limits."""
+        force_detail = raw_model is not None and (
+            "context_window" not in raw_model
+            or "max_completion_tokens" not in raw_model
+        )
+        if not force_detail and (
+            model.context_window is not None and model.max_completion_tokens is not None
+        ):
+            return model
+        try:
+            detail = await self.async_retrieve_model(model.model_id)
+            return detail if detail.model_id == model.model_id else model
+        except (GroqApiError, GroqResponseError, ConfigEntryAuthFailed) as err:
+            _LOGGER.debug(
+                "Could not fetch Groq model detail for %s: %s", model.model_id, err
+            )
+            return model
+
+    async def _async_hydrate_models(
+        self,
+        models: list[GroqModel],
+        raw_models: list[dict[str, Any]] | None = None,
+    ) -> list[GroqModel]:
+        """Fetch model details with bounded concurrency."""
+        if not models:
+            return []
+        semaphore = asyncio.Semaphore(MODEL_DETAIL_CONCURRENCY)
+        raw_models = raw_models if raw_models is not None else [None for _model in models]
+
+        async def hydrate(
+            model: GroqModel,
+            raw_model: dict[str, Any] | None,
+        ) -> GroqModel:
+            async with semaphore:
+                return await self._async_hydrate_model(model, raw_model)
+
+        return list(
+            await asyncio.gather(
+                *(hydrate(model, raw_model) for model, raw_model in zip(models, raw_models))
+            )
+        )
 
     async def async_generate_text(
         self,
@@ -419,7 +487,7 @@ class GroqApiClient:
         self._rate_limiter.raise_if_blocked(guard_key)
         request_kwargs: dict[str, Any] = {
             "headers": headers,
-            "timeout": JSON_REQUEST_TIMEOUT,
+            "timeout": self._request_timeout,
         }
         if json_payload is not None:
             request_kwargs["json"] = json_payload
@@ -433,14 +501,19 @@ class GroqApiClient:
                 **request_kwargs,
             ) as response:
                 body = await response.read()
-                payload = self._decode_json(body)
                 self._rate_limiter.update_from_headers(guard_key, response.headers)
-                if response.status == 429:
-                    GroqRateLimiter.raise_for_headers(response.headers, payload)
                 if response.status in (401, 403):
                     raise ConfigEntryAuthFailed("Authentication failed for Groq API")
+                if response.status == 429:
+                    payload = self._try_decode_json(body)
+                    GroqRateLimiter.raise_for_headers(
+                        response.headers,
+                        payload if isinstance(payload, dict) else None,
+                    )
                 if response.status < 200 or response.status >= 300:
+                    payload = self._try_decode_json(body) or {}
                     raise self._api_error(response.status, payload)
+                payload = self._decode_json(body)
                 if not isinstance(payload, dict):
                     raise GroqResponseError("Groq API returned non-object JSON")
                 return payload
@@ -448,7 +521,7 @@ class GroqApiClient:
             raise
         except (GroqApiError, ConfigEntryAuthFailed):
             raise
-        except aiohttp.ClientError as err:
+        except (aiohttp.ClientError, TimeoutError) as err:
             raise GroqApiError(f"Network error calling Groq API: {err}") from err
 
     async def _request_stream(
@@ -469,7 +542,7 @@ class GroqApiClient:
                 self._url(path),
                 json=json_payload,
                 headers=self._headers(api_key),
-                timeout=STREAM_REQUEST_TIMEOUT,
+                timeout=self._stream_timeout,
             ) as response:
                 self._rate_limiter.update_from_headers(guard_key, response.headers)
                 if response.status in (401, 403):
@@ -502,7 +575,7 @@ class GroqApiClient:
             raise
         except (GroqApiError, ConfigEntryAuthFailed):
             raise
-        except aiohttp.ClientError as err:
+        except (aiohttp.ClientError, TimeoutError) as err:
             raise GroqApiError(f"Network error calling Groq API: {err}") from err
 
     def _headers(
@@ -538,6 +611,14 @@ class GroqApiClient:
             return json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError) as err:
             raise GroqResponseError("Groq API returned invalid JSON") from err
+
+    @staticmethod
+    def _try_decode_json(body: bytes) -> dict[str, Any] | list[Any] | None:
+        """Decode JSON when available without hiding HTTP error classification."""
+        try:
+            return json.loads(body)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
 
     @staticmethod
     def _api_error(status: int, payload: dict[str, Any] | list[Any]) -> GroqApiError:

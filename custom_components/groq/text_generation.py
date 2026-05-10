@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -9,6 +10,13 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 
+from .api import (
+    RESERVED_CHAT_BODY_OPTIONS,
+    StructuredGenerationRequest,
+    TextGenerationRequest,
+    build_structured_generation_payload,
+    build_text_generation_payload,
+)
 from .const import (
     CONF_INCLUDE_REASONING,
     CONF_MAX_TOKENS,
@@ -38,9 +46,20 @@ from .const import (
     REASONING_MODELS,
     UNIQUE_ID,
 )
+from .feature_registry import GroqFeature
+from .model_registry import GroqModelRegistry
 from .subentries import service_data_for_type
 
 _SCHEMA_NAME_RE = re.compile(r"[^a-zA-Z0-9_-]+")
+_APPROX_CHARS_PER_TOKEN = 4
+_REQUEST_BODY_REASONING_KEYS = frozenset(
+    {
+        "reasoning_effort",
+        "reasoning_format",
+        "include_reasoning",
+    }
+)
+_STRUCTURED_RESPONSE_FORMAT_TYPES = frozenset({"json_object", "json_schema"})
 
 
 def entry_value(
@@ -107,12 +126,20 @@ def service_temperature(
 def service_max_tokens(
     config_entry: ConfigEntry,
     service_data: dict[str, Any],
+    model_registry: GroqModelRegistry | None = None,
 ) -> int | None:
     """Return the configured max completion token limit."""
     value = entry_value(config_entry, service_data, CONF_MAX_TOKENS)
     if value in (None, ""):
         return None
-    return int(value)
+    max_tokens = int(value)
+    if model_registry is not None:
+        limit = model_registry.completion_token_limit(
+            service_model(config_entry, service_data)
+        )
+        if limit is not None:
+            return min(max_tokens, limit)
+    return max_tokens
 
 
 def service_top_p(
@@ -216,12 +243,158 @@ def service_protect_free_tier(
 def service_request_body_options(
     config_entry: ConfigEntry,
     service_data: dict[str, Any],
+    model_registry: GroqModelRegistry | None = None,
 ) -> dict[str, Any] | None:
     """Return advanced passthrough chat completion body options."""
     value = entry_value(config_entry, service_data, CONF_REQUEST_BODY_OPTIONS)
     if not value:
         return None
-    return dict(value)
+    options = dict(value)
+    if model_registry is None:
+        return options
+    limit = model_registry.completion_token_limit(
+        service_model(config_entry, service_data)
+    )
+    if limit is None:
+        return options
+    for key in ("max_completion_tokens", "max_tokens"):
+        if options.get(key) in (None, ""):
+            continue
+        try:
+            requested = int(options[key])
+        except (TypeError, ValueError):
+            continue
+        if requested > limit:
+            options[key] = limit
+    return options
+
+
+def _completion_token_requests(request: TextGenerationRequest) -> list[int]:
+    """Return completion-token ceilings requested on a generation request."""
+    values: list[Any] = [request.max_tokens]
+    if isinstance(request.extra_body, dict):
+        values.extend(
+            (
+                request.extra_body.get("max_completion_tokens"),
+                request.extra_body.get("max_tokens"),
+            )
+        )
+    tokens: list[int] = []
+    for value in values:
+        if value in (None, ""):
+            continue
+        try:
+            tokens.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return tokens
+
+
+def _request_body_requests_reasoning(extra_body: dict[str, Any]) -> bool:
+    """Return whether advanced body options request reasoning features."""
+    return any(
+        extra_body.get(key) not in (None, "", False)
+        for key in _REQUEST_BODY_REASONING_KEYS
+    )
+
+
+def _request_body_requests_structured_outputs(extra_body: dict[str, Any]) -> bool:
+    """Return whether advanced body options request structured output features."""
+    if "response_format" not in extra_body:
+        return False
+    response_format = extra_body.get("response_format")
+    if response_format in (None, ""):
+        return False
+    if isinstance(response_format, dict):
+        response_type = response_format.get("type")
+    else:
+        response_type = response_format
+    return response_type in _STRUCTURED_RESPONSE_FORMAT_TYPES
+
+
+def request_body_options_validation_error(
+    model_registry: GroqModelRegistry,
+    model: str,
+    extra_body: dict[str, Any] | None,
+) -> str | None:
+    """Return a config-flow error when advanced options need unsupported features."""
+    if not isinstance(extra_body, dict):
+        return None
+    if RESERVED_CHAT_BODY_OPTIONS.intersection(extra_body):
+        return "reserved_request_body_option"
+    if _request_body_requests_structured_outputs(
+        extra_body
+    ) and not model_registry.supports(model, GroqFeature.STRUCTURED_OUTPUTS):
+        return "unsupported_structured_outputs_model"
+    if _request_body_requests_reasoning(extra_body) and not model_registry.supports(
+        model, GroqFeature.REASONING
+    ):
+        return "unsupported_reasoning_model"
+    return None
+
+
+def request_body_options_error_message(
+    model_registry: GroqModelRegistry,
+    model: str,
+    extra_body: dict[str, Any] | None,
+) -> str | None:
+    """Return a runtime error message for unsupported advanced body options."""
+    error = request_body_options_validation_error(model_registry, model, extra_body)
+    if error == "reserved_request_body_option":
+        reserved = ", ".join(sorted(RESERVED_CHAT_BODY_OPTIONS))
+        return (
+            "request_body_options cannot override integration-managed fields: "
+            f"{reserved}"
+        )
+    if error == "unsupported_structured_outputs_model":
+        return (
+            f"Groq model {model} does not support structured response_format values "
+            "in request_body_options"
+        )
+    if error == "unsupported_reasoning_model":
+        return (
+            f"Groq model {model} does not support reasoning options in "
+            "request_body_options"
+        )
+    return None
+
+
+def _payload_token_upper_bound(value: Any) -> int:
+    """Return a rough token estimate for request payload values."""
+    if value is None:
+        return 0
+    try:
+        encoded = json.dumps(value, separators=(",", ":"), sort_keys=True)
+    except TypeError:
+        return 0
+    byte_count = len(encoded.encode("utf-8"))
+    return max(1, (byte_count + _APPROX_CHARS_PER_TOKEN - 1) // _APPROX_CHARS_PER_TOKEN)
+
+
+def request_context_window_error(
+    model_registry: GroqModelRegistry,
+    request: TextGenerationRequest,
+) -> str | None:
+    """Return an error when a request is too large for the model context window."""
+    context_window = model_registry.context_window(request.model)
+    if context_window is None:
+        return None
+    payload = (
+        build_structured_generation_payload(request)
+        if isinstance(request, StructuredGenerationRequest)
+        else build_text_generation_payload(request)
+    )
+    prompt_estimate = _payload_token_upper_bound(payload)
+    requested_completion = max(_completion_token_requests(request), default=0)
+    estimated_total = prompt_estimate + requested_completion
+    if estimated_total <= context_window:
+        return None
+    return (
+        f"Groq model {request.model} has a {context_window:,} token context window; "
+        f"this request is estimated at {estimated_total:,} tokens including the "
+        "requested completion. Shorten the prompt, schema, or request body options, "
+        "or reduce max completion tokens."
+    )
 
 
 def is_reasoning_model(model: str) -> bool:

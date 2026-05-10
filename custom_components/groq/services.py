@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from base64 import b64encode
+from copy import deepcopy
 from hashlib import sha256
 import json
 import mimetypes
@@ -28,6 +29,7 @@ from homeassistant.core import (
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import service as service_helper
+from homeassistant.util.yaml.loader import load_yaml
 
 from .api import (
     StructuredGenerationRequest,
@@ -36,6 +38,7 @@ from .api import (
 )
 from .const import (
     CONF_INCLUDE_REASONING,
+    CONF_LANGUAGE,
     CONF_MAX_TOKENS,
     CONF_NAME,
     CONF_PROTECT_FREE_TIER,
@@ -51,17 +54,24 @@ from .const import (
     CONF_TEMPERATURE,
     CONF_TOP_P,
     DEFAULT_PROTECT_FREE_TIER,
+    DEFAULT_STT_LANGUAGE,
+    DEFAULT_STT_MODEL,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEXT_MODEL,
     DOMAIN,
     FEATURE_IMAGE_RECOGNITION,
+    FEATURE_SPEECH_TO_TEXT,
     FEATURE_TEXT_GENERATION,
     UNIQUE_ID,
 )
 from .feature_registry import GroqFeature
-from .model_registry import DEFAULT_STRUCTURED_MODEL, DEFAULT_VISION_MODEL
+from .model_registry import DEFAULT_VISION_MODEL
 from .runtime import GroqRuntimeData, async_get_runtime
 from .subentries import service_data_for_type
+from .text_generation import (
+    request_body_options_error_message,
+    request_context_window_error,
+)
 
 ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 ATTR_SERVICE_ID = "service_id"
@@ -81,19 +91,25 @@ ATTR_REQUEST_BODY_OPTIONS = "request_body_options"
 ATTR_SCHEMA = "schema"
 ATTR_SCHEMA_NAME = "schema_name"
 ATTR_STRICT = "strict"
+ATTR_CAMERA_ENTITY_ID = "camera_entity_id"
 ATTR_IMAGE_URL = "image_url"
 ATTR_IMAGE_FILE = "image_file"
 ATTR_IMAGE_PATH = "image_path"
+ATTR_AUDIO_FILE = "audio_file"
+ATTR_AUDIO_PATH = "audio_path"
+ATTR_LANGUAGE = "language"
 ATTR_REFRESH = "refresh"
 
 SERVICE_GENERATE_TEXT = "generate_text"
 SERVICE_GENERATE_STRUCTURED = "generate_structured"
 SERVICE_ANALYZE_IMAGE = "analyze_image"
 SERVICE_EXTRACT_TEXT_FROM_IMAGE = "extract_text_from_image"
+SERVICE_TRANSCRIBE_AUDIO = "transcribe_audio"
 SERVICE_CLEAR_CACHE = "clear_cache"
 SERVICE_LIST_MODELS = "list_models"
 
 _REGISTERED = "services_registered"
+_SERVICES_YAML = Path(__file__).with_name("services.yaml")
 
 _ENTRY_SELECTOR = vol.Optional(ATTR_CONFIG_ENTRY_ID)
 _SERVICE_SELECTOR = vol.Optional(ATTR_SERVICE_ID)
@@ -127,7 +143,7 @@ GENERATE_TEXT_SCHEMA = vol.Schema(
 GENERATE_STRUCTURED_SCHEMA = vol.Schema(
     {
         **_TEXT_OPTIONS,
-        vol.Required(ATTR_SCHEMA): dict,
+        vol.Optional(ATTR_SCHEMA): dict,
         vol.Optional(ATTR_SCHEMA_NAME, default="response"): cv.string,
         vol.Optional(ATTR_STRICT, default=False): cv.boolean,
     }
@@ -140,6 +156,7 @@ VISION_SCHEMA = vol.Schema(
         _MODEL_SELECTOR: cv.string,
         vol.Required(ATTR_PROMPT): cv.string,
         vol.Optional(ATTR_SYSTEM_PROMPT): cv.string,
+        vol.Optional(ATTR_CAMERA_ENTITY_ID): cv.entity_id,
         vol.Optional(ATTR_IMAGE_FILE): cv.string,
         vol.Optional(ATTR_IMAGE_PATH): cv.string,
         vol.Optional(ATTR_IMAGE_URL): cv.string,
@@ -156,9 +173,21 @@ OCR_SCHEMA = vol.Schema(
             default="Extract all visible text from this image. Return only the text.",
         ): cv.string,
         vol.Optional(ATTR_SYSTEM_PROMPT): cv.string,
+        vol.Optional(ATTR_CAMERA_ENTITY_ID): cv.entity_id,
         vol.Optional(ATTR_IMAGE_FILE): cv.string,
         vol.Optional(ATTR_IMAGE_PATH): cv.string,
         vol.Optional(ATTR_IMAGE_URL): cv.string,
+    }
+)
+TRANSCRIBE_AUDIO_SCHEMA = vol.Schema(
+    {
+        _ENTRY_SELECTOR: cv.string,
+        _SERVICE_SELECTOR: cv.string,
+        _MODEL_SELECTOR: cv.string,
+        vol.Optional(ATTR_AUDIO_FILE): cv.string,
+        vol.Optional(ATTR_AUDIO_PATH): cv.string,
+        vol.Optional(ATTR_LANGUAGE): cv.string,
+        vol.Optional(ATTR_PROMPT): cv.string,
     }
 )
 CLEAR_CACHE_SCHEMA = vol.Schema({_ENTRY_SELECTOR: cv.string})
@@ -168,6 +197,14 @@ LIST_MODELS_SCHEMA = vol.Schema(
         vol.Optional(ATTR_REFRESH, default=False): cv.boolean,
     }
 )
+
+_SERVICE_FIELD_TYPES = {
+    SERVICE_GENERATE_TEXT: FEATURE_TEXT_GENERATION,
+    SERVICE_GENERATE_STRUCTURED: FEATURE_TEXT_GENERATION,
+    SERVICE_ANALYZE_IMAGE: FEATURE_IMAGE_RECOGNITION,
+    SERVICE_EXTRACT_TEXT_FROM_IMAGE: FEATURE_IMAGE_RECOGNITION,
+    SERVICE_TRANSCRIBE_AUDIO: FEATURE_SPEECH_TO_TEXT,
+}
 
 
 def _cache_key(namespace: str, data: dict[str, Any]) -> str:
@@ -181,16 +218,64 @@ def _domain_data(hass: HomeAssistant) -> dict[str, Any]:
     return hass.data.setdefault(DOMAIN, {})
 
 
-def _loaded_entries(hass: HomeAssistant) -> list[ConfigEntry]:
-    """Return loaded Groq entries."""
+def _entry_state_matches(
+    entry: ConfigEntry,
+    *,
+    include_setup: bool = False,
+) -> bool:
+    """Return whether an entry should be considered for runtime or UI use."""
+    state = getattr(entry, "state", ConfigEntryState.LOADED)
+    if state == ConfigEntryState.LOADED:
+        return True
+    return include_setup and getattr(state, "name", None) == "SETUP_IN_PROGRESS"
+
+
+def _loaded_entries(
+    hass: HomeAssistant,
+    *,
+    exclude_entry_id: str | None = None,
+    include_setup: bool = False,
+) -> list[ConfigEntry]:
+    """Return Groq entries usable for service calls or UI selectors."""
     return [
         entry
         for entry in hass.config_entries.async_entries(DOMAIN)
-        if getattr(entry, "state", ConfigEntryState.LOADED) == ConfigEntryState.LOADED
+        if entry.entry_id != exclude_entry_id
+        if _entry_state_matches(entry, include_setup=include_setup)
     ]
 
 
-def _entry_from_call(hass: HomeAssistant, call: ServiceCall) -> ConfigEntry:
+def _service_matches(service: dict[str, Any], requested: str) -> bool:
+    """Return whether a service subentry matches a requested service selector."""
+    return requested in (service.get(UNIQUE_ID), service.get(CONF_NAME))
+
+
+def _entry_from_service_id(
+    hass: HomeAssistant,
+    service_type: str,
+    requested: str,
+) -> ConfigEntry | None:
+    """Return the loaded config entry that owns a selected Groq service."""
+    matched_entry: ConfigEntry | None = None
+    for entry in _loaded_entries(hass):
+        runtime = getattr(entry, "runtime_data", None)
+        if any(
+            _service_matches(service, requested)
+            for service in _service_subentries(entry, runtime, service_type)
+        ):
+            if matched_entry is not None:
+                raise ServiceValidationError(
+                    f"Multiple Groq services match service_id: {requested}"
+                )
+            matched_entry = entry
+    return matched_entry
+
+
+def _entry_from_call(
+    hass: HomeAssistant,
+    call: ServiceCall,
+    service_type: str | None = None,
+) -> ConfigEntry:
     """Resolve a Groq config entry from a service call."""
     entry_id = call.data.get(ATTR_CONFIG_ENTRY_ID)
     if entry_id:
@@ -202,9 +287,12 @@ def _entry_from_call(hass: HomeAssistant, call: ServiceCall) -> ConfigEntry:
     entries = _loaded_entries(hass)
     if not entries:
         raise ServiceValidationError("No loaded Groq config entry found")
+    if service_type and (requested := call.data.get(ATTR_SERVICE_ID)):
+        if entry := _entry_from_service_id(hass, service_type, requested):
+            return entry
     if len(entries) > 1:
         raise ServiceValidationError(
-            "Multiple Groq config entries are loaded; provide config_entry_id"
+            "Multiple Groq config entries are loaded; provide config_entry_id or service_id"
         )
     return entries[0]
 
@@ -212,9 +300,10 @@ def _entry_from_call(hass: HomeAssistant, call: ServiceCall) -> ConfigEntry:
 async def _runtime_from_call(
     hass: HomeAssistant,
     call: ServiceCall,
+    service_type: str | None = None,
 ) -> tuple[ConfigEntry, GroqRuntimeData]:
     """Return entry and runtime for a service call."""
-    entry = _entry_from_call(hass, call)
+    entry = _entry_from_call(hass, call, service_type)
     runtime = getattr(entry, "runtime_data", None)
     if runtime is None:
         runtime = await async_get_runtime(hass, entry)
@@ -250,7 +339,7 @@ def _service_from_call(
         for service in services:
             # Accept both the stable subentry id and the user-facing service
             # name so service calls remain practical from automations.
-            if requested in (service.get(UNIQUE_ID), service.get(CONF_NAME)):
+            if _service_matches(service, requested):
                 return service
         raise ServiceValidationError(
             f"Groq {service_type} service not found: {requested}"
@@ -348,6 +437,54 @@ def _request_options(
     }
 
 
+def _coerce_completion_tokens(value: Any) -> int | None:
+    """Return an integer token count from a request option."""
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _ensure_completion_token_limit(
+    runtime: GroqRuntimeData,
+    request: TextGenerationRequest,
+) -> None:
+    """Raise when a request exceeds the selected model's completion limit."""
+    limit = runtime.model_registry.completion_token_limit(request.model)
+    if limit is None:
+        return
+    requested = [_coerce_completion_tokens(request.max_tokens)]
+    if isinstance(request.extra_body, dict):
+        requested.extend(
+            (
+                _coerce_completion_tokens(
+                    request.extra_body.get("max_completion_tokens")
+                ),
+                _coerce_completion_tokens(request.extra_body.get("max_tokens")),
+            )
+        )
+    if any(value is not None and value > limit for value in requested):
+        raise ServiceValidationError(
+            f"Groq model {request.model} supports at most "
+            f"{limit:,} completion tokens"
+        )
+
+
+def _ensure_request_body_features(
+    runtime: GroqRuntimeData,
+    request: TextGenerationRequest,
+) -> None:
+    """Raise when advanced body options require unsupported model features."""
+    if error := request_body_options_error_message(
+        runtime.model_registry,
+        request.model,
+        request.extra_body,
+    ):
+        raise ServiceValidationError(error)
+
+
 def _request_cache_fields(request: TextGenerationRequest) -> dict[str, Any]:
     """Return request values that influence a generated response."""
     return {
@@ -408,7 +545,9 @@ async def _image_from_camera_target(
     call: ServiceCall,
 ) -> str | None:
     """Return a data URL from the targeted camera entity, if one was selected."""
-    if direct_entity_id := call.data.get(ATTR_ENTITY_ID):
+    if camera_entity_id := call.data.get(ATTR_CAMERA_ENTITY_ID):
+        entity_ids = cv.ensure_list(camera_entity_id)
+    elif direct_entity_id := call.data.get(ATTR_ENTITY_ID):
         entity_ids = cv.ensure_list(direct_entity_id)
     elif any(
         call.data.get(target_key)
@@ -478,15 +617,63 @@ async def _image_url_from_call(hass: HomeAssistant, call: ServiceCall) -> str:
     if image_url := call.data.get(ATTR_IMAGE_URL):
         return image_url
     raise ServiceValidationError(
-        "Select a camera target, image file, local image path, or image URL"
+        "Select a camera entity, image file, local image path, or image URL"
     )
 
 
-def _handle_generate_text(hass: HomeAssistant):
+async def _audio_from_local_path(
+    hass: HomeAssistant, audio_path: str
+) -> tuple[bytes, str]:
+    """Return audio bytes and filename from an allowlisted local path."""
+    allowed = await hass.async_add_executor_job(hass.config.is_allowed_path, audio_path)
+    if not allowed:
+        raise ServiceValidationError(
+            "Local audio path is not in Home Assistant's allowlist_external_dirs"
+        )
+    path = Path(audio_path)
+    if not await hass.async_add_executor_job(path.is_file):
+        raise ServiceValidationError(f"Local audio file not found: {audio_path}")
+    content_type = mimetypes.guess_type(audio_path)[0] or "audio/wav"
+    if not content_type.startswith("audio/"):
+        raise ServiceValidationError(f"Local file is not audio: {audio_path}")
+    content = await hass.async_add_executor_job(path.read_bytes)
+    return content, path.name
+
+
+async def _audio_from_media_source(
+    hass: HomeAssistant,
+    audio_file: str,
+) -> tuple[bytes, str]:
+    """Return audio bytes and filename from Home Assistant media or local path."""
+    if not is_media_source_id(audio_file):
+        return await _audio_from_local_path(hass, audio_file)
+    try:
+        media = await async_resolve_media(hass, audio_file, None)
+    except Unresolvable as err:
+        raise ServiceValidationError(
+            f"Could not resolve audio file: {audio_file}"
+        ) from err
+    if media.path is None:
+        raise ServiceValidationError("Selected audio must resolve to a local file")
+    if media.mime_type and not media.mime_type.startswith("audio/"):
+        raise ServiceValidationError(f"Selected media is not audio: {audio_file}")
+    return await _audio_from_local_path(hass, str(media.path))
+
+
+async def _audio_from_call(hass: HomeAssistant, call: ServiceCall) -> tuple[bytes, str]:
+    """Resolve the audio source selected for a speech-to-text action."""
+    if audio_file := call.data.get(ATTR_AUDIO_FILE):
+        return await _audio_from_media_source(hass, audio_file)
+    if audio_path := call.data.get(ATTR_AUDIO_PATH):
+        return await _audio_from_local_path(hass, audio_path)
+    raise ServiceValidationError("Select an audio file or local audio path")
+
+
+def _handle_generate_text(hass: HomeAssistant, *, use_service_schema: bool = True):
     """Build the generate_text service handler."""
 
     async def handler(call: ServiceCall) -> ServiceResponse:
-        entry, runtime = await _runtime_from_call(hass, call)
+        entry, runtime = await _runtime_from_call(hass, call, FEATURE_TEXT_GENERATION)
         _ensure_feature(runtime, GroqFeature.TEXT_GENERATION)
         service_data = _service_from_call(entry, runtime, call, FEATURE_TEXT_GENERATION)
         model = _service_value(call, service_data, ATTR_MODEL, DEFAULT_TEXT_MODEL)
@@ -495,7 +682,11 @@ def _handle_generate_text(hass: HomeAssistant):
             _ensure_model(runtime, model, GroqFeature.REASONING)
 
         schema = call.data.get(ATTR_SCHEMA)
-        if schema is None and service_data.get(CONF_STRUCTURED_OUTPUTS):
+        if (
+            use_service_schema
+            and schema is None
+            and service_data.get(CONF_STRUCTURED_OUTPUTS)
+        ):
             schema = service_data.get(CONF_SCHEMA)
         if schema:
             # generate_text doubles as the ergonomic entry point for structured
@@ -536,6 +727,10 @@ def _handle_generate_text(hass: HomeAssistant):
                 service_id=service_data.get(UNIQUE_ID),
                 protect_free_tier=_service_protect_free_tier(service_data),
             )
+        _ensure_completion_token_limit(runtime, request)
+        _ensure_request_body_features(runtime, request)
+        if error := request_context_window_error(runtime.model_registry, request):
+            raise ServiceValidationError(error)
         key = _cache_key(
             "text_generation",
             {
@@ -572,60 +767,15 @@ def _handle_generate_text(hass: HomeAssistant):
 
 
 def _handle_generate_structured(hass: HomeAssistant):
-    """Build the generate_structured service handler."""
-
-    async def handler(call: ServiceCall) -> ServiceResponse:
-        entry, runtime = await _runtime_from_call(hass, call)
-        _ensure_feature(runtime, GroqFeature.STRUCTURED_OUTPUTS)
-        service_data = _service_from_call(entry, runtime, call, FEATURE_TEXT_GENERATION)
-        model = _service_value(call, service_data, ATTR_MODEL, DEFAULT_STRUCTURED_MODEL)
-        _ensure_model(runtime, model, GroqFeature.STRUCTURED_OUTPUTS)
-        if _reasoning_requested(call.data, service_data):
-            _ensure_model(runtime, model, GroqFeature.REASONING)
-        request = StructuredGenerationRequest(
-            prompt=call.data[ATTR_PROMPT],
-            model=model,
-            system_prompt=_service_value(call, service_data, ATTR_SYSTEM_PROMPT),
-            **_request_options(call.data, service_data),
-            service_id=service_data.get(UNIQUE_ID),
-            protect_free_tier=_service_protect_free_tier(service_data),
-            schema=call.data[ATTR_SCHEMA],
-            schema_name=_service_value(
-                call,
-                service_data,
-                ATTR_SCHEMA_NAME,
-                service_data.get(CONF_SCHEMA_NAME, "response"),
-            ),
-            strict=_service_value(call, service_data, ATTR_STRICT, False),
-        )
-        key = _cache_key(
-            "structured_outputs",
-            {
-                "service_id": service_data.get(UNIQUE_ID),
-                "model": request.model,
-                "prompt": request.prompt,
-                "system_prompt": request.system_prompt,
-                **_request_cache_fields(request),
-                "schema": request.schema,
-                "schema_name": request.schema_name,
-                "strict": request.strict,
-            },
-        )
-        if cached := _cache_get(runtime, request.model, key):
-            return cached
-
-        response = await runtime.client.async_generate_structured(request)
-        _cache_set(runtime, request.model, key, response)
-        return response
-
-    return handler
+    """Build a generic text-output handler kept for service compatibility."""
+    return _handle_generate_text(hass, use_service_schema=False)
 
 
 def _handle_analyze_image(hass: HomeAssistant):
     """Build the analyze_image service handler."""
 
     async def handler(call: ServiceCall) -> ServiceResponse:
-        entry, runtime = await _runtime_from_call(hass, call)
+        entry, runtime = await _runtime_from_call(hass, call, FEATURE_IMAGE_RECOGNITION)
         _ensure_feature(runtime, GroqFeature.VISION)
         service_data = _service_from_call(
             entry, runtime, call, FEATURE_IMAGE_RECOGNITION
@@ -670,8 +820,8 @@ def _handle_extract_text_from_image(hass: HomeAssistant):
     """Build the extract_text_from_image service handler."""
 
     async def handler(call: ServiceCall) -> ServiceResponse:
-        entry, runtime = await _runtime_from_call(hass, call)
-        _ensure_feature(runtime, GroqFeature.OCR)
+        entry, runtime = await _runtime_from_call(hass, call, FEATURE_IMAGE_RECOGNITION)
+        _ensure_feature(runtime, GroqFeature.VISION)
         service_data = _service_from_call(
             entry, runtime, call, FEATURE_IMAGE_RECOGNITION
         )
@@ -711,6 +861,144 @@ def _handle_extract_text_from_image(hass: HomeAssistant):
     return handler
 
 
+def _handle_transcribe_audio(hass: HomeAssistant):
+    """Build the transcribe_audio service handler."""
+
+    async def handler(call: ServiceCall) -> ServiceResponse:
+        entry, runtime = await _runtime_from_call(hass, call, FEATURE_SPEECH_TO_TEXT)
+        _ensure_feature(runtime, GroqFeature.SPEECH_TO_TEXT)
+        service_data = _service_from_call(entry, runtime, call, FEATURE_SPEECH_TO_TEXT)
+        model = _service_value(call, service_data, ATTR_MODEL, DEFAULT_STT_MODEL)
+        _ensure_model(runtime, model, GroqFeature.SPEECH_TO_TEXT)
+        audio, filename = await _audio_from_call(hass, call)
+        text = await runtime.client.async_transcribe_audio(
+            audio=audio,
+            filename=filename,
+            model=model,
+            language=_service_value(
+                call,
+                service_data,
+                ATTR_LANGUAGE,
+                service_data.get(CONF_LANGUAGE, DEFAULT_STT_LANGUAGE),
+            ),
+            prompt=call.data.get(ATTR_PROMPT),
+            service_id=service_data.get(UNIQUE_ID),
+            protect_free_tier=_service_protect_free_tier(service_data),
+        )
+        return {
+            "text": text,
+            "model": model,
+            "language": _service_value(
+                call,
+                service_data,
+                ATTR_LANGUAGE,
+                service_data.get(CONF_LANGUAGE, DEFAULT_STT_LANGUAGE),
+            ),
+            "filename": filename,
+        }
+
+    return handler
+
+
+def _entry_label(entry: ConfigEntry) -> str:
+    """Return a stable user-facing label for a Groq account."""
+    return (
+        getattr(entry, "title", None)
+        or entry.data.get(CONF_NAME)
+        or entry.entry_id
+        or "Groq"
+    )
+
+
+def _service_label(entry: ConfigEntry, service_data: dict[str, Any]) -> str:
+    """Return a user-facing option label for a configured Groq service."""
+    service_name = service_data.get(CONF_NAME) or service_data.get(UNIQUE_ID)
+    model = service_data.get(ATTR_MODEL)
+    label = f"{_entry_label(entry)} - {service_name}"
+    return f"{label} ({model})" if model else label
+
+
+def _service_options(
+    hass: HomeAssistant,
+    service_type: str,
+    *,
+    exclude_entry_id: str | None = None,
+) -> list[dict[str, str]]:
+    """Return select options for Groq service subentries of a feature type."""
+    options: list[dict[str, str]] = []
+    for entry in _loaded_entries(
+        hass,
+        exclude_entry_id=exclude_entry_id,
+        include_setup=True,
+    ):
+        runtime = getattr(entry, "runtime_data", None)
+        for service_data in _service_subentries(entry, runtime, service_type):
+            if service_id := service_data.get(UNIQUE_ID):
+                options.append(
+                    {
+                        "label": _service_label(entry, service_data),
+                        "value": service_id,
+                    }
+                )
+    return sorted(options, key=lambda option: option["label"])
+
+
+def _apply_service_options(
+    description: dict[str, Any],
+    options: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Return a service description with a populated Groq Service dropdown."""
+    updated = deepcopy(description)
+    field = updated.get("fields", {}).get(ATTR_SERVICE_ID)
+    if not field:
+        return updated
+    field["description"] = (
+        "Configured Groq service to use. Choose from the loaded Groq services, "
+        "or enter a service ID manually for YAML/backward compatibility. Leave "
+        "empty when the selected account has only one matching service."
+    )
+    field["selector"] = {
+        "select": {
+            "custom_value": True,
+            "options": options,
+        }
+    }
+    return updated
+
+
+async def async_update_service_descriptions(
+    hass: HomeAssistant,
+    *,
+    exclude_entry_id: str | None = None,
+) -> None:
+    """Populate Groq action descriptions with currently configured services."""
+    if not hasattr(hass, "services") or not hasattr(hass.services, "supports_response"):
+        return
+    if hasattr(hass, "async_add_executor_job"):
+        descriptions = await hass.async_add_executor_job(load_yaml, _SERVICES_YAML)
+    else:
+        descriptions = load_yaml(_SERVICES_YAML)
+    if not isinstance(descriptions, dict):
+        return
+    for service_name, service_type in _SERVICE_FIELD_TYPES.items():
+        description = descriptions.get(service_name)
+        if not isinstance(description, dict):
+            continue
+        service_helper.async_set_service_schema(
+            hass,
+            DOMAIN,
+            service_name,
+            _apply_service_options(
+                description,
+                _service_options(
+                    hass,
+                    service_type,
+                    exclude_entry_id=exclude_entry_id,
+                ),
+            ),
+        )
+
+
 def _handle_clear_cache(hass: HomeAssistant):
     """Build the clear_cache service handler."""
 
@@ -746,6 +1034,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
     """Register Groq response services once."""
     data = _domain_data(hass)
     if data.get(_REGISTERED):
+        await async_update_service_descriptions(hass)
         return
 
     hass.services.async_register(
@@ -778,6 +1067,13 @@ async def async_register_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_TRANSCRIBE_AUDIO,
+        _handle_transcribe_audio(hass),
+        schema=TRANSCRIBE_AUDIO_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_CLEAR_CACHE,
         _handle_clear_cache(hass),
         schema=CLEAR_CACHE_SCHEMA,
@@ -791,6 +1087,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
         supports_response=SupportsResponse.ONLY,
     )
     data[_REGISTERED] = True
+    await async_update_service_descriptions(hass)
 
 
 async def async_unregister_services(hass: HomeAssistant) -> None:
@@ -803,6 +1100,7 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_GENERATE_STRUCTURED,
         SERVICE_ANALYZE_IMAGE,
         SERVICE_EXTRACT_TEXT_FROM_IMAGE,
+        SERVICE_TRANSCRIBE_AUDIO,
         SERVICE_CLEAR_CACHE,
         SERVICE_LIST_MODELS,
     ):

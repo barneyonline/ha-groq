@@ -37,6 +37,16 @@ class GroqModel:
     max_completion_tokens: int | None = None
     capabilities: frozenset[GroqCapability] = frozenset()
 
+    @property
+    def completion_token_limit(self) -> int | None:
+        """Return the safest known upper bound for generated tokens."""
+        limits = [
+            value
+            for value in (self.context_window, self.max_completion_tokens)
+            if value is not None
+        ]
+        return min(limits) if limits else None
+
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation."""
         return {
@@ -45,6 +55,7 @@ class GroqModel:
             "owned_by": self.owned_by,
             "context_window": self.context_window,
             "max_completion_tokens": self.max_completion_tokens,
+            "completion_token_limit": self.completion_token_limit,
             "capabilities": sorted(str(capability) for capability in self.capabilities),
         }
 
@@ -114,6 +125,7 @@ BUILT_IN_MODELS: dict[str, GroqModel] = {
     "qwen/qwen3-32b": GroqModel(
         model_id="qwen/qwen3-32b",
         context_window=131072,
+        max_completion_tokens=40960,
         capabilities=frozenset(
             {
                 GroqCapability.TEXT_GENERATION,
@@ -152,6 +164,17 @@ BUILT_IN_MODELS: dict[str, GroqModel] = {
                 GroqCapability.TEXT_GENERATION,
                 GroqCapability.VISION,
                 GroqCapability.STRUCTURED_OUTPUTS,
+            }
+        ),
+    ),
+    "meta-llama/llama-4-maverick-17b-128e-instruct": GroqModel(
+        model_id="meta-llama/llama-4-maverick-17b-128e-instruct",
+        context_window=131072,
+        max_completion_tokens=8192,
+        capabilities=frozenset(
+            {
+                GroqCapability.TEXT_GENERATION,
+                GroqCapability.VISION,
             }
         ),
     ),
@@ -267,6 +290,16 @@ class GroqModelRegistry:
     def get(self, model_id: str) -> GroqModel | None:
         """Return model metadata by id."""
         return self._models.get(model_id)
+
+    def completion_token_limit(self, model_id: str) -> int | None:
+        """Return the safest known generated-token upper bound for a model."""
+        model = self._models.get(model_id) or BUILT_IN_MODELS.get(model_id)
+        return model.completion_token_limit if model is not None else None
+
+    def context_window(self, model_id: str) -> int | None:
+        """Return the known context-window upper bound for a model."""
+        model = self._models.get(model_id) or BUILT_IN_MODELS.get(model_id)
+        return model.context_window if model is not None else None
 
     def models_for_feature(self, feature: GroqFeature) -> list[GroqModel]:
         """Return active models known to support a feature."""

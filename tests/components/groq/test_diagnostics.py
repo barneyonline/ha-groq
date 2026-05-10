@@ -44,7 +44,10 @@ async def test_config_entry_diagnostics_redacts_api_keys() -> None:
             "image_recognition",
         ],
         "text_to_speech_enabled": True,
-        "defaults": {
+        "service_counts": {},
+        "total_services": 0,
+        "services": {},
+        "legacy_defaults": {
             "text_to_speech": {
                 "endpoint": "https://api.groq.com/openai/v1/audio/speech",
                 "model": "canopylabs/orpheus-v1-english",
@@ -84,6 +87,61 @@ async def test_config_entry_diagnostics_account_only_entry_has_no_services() -> 
 
     assert diagnostics["summary"]["enabled_features"] == []
     assert diagnostics["summary"]["text_to_speech_enabled"] is False
+    assert diagnostics["summary"]["total_services"] == 0
+
+
+@pytest.mark.asyncio
+async def test_config_entry_diagnostics_summarizes_service_subentries() -> None:
+    entry = SimpleNamespace(
+        data={"api_key": "secret-key", "name": "Groq"},
+        options={},
+        subentries={
+            "text": SimpleNamespace(
+                subentry_id="text-id",
+                title="Assistant",
+                data={
+                    "name": "Assistant",
+                    "service_type": "text_generation",
+                    "model": "openai/gpt-oss-20b",
+                    "system_prompt": "secret instructions",
+                    "temperature": 0.2,
+                    "stream": True,
+                    "structured_outputs": True,
+                },
+            ),
+            "tts": SimpleNamespace(
+                subentry_id="tts-id",
+                title="Voice",
+                data={
+                    "name": "Voice",
+                    "service_type": "text_to_speech",
+                    "model": "canopylabs/orpheus-v1-english",
+                    "voice": "autumn",
+                    "protect_free_tier": True,
+                },
+            ),
+        },
+    )
+
+    diagnostics = await async_get_config_entry_diagnostics(None, entry)
+
+    assert diagnostics["summary"]["service_counts"] == {
+        "text_generation": 1,
+        "text_to_speech": 1,
+    }
+    assert diagnostics["summary"]["total_services"] == 2
+    assert "legacy_defaults" not in diagnostics["summary"]
+    text_service = diagnostics["summary"]["services"]["text_generation"][0]
+    assert text_service == {
+        "subentry_id": "text-id",
+        "title": "Assistant",
+        "name": "Assistant",
+        "model": "openai/gpt-oss-20b",
+        "temperature": 0.2,
+        "stream": True,
+        "structured_outputs": True,
+    }
+    assert "system_prompt" not in text_service
 
 
 @pytest.mark.asyncio

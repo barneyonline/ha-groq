@@ -31,7 +31,7 @@ def test_hacs_minimum_homeassistant_version_is_declared() -> None:
 
     assert hacs["name"] == "Groq"
     assert hacs["render_readme"] is True
-    assert hacs["homeassistant"]
+    assert hacs["homeassistant"] == "2026.5.1"
 
 
 def test_translation_domain_matches_component_domain() -> None:

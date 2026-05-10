@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .api import GroqApiClient, normalize_base_url
 from .const import (
@@ -26,6 +28,7 @@ from .const import (
     FEATURE_TEXT_GENERATION,
     PROMPT_CACHING_MODELS,
 )
+from .errors import GroqApiError, GroqResponseError
 from .feature_registry import (
     GroqFeature,
     GroqFeatureRegistry,
@@ -39,6 +42,8 @@ from .subentries import service_data_by_type
 CONF_BASE_URL = "base_url"
 CONF_PROMPT_CACHE_SIZE = "prompt_cache_size"
 CONF_PROMPT_CACHE_TTL = "prompt_cache_ttl"
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -137,6 +142,27 @@ def build_runtime(hass: HomeAssistant, entry: ConfigEntry) -> GroqRuntimeData:
         prompt_cache=GroqPromptCache(max_size=cache_size, default_ttl=cache_ttl),
         services_by_type=services_by_type,
     )
+
+
+async def async_hydrate_runtime_model_registry(
+    entry: ConfigEntry,
+    runtime: GroqRuntimeData,
+    *,
+    hydrate_details: bool = False,
+) -> None:
+    """Hydrate runtime model metadata from Groq when credentials are available."""
+    if not entry_value(entry, CONF_API_KEY):
+        return
+    try:
+        runtime.model_registry.update(
+            await runtime.client.async_list_models(hydrate=hydrate_details)
+        )
+    except ConfigEntryAuthFailed:
+        raise
+    except (GroqApiError, GroqResponseError, TimeoutError) as err:
+        # Built-in model metadata keeps setup usable when Groq is temporarily
+        # unreachable; users can still refresh model data from the integration.
+        _LOGGER.debug("Could not hydrate Groq model metadata during setup: %s", err)
 
 
 async def async_get_runtime(

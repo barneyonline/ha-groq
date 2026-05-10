@@ -215,6 +215,9 @@ def test_payload_builders_use_openai_compatible_shapes():
                 "tools": [{"type": "function", "function": {"name": "tool"}}],
                 "top_logprobs": 2,
                 "user": "home-assistant",
+                "messages": [{"role": "user", "content": "override"}],
+                "model": "override-model",
+                "stream": True,
             },
         )
     )
@@ -442,6 +445,8 @@ def test_feature_registry_supports_enabled_options():
     assert registry.is_enabled(GroqFeature.VISION)
     assert registry.enabled_services() == {
         "analyze_image",
+        "extract_text_from_image",
+        "generate_structured",
         "generate_text",
         "clear_cache",
     }
@@ -507,6 +512,25 @@ def test_runtime_enables_stt_platform_from_speech_service_subentry():
 
     assert runtime.feature_registry.is_enabled(GroqFeature.SPEECH_TO_TEXT)
     assert Platform.STT in runtime.feature_registry.enabled_platforms()
+    assert "transcribe_audio" in runtime.feature_registry.enabled_services()
+
+
+def test_runtime_enables_image_actions_from_image_service_subentry():
+    entry = DummyEntry()
+    entry.subentries = {
+        "image-service": SimpleNamespace(
+            data={
+                "service_type": "image_recognition",
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+            }
+        )
+    }
+
+    runtime = build_runtime(DummyHass(), entry)
+
+    assert runtime.feature_registry.is_enabled(GroqFeature.VISION)
+    assert "analyze_image" in runtime.feature_registry.enabled_services()
+    assert "extract_text_from_image" in runtime.feature_registry.enabled_services()
 
 
 def test_runtime_ignores_prompt_caching_for_unsupported_text_models():
@@ -710,6 +734,38 @@ async def test_generate_text_service_uses_cache():
     assert request_body["service_tier"] == "flex"
     assert request_body["user"] == "home-assistant"
     assert request_body["parallel_tool_calls"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_text_service_rejects_excessive_completion_tokens():
+    entry = DummyEntry()
+    entry.options = {CONF_ENABLED_FEATURES: ["text_generation"]}
+    hass = DummyHass([entry])
+    handler = _handle_generate_text(hass)
+
+    with pytest.raises(ServiceValidationError, match="65,536 completion tokens"):
+        await handler(
+            service_call(
+                {
+                    ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    "prompt": "Hi",
+                    "model": "openai/gpt-oss-20b",
+                    "max_tokens": 65537,
+                }
+            )
+        )
+
+    with pytest.raises(ServiceValidationError, match="8,192 completion tokens"):
+        await handler(
+            service_call(
+                {
+                    ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    "prompt": "Hi",
+                    "model": "groq/compound",
+                    "request_body_options": {"max_completion_tokens": "8193"},
+                }
+            )
+        )
 
 
 @pytest.mark.asyncio

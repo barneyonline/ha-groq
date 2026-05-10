@@ -26,6 +26,8 @@ from .feature_registry import GroqFeature
 from .model_registry import GroqModelRegistry
 from .runtime import async_get_runtime
 from .text_generation import (
+    request_body_options_error_message,
+    request_context_window_error,
     service_include_reasoning,
     service_max_tokens,
     service_model,
@@ -58,6 +60,11 @@ async def async_setup_entry(
     """Set up Groq AI task entities from text generation services."""
     runtime = await async_get_runtime(hass, config_entry)
     for service_data in text_generation_service_data(config_entry):
+        if not runtime.model_registry.supports(
+            service_model(config_entry, service_data),
+            GroqFeature.STRUCTURED_OUTPUTS,
+        ):
+            continue
         async_add_entities(
             [
                 GroqAITaskEntity(
@@ -159,7 +166,11 @@ class GroqAITaskEntity(AITaskEntity):
             model=service_model(self._config_entry, self._service_data),
             system_prompt=service_system_prompt(self._config_entry, self._service_data),
             temperature=service_temperature(self._config_entry, self._service_data),
-            max_tokens=service_max_tokens(self._config_entry, self._service_data),
+            max_tokens=service_max_tokens(
+                self._config_entry,
+                self._service_data,
+                self._model_registry,
+            ),
             top_p=service_top_p(self._config_entry, self._service_data),
             stop=service_stop(self._config_entry, self._service_data),
             seed=service_seed(self._config_entry, self._service_data),
@@ -174,7 +185,9 @@ class GroqAITaskEntity(AITaskEntity):
                 self._config_entry, self._service_data
             ),
             extra_body=service_request_body_options(
-                self._config_entry, self._service_data
+                self._config_entry,
+                self._service_data,
+                self._model_registry,
             ),
             service_id=service_unique_id(self._config_entry, self._service_data),
             protect_free_tier=service_protect_free_tier(
@@ -226,10 +239,17 @@ class GroqAITaskEntity(AITaskEntity):
                 "Return only a valid JSON object matching this output structure. "
                 "Do not include Markdown, explanations, or extra keys.\n"
                 f"{_structure_description(task.structure)}"
-            )
-        result = await self._client.async_generate_text(
-            self._text_generation_request(instructions)
         )
+        request = self._text_generation_request(instructions)
+        if error := request_body_options_error_message(
+            self._model_registry,
+            request.model,
+            request.extra_body,
+        ):
+            raise HomeAssistantError(error)
+        if error := request_context_window_error(self._model_registry, request):
+            raise HomeAssistantError(error)
+        result = await self._client.async_generate_text(request)
         data: Any = result.text
         if task.structure is not None:
             try:
@@ -279,6 +299,14 @@ class GroqAITaskEntity(AITaskEntity):
                     else service_strict(self._config_entry, self._service_data)
                 ),
             )
+            if error := request_body_options_error_message(
+                self._model_registry,
+                request.model,
+                request.extra_body,
+            ):
+                raise HomeAssistantError(error)
+            if error := request_context_window_error(self._model_registry, request):
+                raise HomeAssistantError(error)
             try:
                 response = await self._client.async_generate_structured(request)
             except GroqApiError as err:

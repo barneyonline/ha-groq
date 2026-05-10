@@ -108,7 +108,10 @@ async def async_setup_entry(
 
 
 class GroqTTSEntity(TextToSpeechEntity):
-    _attr_has_entity_name = True
+    # Home Assistant's TTS manager requires TextToSpeechEntity.name to be set
+    # before it will generate or stream audio. TTS entities therefore expose
+    # the configured service name directly instead of using device-only naming.
+    _attr_has_entity_name = False
     _attr_should_poll = False
 
     def __init__(
@@ -139,7 +142,7 @@ class GroqTTSEntity(TextToSpeechEntity):
             _entry_value(config, CONF_MODEL, "", service_data=self._service_data),
             service_data=self._service_data,
         )
-        self._attr_name = None
+        self._attr_name = self._service_name
 
     @property
     def default_language(self) -> str:

@@ -64,6 +64,7 @@ from .const import (
 )
 from .feature_registry import GroqFeature
 from .model_registry import GroqCapability, GroqModelRegistry
+from .text_generation import request_body_options_validation_error
 
 
 def _model_default(
@@ -95,6 +96,129 @@ def _supports_model_option(
     return active_registry.supports(model, feature)
 
 
+def _model_completion_token_limit(
+    model: str,
+    registry: GroqModelRegistry | None = None,
+) -> int | None:
+    """Return the configured completion-token ceiling for a model."""
+    active_registry = registry or GroqModelRegistry()
+    return active_registry.completion_token_limit(model)
+
+
+def _max_tokens_selector_config(
+    model: str,
+    registry: GroqModelRegistry | None = None,
+) -> dict[str, Any]:
+    """Return a number selector config capped to the selected model."""
+    config: dict[str, Any] = {"min": 1, "step": 1, "mode": "box"}
+    if limit := _model_completion_token_limit(model, registry):
+        config["max"] = limit
+    return config
+
+
+def _requested_max_completion_tokens(data: dict[str, Any]) -> list[int]:
+    """Return max completion token values requested by dedicated or raw options."""
+    values = [data.get(CONF_MAX_TOKENS)]
+    request_body_options = data.get(CONF_REQUEST_BODY_OPTIONS)
+    if isinstance(request_body_options, dict):
+        values.extend(
+            (
+                request_body_options.get("max_completion_tokens"),
+                request_body_options.get("max_tokens"),
+            )
+        )
+    tokens: list[int] = []
+    for value in values:
+        if value in (None, ""):
+            continue
+        try:
+            tokens.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return tokens
+
+
+def _clamp_max_completion_tokens(
+    data: dict[str, Any],
+    model: str,
+    registry: GroqModelRegistry | None = None,
+) -> None:
+    """Clamp stored token ceilings to the selected model limit in place."""
+    limit = _model_completion_token_limit(model, registry)
+    if limit is None:
+        return
+    if data.get(CONF_MAX_TOKENS) not in (None, ""):
+        try:
+            data[CONF_MAX_TOKENS] = min(int(data[CONF_MAX_TOKENS]), limit)
+        except (TypeError, ValueError):
+            data.pop(CONF_MAX_TOKENS, None)
+    request_body_options = data.get(CONF_REQUEST_BODY_OPTIONS)
+    if not isinstance(request_body_options, dict):
+        return
+    for key in ("max_completion_tokens", "max_tokens"):
+        if request_body_options.get(key) in (None, ""):
+            continue
+        try:
+            request_body_options[key] = min(int(request_body_options[key]), limit)
+        except (TypeError, ValueError):
+            request_body_options.pop(key, None)
+
+
+def _response_format_requests_structured_outputs(value: Any) -> bool:
+    """Return whether a response_format value requests structured output."""
+    if value in (None, ""):
+        return False
+    if isinstance(value, dict):
+        value = value.get("type")
+    return value in {"json_object", "json_schema"}
+
+
+def sanitize_text_generation_service_data(
+    user_input: dict[str, Any],
+    model_registry: GroqModelRegistry | None = None,
+) -> dict[str, Any]:
+    """Remove hidden model-scoped options that no longer fit the selected model."""
+    data = dict(user_input)
+    model = str(data.get(CONF_MODEL, ""))
+    request_body_options = data.get(CONF_REQUEST_BODY_OPTIONS)
+    if isinstance(request_body_options, dict):
+        request_body_options = dict(request_body_options)
+        data[CONF_REQUEST_BODY_OPTIONS] = request_body_options
+
+    if not _supports_model_option(model_registry, model, GroqFeature.REASONING):
+        for key in (
+            CONF_REASONING_EFFORT,
+            CONF_REASONING_FORMAT,
+            CONF_INCLUDE_REASONING,
+        ):
+            data.pop(key, None)
+        if isinstance(request_body_options, dict):
+            for key in ("reasoning_effort", "reasoning_format", "include_reasoning"):
+                request_body_options.pop(key, None)
+
+    if not _supports_model_option(model_registry, model, GroqFeature.PROMPT_CACHING):
+        data.pop(CONF_PROMPT_CACHING, None)
+
+    if not _supports_model_option(
+        model_registry,
+        model,
+        GroqFeature.STRUCTURED_OUTPUTS,
+    ):
+        for key in (CONF_STRUCTURED_OUTPUTS, CONF_SCHEMA, CONF_SCHEMA_NAME, CONF_STRICT):
+            data.pop(key, None)
+        if isinstance(request_body_options, dict) and (
+            _response_format_requests_structured_outputs(
+                request_body_options.get("response_format")
+            )
+        ):
+            request_body_options.pop("response_format", None)
+
+    _clamp_max_completion_tokens(data, model, model_registry)
+    if isinstance(request_body_options, dict) and not request_body_options:
+        data.pop(CONF_REQUEST_BODY_OPTIONS, None)
+    return data
+
+
 def text_generation_model_capability_summary(
     model: str,
     registry: GroqModelRegistry | None = None,
@@ -103,6 +227,7 @@ def text_generation_model_capability_summary(
     active_registry = registry or GroqModelRegistry()
     model_data = active_registry.get(model)
     capabilities = model_data.capabilities if model_data else frozenset()
+    limit = _model_completion_token_limit(model, active_registry)
     supported: list[str] = []
     unsupported: list[str] = []
     supported.append("Assist")
@@ -123,6 +248,10 @@ def text_generation_model_capability_summary(
     summary = f"Supported: {', '.join(supported)}."
     if unsupported:
         summary = f"{summary} Not supported: {', '.join(unsupported)}."
+    if model_data and model_data.context_window:
+        summary = f"{summary} Context window: {model_data.context_window:,} tokens."
+    if limit:
+        summary = f"{summary} Max completion: {limit:,} tokens."
     return summary
 
 
@@ -355,7 +484,7 @@ def text_generation_advanced_schema(
     model = str(values.get(CONF_MODEL, ""))
     schema: dict[Any, Any] = {
         vol.Optional(CONF_MAX_TOKENS, default=values.get(CONF_MAX_TOKENS)): (
-            selector({"number": {"min": 1, "step": 1, "mode": "box"}})
+            selector({"number": _max_tokens_selector_config(model, model_registry)})
         ),
         vol.Optional(CONF_TOP_P, default=values.get(CONF_TOP_P)): selector(
             {"number": {"min": 0, "max": 1, "step": 0.01, "mode": "box"}}
@@ -507,4 +636,23 @@ def validate_text_generation_input(
         model_registry, model, GroqFeature.STRUCTURED_OUTPUTS
     ):
         errors[CONF_MODEL] = "unsupported_structured_outputs_model"
+    active_registry = model_registry or GroqModelRegistry()
+    if body_error := request_body_options_validation_error(
+        active_registry,
+        model,
+        user_input.get(CONF_REQUEST_BODY_OPTIONS),
+    ):
+        errors[CONF_REQUEST_BODY_OPTIONS] = body_error
+    limit = _model_completion_token_limit(model, model_registry)
+    if limit is not None:
+        requested_max_tokens = _requested_max_completion_tokens(
+            {CONF_MAX_TOKENS: user_input.get(CONF_MAX_TOKENS)}
+        )
+        requested_body_tokens = _requested_max_completion_tokens(
+            {CONF_REQUEST_BODY_OPTIONS: user_input.get(CONF_REQUEST_BODY_OPTIONS)}
+        )
+        if any(value > limit for value in requested_max_tokens):
+            errors[CONF_MAX_TOKENS] = "max_completion_tokens_exceeded"
+        elif any(value > limit for value in requested_body_tokens):
+            errors[CONF_REQUEST_BODY_OPTIONS] = "max_completion_tokens_exceeded"
     return errors

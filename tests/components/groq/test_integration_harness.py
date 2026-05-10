@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -19,6 +20,7 @@ from custom_components.groq.const import (
     FEATURE_TEXT_GENERATION,
     FEATURE_TEXT_TO_SPEECH,
 )
+from custom_components.groq.model_registry import model_from_api
 from custom_components.groq.tts_engine import GroqTTSEngine
 from custom_components.groq.tts import GroqTTSEntity
 
@@ -130,12 +132,16 @@ async def test_validate_user_input_rejects_unknown_enabled_features():
 class DummyGetResponse:
     def __init__(self, status: int = 200, payload=None):
         self.status = status
+        self.headers = {"content-type": "application/json"}
         self._payload = payload or {
             "data": [{"id": "model-a"}, {"name": "model-b"}, "model-c", {}]
         }
 
     async def json(self):
         return self._payload
+
+    async def read(self):
+        return json.dumps(self._payload).encode()
 
     async def __aenter__(self):
         return self
@@ -153,6 +159,10 @@ class DummyGetSession:
         self.calls.append({"args": args, "kwargs": kwargs})
         return self._response
 
+    def request(self, *args, **kwargs):
+        self.calls.append({"args": args, "kwargs": kwargs})
+        return self._response
+
 
 @pytest.mark.asyncio
 async def test_fetch_available_extracts_models_and_auth_header():
@@ -164,7 +174,7 @@ async def test_fetch_available_extracts_models_and_auth_header():
         )
 
     assert models == ["model-a", "model-b", "model-c"]
-    assert session.calls[0]["kwargs"]["headers"] == {"Authorization": "Bearer api-key"}
+    assert session.calls[0]["kwargs"]["headers"]["Authorization"] == "Bearer api-key"
 
 
 @pytest.mark.asyncio
@@ -188,7 +198,7 @@ async def test_async_validate_api_key_accepts_valid_key():
     with patch.object(config_flow, "async_get_clientsession", return_value=session):
         assert await config_flow.async_validate_api_key(DummyHass(), "api-key") is None
 
-    assert session.calls[0]["kwargs"]["headers"] == {"Authorization": "Bearer api-key"}
+    assert session.calls[0]["kwargs"]["headers"]["Authorization"] == "Bearer api-key"
 
 
 @pytest.mark.asyncio
@@ -218,6 +228,9 @@ async def test_async_validate_api_key_maps_connection_errors():
         def get(self, *args, **kwargs):
             raise aiohttp.ClientError("boom")
 
+        def request(self, *args, **kwargs):
+            raise aiohttp.ClientError("boom")
+
     with patch.object(
         config_flow,
         "async_get_clientsession",
@@ -233,8 +246,8 @@ async def test_async_validate_api_key_maps_connection_errors():
 async def test_get_dynamic_options_filters_discovered_models(monkeypatch):
     async def fake_fetch_available_models(hass, api_key):
         return [
-            config_flow.model_from_api({"id": "llama-3.3-70b-versatile"}),
-            config_flow.model_from_api({"id": "canopylabs/orpheus-custom"}),
+            model_from_api({"id": "llama-3.3-70b-versatile"}),
+            model_from_api({"id": "canopylabs/orpheus-custom"}),
         ]
 
     monkeypatch.setattr(
@@ -320,7 +333,7 @@ def test_tts_entity_properties_use_options_over_data():
     assert entity.supported_languages == ["ar", "en"]
     assert entity.device_info["model"] == ORPHEUS_ENGLISH_MODEL
     assert entity.device_info["name"] == ORPHEUS_ENGLISH_MODEL
-    assert entity.name is None
+    assert entity.name == ORPHEUS_ENGLISH_MODEL
 
 
 class DummyProc:
@@ -471,7 +484,7 @@ async def test_tts_async_setup_entry_builds_entities_from_subentries():
     assert len(added) == 1
     assert subentry_ids == ["subentry-id"]
     assert added[0].unique_id == "subentry-id"
-    assert added[0].name is None
+    assert added[0].name == "Kitchen TTS"
     assert added[0].device_info["name"] == "Kitchen TTS"
     assert added[0]._engine._url == DEFAULT_TTS_URL
     assert added[0]._engine._protect_free_tier is False
@@ -979,6 +992,98 @@ async def test_text_generation_reconfigure_keeps_advanced_defaults_until_edited(
 
 
 @pytest.mark.asyncio
+async def test_text_generation_reconfigure_strips_unsupported_hidden_options(
+    monkeypatch,
+):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_GENERATION)
+    flow.context = {"source": "reconfigure", "subentry_id": "subentry-id"}
+    entry = SimpleNamespace(entry_id="entry-id")
+    subentry = SimpleNamespace(
+        data={
+            "name": "Existing Text",
+            "model": "openai/gpt-oss-20b",
+            "system_prompt": "Existing prompt.",
+            "temperature": 0.3,
+            "reasoning_effort": "medium",
+            "prompt_caching": True,
+            "structured_outputs": True,
+            "schema_name": "response",
+            "schema": {"type": "object"},
+            "strict": True,
+            "request_body_options": {
+                "response_format": {"type": "json_schema", "json_schema": {}},
+                "reasoning_effort": "low",
+                "user": "home-assistant",
+            },
+            "service_type": FEATURE_TEXT_GENERATION,
+        }
+    )
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(flow, "_get_entry", lambda: entry)
+    monkeypatch.setattr(flow, "_get_reconfigure_subentry", lambda: subentry)
+
+    result = await flow.async_step_reconfigure(
+        {
+            "name": "Updated Text",
+            "model": "llama-3.1-8b-instant",
+            "system_prompt": "Updated prompt.",
+            "temperature": 0.4,
+        }
+    )
+
+    assert result["type"] == "abort"
+    assert result["data"]["model"] == "llama-3.1-8b-instant"
+    for key in (
+        "reasoning_effort",
+        "prompt_caching",
+        "structured_outputs",
+        "schema_name",
+        "schema",
+        "strict",
+    ):
+        assert key not in result["data"]
+    assert result["data"]["request_body_options"] == {"user": "home-assistant"}
+    assert result["data"]["service_type"] == FEATURE_TEXT_GENERATION
+
+
+@pytest.mark.asyncio
+async def test_text_generation_reconfigure_reports_remaining_hidden_errors(
+    monkeypatch,
+):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_GENERATION)
+    flow.context = {"source": "reconfigure", "subentry_id": "subentry-id"}
+    entry = SimpleNamespace(entry_id="entry-id")
+    subentry = SimpleNamespace(
+        data={
+            "name": "Existing Text",
+            "model": "openai/gpt-oss-20b",
+            "request_body_options": {"model": "override-model"},
+            "service_type": FEATURE_TEXT_GENERATION,
+        }
+    )
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(flow, "_get_entry", lambda: entry)
+    monkeypatch.setattr(flow, "_get_reconfigure_subentry", lambda: subentry)
+
+    result = await flow.async_step_reconfigure(
+        {
+            "name": "Updated Text",
+            "model": "openai/gpt-oss-20b",
+            "system_prompt": "Updated prompt.",
+            "temperature": 0.4,
+        }
+    )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == FEATURE_TEXT_GENERATION
+    assert result["errors"] == {
+        "base": "reserved_request_body_option",
+    }
+
+
+@pytest.mark.asyncio
 async def test_config_flow_reauth_confirm(monkeypatch):
     config_entries = DummyConfigEntries()
     reauth_entry = DummyConfigEntry({"api_key": "old", "model": "model"}, {})
@@ -1001,7 +1106,41 @@ async def test_config_flow_reauth_confirm(monkeypatch):
 
     result = await flow.async_step_reauth_confirm({"api_key": "new"})
     assert result["entry"] is reauth_entry
-    assert result["data_updates"]["api_key"] == "new"
+    assert result["data"]["api_key"] == "new"
+    assert result["options"] == {}
+    assert result["unique_id"].startswith("groq_")
+
+    async def invalid_api_key(_hass, _api_key):
+        return "invalid_auth"
+
+    monkeypatch.setattr(config_flow, "async_validate_api_key", invalid_api_key)
+    invalid = await flow.async_step_reauth_confirm({"api_key": "bad"})
+    assert invalid["type"] == "form"
+    assert invalid["errors"] == {"api_key": "invalid_auth"}
+
+    duplicate_key = "duplicate"
+    duplicate_unique_id = config_flow._unique_id_from_api_key(duplicate_key)
+    other_entry = DummyConfigEntry(
+        {"api_key": duplicate_key},
+        {},
+        unique_id=duplicate_unique_id,
+    )
+    other_entry.entry_id = "other-entry"
+
+    class DuplicateConfigEntries(DummyConfigEntries):
+        def async_entries(self, _domain):
+            return [reauth_entry, other_entry]
+
+    flow.hass = SimpleNamespace(config_entries=DuplicateConfigEntries())
+    flow._reauth_entry = reauth_entry
+    monkeypatch.setattr(
+        config_flow,
+        "async_validate_api_key",
+        lambda _hass, _api_key: asyncio.sleep(0, result=None),
+    )
+    duplicate = await flow.async_step_reauth_confirm({"api_key": duplicate_key})
+    assert duplicate["type"] == "form"
+    assert duplicate["errors"] == {"base": "duplicate_api_key"}
 
 
 @pytest.mark.asyncio
@@ -1019,10 +1158,14 @@ async def test_options_flow_shows_schema_and_saves(monkeypatch):
     async def async_add_executor_job(func):
         return func()
 
+    updated = []
     flow.hass = SimpleNamespace(
         async_add_executor_job=async_add_executor_job,
         config_entries=SimpleNamespace(
             async_get_known_entry=lambda entry_id: entry,
+            async_update_entry=lambda entry, **kwargs: updated.append(
+                (entry, kwargs)
+            ),
         ),
     )
     _patch_flow_common(monkeypatch, flow, flow.hass)
@@ -1035,5 +1178,58 @@ async def test_options_flow_shows_schema_and_saves(monkeypatch):
     assert saved == {
         "type": "create_entry",
         "title": "",
-        "data": {"api_key": "new-key"},
+        "data": {},
     }
+    assert updated[0][0] is entry
+    assert updated[0][1]["data"]["api_key"] == "new-key"
+    assert updated[0][1]["options"] == {}
+    assert updated[0][1]["unique_id"].startswith("groq_")
+
+    async def cannot_connect(_hass, _api_key):
+        return "cannot_connect"
+
+    monkeypatch.setattr(config_flow, "async_validate_api_key", cannot_connect)
+    failed = await flow.async_step_init({"api_key": "broken-key"})
+    assert failed["type"] == "form"
+    assert failed["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.asyncio
+async def test_options_flow_rejects_duplicate_api_key(monkeypatch):
+    duplicate_key = "duplicate"
+    duplicate_unique_id = config_flow._unique_id_from_api_key(duplicate_key)
+    current_entry = DummyConfigEntry({"api_key": "current"}, {}, unique_id="current")
+    other_entry = DummyConfigEntry(
+        {"api_key": duplicate_key},
+        {},
+        unique_id=duplicate_unique_id,
+    )
+    other_entry.entry_id = "other-entry"
+
+    class DuplicateConfigEntries:
+        def async_entries(self, _domain):
+            return [current_entry, other_entry]
+
+    flow = config_flow.GroqOptionsFlow()
+    flow.hass = SimpleNamespace(config_entries=DuplicateConfigEntries())
+    flow.handler = current_entry.entry_id
+    monkeypatch.setattr(
+        flow,
+        "async_show_form",
+        lambda **kwargs: {"type": "form", **kwargs},
+    )
+    monkeypatch.setattr(
+        flow,
+        "async_create_entry",
+        lambda **kwargs: {"type": "create_entry", **kwargs},
+    )
+    monkeypatch.setattr(
+        config_flow,
+        "async_validate_api_key",
+        lambda _hass, _api_key: asyncio.sleep(0, result=None),
+    )
+
+    result = await flow.async_step_init({"api_key": duplicate_key})
+
+    assert result["type"] == "form"
+    assert result["errors"] == {"base": "duplicate_api_key"}

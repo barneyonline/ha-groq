@@ -11,11 +11,13 @@ generate_text:
           integration: groq
     service_id:
       name: Groq Service
-      description: Text Generation service name or ID from the Groq integration page. This is user-defined, so it cannot be shown as a fixed dropdown. Leave empty when the account has only one Text Generation service.
+      description: Configured Text Generation service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Text Generation service.
       required: false
       example: Text Generation
       selector:
-        text:
+        select:
+          custom_value: true
+          options: []
     prompt:
       name: Prompt
       description: User prompt to send to Groq.
@@ -190,8 +192,8 @@ generate_text:
         boolean:
 
 generate_structured:
-  name: Generate Structured Output
-  description: Generate JSON that follows a supplied schema with a supported Groq Text Generation service.
+  name: Generate Text Output
+  description: Generate text with a configured Groq Text Generation service. Optionally provide a JSON schema to request structured output from models that support structured outputs.
   fields:
     config_entry_id:
       name: Groq Account
@@ -202,23 +204,25 @@ generate_structured:
           integration: groq
     service_id:
       name: Groq Service
-      description: Text Generation service name or ID from the Groq integration page. This is user-defined, so it cannot be shown as a fixed dropdown. Leave empty when the account has only one Text Generation service.
+      description: Configured Text Generation service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Text Generation service.
       required: false
       example: Text Generation
       selector:
-        text:
+        select:
+          custom_value: true
+          options: []
     prompt:
       name: Prompt
-      description: User prompt describing the data to generate.
+      description: User prompt to send to Groq.
       required: true
-      example: Extract the room, device, and action from "turn off the kitchen lights".
+      example: Summarize the current home status for a notification.
       selector:
         text:
           multiline: true
     schema:
       name: JSON Schema
-      description: JSON Schema object that Groq should follow. This is free-form because every structured output task needs its own schema.
-      required: true
+      description: Optional JSON Schema object for structured output. Leave empty for plain text. When set, the selected model must support structured outputs.
+      required: false
       example: '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"],"additionalProperties":false}'
       selector:
         object:
@@ -238,7 +242,7 @@ generate_structured:
         boolean:
     model:
       name: Model
-      description: Optional Groq structured-output model override. Choose a known compatible model from the dropdown, or enter a newer Groq model ID manually if Groq adds one before this integration is updated. Leave empty to use the selected service model.
+      description: Optional Groq chat model override. Choose a known compatible model from the dropdown, or enter a newer Groq model ID manually if Groq adds one before this integration is updated. Leave empty to use the selected service model. Structured output only works when the selected model supports structured outputs.
       required: false
       selector:
         select:
@@ -252,6 +256,16 @@ generate_structured:
               value: openai/gpt-oss-safeguard-20b
             - label: Llama 4 Scout 17B
               value: meta-llama/llama-4-scout-17b-16e-instruct
+            - label: Llama 3.1 8B Instant
+              value: llama-3.1-8b-instant
+            - label: Llama 3.3 70B Versatile
+              value: llama-3.3-70b-versatile
+            - label: Qwen 3 32B
+              value: qwen/qwen3-32b
+            - label: Groq Compound
+              value: groq/compound
+            - label: Groq Compound Mini
+              value: groq/compound-mini
     system_prompt:
       name: System Prompt
       description: Optional system instructions. Leave empty to use the selected service prompt.
@@ -372,9 +386,6 @@ generate_structured:
 analyze_image:
   name: Analyze Image
   description: Ask a Groq Image Recognition service to describe or answer questions about an image.
-  target:
-    entity:
-      domain: camera
   fields:
     config_entry_id:
       name: Groq Account
@@ -385,11 +396,13 @@ analyze_image:
           integration: groq
     service_id:
       name: Groq Service
-      description: Image Recognition service name or ID from the Groq integration page. This is user-defined, so it cannot be shown as a fixed dropdown. Leave empty when the account has only one Image Recognition service.
+      description: Configured Image Recognition service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Image Recognition service.
       required: false
       example: Image Recognition
       selector:
-        text:
+        select:
+          custom_value: true
+          options: []
     prompt:
       name: Prompt
       description: Question or instruction for the image.
@@ -398,9 +411,16 @@ analyze_image:
       selector:
         text:
           multiline: true
+    camera_entity_id:
+      name: Camera Entity
+      description: Optional camera entity to capture. Leave empty when using an image file, local path, or image URL.
+      required: false
+      selector:
+        entity:
+          domain: camera
     image_file:
       name: Image File
-      description: Choose an image from Home Assistant media. Leave empty when using a camera target.
+      description: Choose an image from Home Assistant media. Leave empty when using a camera entity.
       required: false
       selector:
         media:
@@ -408,7 +428,7 @@ analyze_image:
             - image/*
     image_path:
       name: Local Image Path
-      description: Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera target or media image.
+      description: Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image.
       required: false
       advanced: true
       example: /config/www/snapshot.jpg
@@ -416,7 +436,7 @@ analyze_image:
         text:
     image_url:
       name: Image URL
-      description: Advanced public or data URL for the image. Leave empty when using a camera target or local image.
+      description: Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path.
       required: false
       advanced: true
       example: https://example.com/snapshot.jpg
@@ -439,9 +459,6 @@ analyze_image:
 extract_text_from_image:
   name: Extract Text From Image
   description: Extract visible text from an image with a Groq Image Recognition service.
-  target:
-    entity:
-      domain: camera
   fields:
     config_entry_id:
       name: Groq Account
@@ -452,14 +469,23 @@ extract_text_from_image:
           integration: groq
     service_id:
       name: Groq Service
-      description: Image Recognition service name or ID from the Groq integration page. This is user-defined, so it cannot be shown as a fixed dropdown. Leave empty when the account has only one Image Recognition service.
+      description: Configured Image Recognition service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Image Recognition service.
       required: false
       example: Image Recognition
       selector:
-        text:
+        select:
+          custom_value: true
+          options: []
+    camera_entity_id:
+      name: Camera Entity
+      description: Optional camera entity to capture. Leave empty when using an image file, local path, or image URL.
+      required: false
+      selector:
+        entity:
+          domain: camera
     image_file:
       name: Image File
-      description: Choose an image from Home Assistant media. Leave empty when using a camera target.
+      description: Choose an image from Home Assistant media. Leave empty when using a camera entity.
       required: false
       selector:
         media:
@@ -467,7 +493,7 @@ extract_text_from_image:
             - image/*
     image_path:
       name: Local Image Path
-      description: Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera target or media image.
+      description: Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image.
       required: false
       advanced: true
       example: /config/www/snapshot.jpg
@@ -475,7 +501,7 @@ extract_text_from_image:
         text:
     image_url:
       name: Image URL
-      description: Advanced public or data URL for the image. Leave empty when using a camera target or local image.
+      description: Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path.
       required: false
       advanced: true
       example: https://example.com/snapshot.jpg
@@ -502,6 +528,95 @@ extract_text_from_image:
               value: meta-llama/llama-4-scout-17b-16e-instruct
             - label: Llama 4 Maverick 17B
               value: meta-llama/llama-4-maverick-17b-128e-instruct
+
+transcribe_audio:
+  name: Transcribe Audio
+  description: Transcribe an audio file with a configured Groq Speech-to-Text service.
+  fields:
+    config_entry_id:
+      name: Groq Account
+      description: Groq account to use. Leave empty when only one Groq account is configured.
+      required: false
+      selector:
+        config_entry:
+          integration: groq
+    service_id:
+      name: Groq Service
+      description: Configured Speech-to-Text service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Speech-to-Text service.
+      required: false
+      example: Speech-to-Text
+      selector:
+        select:
+          custom_value: true
+          options: []
+    audio_file:
+      name: Audio File
+      description: Choose an audio file from Home Assistant media. Leave empty when using a local audio path.
+      required: false
+      selector:
+        media:
+          accept:
+            - audio/*
+    audio_path:
+      name: Local Audio Path
+      description: Advanced local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file.
+      required: false
+      advanced: true
+      example: /config/www/recording.wav
+      selector:
+        text:
+    model:
+      name: Model
+      description: Optional Groq speech-to-text model override. Leave empty to use the selected service model.
+      required: false
+      selector:
+        select:
+          custom_value: true
+          options:
+            - label: Whisper Large V3 Turbo
+              value: whisper-large-v3-turbo
+            - label: Whisper Large V3
+              value: whisper-large-v3
+    language:
+      name: Language
+      description: Optional transcription language hint. Leave empty to use the selected service language.
+      required: false
+      selector:
+        select:
+          custom_value: true
+          options:
+            - label: English (United States)
+              value: en-US
+            - label: English (United Kingdom)
+              value: en-GB
+            - label: English
+              value: en
+            - label: German
+              value: de-DE
+            - label: Spanish
+              value: es-ES
+            - label: French
+              value: fr-FR
+            - label: Italian
+              value: it-IT
+            - label: Portuguese
+              value: pt-PT
+            - label: Dutch
+              value: nl-NL
+            - label: Japanese
+              value: ja-JP
+            - label: Korean
+              value: ko-KR
+            - label: Chinese
+              value: zh-CN
+    prompt:
+      name: Prompt
+      description: Optional context or spelling hints for the transcription.
+      required: false
+      advanced: true
+      selector:
+        text:
+          multiline: true
 
 clear_cache:
   name: Clear Cache

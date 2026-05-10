@@ -11,13 +11,16 @@ from homeassistant.components.conversation import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers import intent
 
 from .api import TextGenerationRequest
 from .const import CONF_SUBENTRY_ID, DOMAIN
+from .model_registry import GroqModelRegistry
 from .runtime import async_get_runtime
 from .text_generation import (
+    request_body_options_error_message,
     service_include_reasoning,
     service_max_tokens,
     service_model,
@@ -26,6 +29,7 @@ from .text_generation import (
     service_reasoning_effort,
     service_reasoning_format,
     service_request_body_options,
+    request_context_window_error,
     service_seed,
     service_service_tier,
     service_stop,
@@ -47,7 +51,15 @@ async def async_setup_entry(
     runtime = await async_get_runtime(hass, config_entry)
     for service_data in text_generation_service_data(config_entry):
         async_add_entities(
-            [GroqConversationEntity(hass, config_entry, service_data, runtime.client)],
+            [
+                GroqConversationEntity(
+                    hass,
+                    config_entry,
+                    service_data,
+                    runtime.client,
+                    runtime.model_registry,
+                )
+            ],
             config_subentry_id=service_data.get(CONF_SUBENTRY_ID),
         )
 
@@ -65,12 +77,14 @@ class GroqConversationEntity(ConversationEntity):
         config_entry: ConfigEntry,
         service_data: dict,
         client,
+        model_registry: GroqModelRegistry | None = None,
     ) -> None:
         """Initialize the conversation entity."""
         self.hass = hass
         self._config_entry = config_entry
         self._service_data = service_data
         self._client = client
+        self._model_registry = model_registry or GroqModelRegistry()
         self._service_name = service_name(config_entry, service_data)
         self._attr_name = "Assist"
         self._attr_unique_id = f"{service_unique_id(config_entry, service_data)}_assist"
@@ -107,7 +121,11 @@ class GroqConversationEntity(ConversationEntity):
             model=service_model(self._config_entry, self._service_data),
             system_prompt=system_prompt,
             temperature=service_temperature(self._config_entry, self._service_data),
-            max_tokens=service_max_tokens(self._config_entry, self._service_data),
+            max_tokens=service_max_tokens(
+                self._config_entry,
+                self._service_data,
+                self._model_registry,
+            ),
             top_p=service_top_p(self._config_entry, self._service_data),
             stop=service_stop(self._config_entry, self._service_data),
             seed=service_seed(self._config_entry, self._service_data),
@@ -122,13 +140,23 @@ class GroqConversationEntity(ConversationEntity):
                 self._config_entry, self._service_data
             ),
             extra_body=service_request_body_options(
-                self._config_entry, self._service_data
+                self._config_entry,
+                self._service_data,
+                self._model_registry,
             ),
             service_id=service_unique_id(self._config_entry, self._service_data),
             protect_free_tier=service_protect_free_tier(
                 self._config_entry, self._service_data
             ),
         )
+        if error := request_body_options_error_message(
+            self._model_registry,
+            request.model,
+            request.extra_body,
+        ):
+            raise HomeAssistantError(error)
+        if error := request_context_window_error(self._model_registry, request):
+            raise HomeAssistantError(error)
         if service_stream(self._config_entry, self._service_data) and hasattr(
             chat_log, "async_add_delta_content_stream"
         ):

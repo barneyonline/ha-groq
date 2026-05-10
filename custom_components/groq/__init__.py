@@ -8,8 +8,16 @@ from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, UNIQUE_ID
-from .runtime import GroqConfigEntry, build_runtime
-from .services import async_register_services, async_unregister_services
+from .runtime import (
+    GroqConfigEntry,
+    async_hydrate_runtime_model_registry,
+    build_runtime,
+)
+from .services import (
+    async_register_services,
+    async_unregister_services,
+    async_update_service_descriptions,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,6 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool:
     """Set up entities."""
     runtime = build_runtime(hass, entry)
+    await async_hydrate_runtime_model_registry(entry, runtime)
     entry.runtime_data = runtime
 
     # Reload the entry when options change so updates (like cache size)
@@ -40,6 +49,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> boo
     if unload_ok:
         if hasattr(hass, "services") and not _has_other_loaded_entries(hass, entry):
             await async_unregister_services(hass)
+        elif hasattr(hass, "services"):
+            await async_update_service_descriptions(
+                hass,
+                exclude_entry_id=entry.entry_id,
+            )
     return unload_ok
 
 

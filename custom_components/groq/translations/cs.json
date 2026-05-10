@@ -25,7 +25,7 @@
         "data": {
           "voice": "Hlas",
           "normalize_audio": "Povolte zvýšení hlasitosti generovaného audia (vyžaduje více CPU)",
-          "protect_free_tier": "Protect this service's free-tier usage",
+          "protect_free_tier": "Free-Tier Protection",
           "response_format": "Response format",
           "vocal_directions": "Default vocal directions"
         }

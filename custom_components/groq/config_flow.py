@@ -17,9 +17,11 @@ from homeassistant.config_entries import (
     ConfigSubentryFlow,
     OptionsFlow,
 )
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.core import callback
 
+from .api import GroqApiClient
 from .const import (
     CONF_ADVANCED_OPTIONS,
     CONF_API_KEY,
@@ -58,19 +60,61 @@ from .flow_schemas import (
     text_generation_basic_schema,
     text_generation_model_capability_summary,
     text_to_speech_schema,
+    sanitize_text_generation_service_data,
     validate_text_generation_input,
     validate_user_input,
 )
-from .model_registry import GroqModel, GroqModelRegistry, model_from_api
+from .model_registry import (
+    GroqModel,
+    GroqModelRegistry,
+)
+from .errors import GroqApiError, GroqResponseError
 
 _LOGGER = logging.getLogger(__name__)
-
-MODELS_ENDPOINT = "https://api.groq.com/openai/v1/models"
-API_KEY_VALIDATION_TIMEOUT = 10
+API_KEY_VALIDATION_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
 
 def generate_entry_id() -> str:
     return str(uuid.uuid4())
+
+
+def _unique_id_from_api_key(api_key: str) -> str:
+    """Return the stable account unique id derived from a Groq API key."""
+    uid_hash = hashlib.sha1(api_key.encode("utf-8")).hexdigest()
+    return f"groq_{uid_hash}"
+
+
+def _api_key_validation_errors(validation_error: str | None) -> dict[str, str]:
+    """Return config-flow errors for a Groq API key validation result."""
+    if validation_error == "invalid_auth":
+        return {CONF_API_KEY: validation_error}
+    if validation_error is not None:
+        return {"base": validation_error}
+    return {}
+
+
+def _api_key_duplicate_error(
+    hass,
+    api_key: str,
+    *,
+    current_entry_id: str | None = None,
+) -> str | None:
+    """Return an error when another Groq entry already uses an API key."""
+    unique_id = _unique_id_from_api_key(api_key)
+    config_entries = getattr(hass, "config_entries", None)
+    async_entries = getattr(config_entries, "async_entries", None)
+    if async_entries is None:
+        return None
+    for entry in async_entries(DOMAIN):
+        if getattr(entry, "entry_id", None) == current_entry_id:
+            continue
+        if getattr(entry, "unique_id", None) == unique_id:
+            return "duplicate_api_key"
+        data = getattr(entry, "data", {}) or {}
+        options = getattr(entry, "options", {}) or {}
+        if api_key in (data.get(CONF_API_KEY), options.get(CONF_API_KEY)):
+            return "duplicate_api_key"
+    return None
 
 
 async def fetch_available(hass, endpoint: str, api_key: str | None = None) -> list[str]:
@@ -101,22 +145,18 @@ async def fetch_available(hass, endpoint: str, api_key: str | None = None) -> li
 
 async def async_fetch_available_models(hass, api_key: str) -> list[GroqModel]:
     """Fetch active models visible to a Groq API key."""
-    session = async_get_clientsession(hass)
-    headers = {"Authorization": f"Bearer {api_key}"}
-    async with session.get(
-        MODELS_ENDPOINT,
-        headers=headers,
-        timeout=API_KEY_VALIDATION_TIMEOUT,
-    ) as resp:
-        if resp.status in (401, 403):
-            raise ValueError("invalid_auth")
-        if resp.status != 200:
-            raise RuntimeError(f"Unexpected Groq models status {resp.status}")
-        data = await resp.json()
-    items = data.get("data") if isinstance(data, dict) else None
-    if not isinstance(items, list):
-        raise RuntimeError("Groq models response did not include a data list")
-    return [model_from_api(item) for item in items if isinstance(item, dict)]
+    client = GroqApiClient(
+        hass,
+        api_key=api_key,
+        session=async_get_clientsession(hass),
+        request_timeout=API_KEY_VALIDATION_TIMEOUT,
+    )
+    try:
+        return await client.async_list_models(hydrate=False)
+    except ConfigEntryAuthFailed as err:
+        raise ValueError("invalid_auth") from err
+    except GroqResponseError as err:
+        raise RuntimeError(str(err)) from err
 
 
 async def async_get_model_registry(
@@ -156,6 +196,12 @@ async def async_validate_api_key(hass, api_key: str) -> str | None:
         return "invalid_auth"
     except (aiohttp.ContentTypeError, TypeError) as err:
         _LOGGER.debug("Groq API key validation returned invalid payload: %s", err)
+        return "unknown"
+    except GroqApiError as err:
+        if str(err).startswith("Network error"):
+            _LOGGER.debug("Could not connect to Groq while validating API key: %s", err)
+            return "cannot_connect"
+        _LOGGER.debug("Groq API key validation failed: %s", err)
         return "unknown"
     except (aiohttp.ClientError, TimeoutError) as err:
         _LOGGER.debug("Could not connect to Groq while validating API key: %s", err)
@@ -200,10 +246,7 @@ class GroqConfigFlow(ConfigFlow, domain=DOMAIN):
                 await validate_user_input(user_input)
                 entry_data = entry_defaults(user_input)
                 # Create a deterministic unique_id from the API key to avoid duplicate account entries.
-                uid_hash = hashlib.sha1(
-                    entry_data[CONF_API_KEY].encode("utf-8")
-                ).hexdigest()
-                unique_id = f"groq_{uid_hash}"
+                unique_id = _unique_id_from_api_key(entry_data[CONF_API_KEY])
                 await self.async_set_unique_id(unique_id)
                 # Allow multiple named Groq accounts, but do not create a
                 # duplicate account for the same API key.
@@ -212,11 +255,15 @@ class GroqConfigFlow(ConfigFlow, domain=DOMAIN):
                     self.hass,
                     entry_data[CONF_API_KEY],
                 )
-                if validation_error == "invalid_auth":
-                    errors[CONF_API_KEY] = validation_error
-                elif validation_error is not None:
-                    errors["base"] = validation_error
-                else:
+                errors.update(_api_key_validation_errors(validation_error))
+                if not errors and (
+                    duplicate_error := _api_key_duplicate_error(
+                        self.hass,
+                        entry_data[CONF_API_KEY],
+                    )
+                ):
+                    errors["base"] = duplicate_error
+                if not errors:
                     # Store unique id in data for backward-compat device identifiers
                     entry_data[UNIQUE_ID] = unique_id
                     return self.async_create_entry(
@@ -280,14 +327,30 @@ class GroqConfigFlow(ConfigFlow, domain=DOMAIN):
                 reauth_entry = getattr(self, "_reauth_entry", None)
                 if reauth_entry is None:
                     return self.async_abort(reason="unknown")
-                new_data = dict(reauth_entry.data)
-                new_data[CONF_API_KEY] = api_key
-                # Abort current flow, update & reload the entry with new credentials
-                return self.async_update_reload_and_abort(
-                    reauth_entry,
-                    data_updates=new_data,
-                    reason="reauth_successful",
-                )
+                validation_error = await async_validate_api_key(self.hass, api_key)
+                errors.update(_api_key_validation_errors(validation_error))
+                if not errors and (
+                    duplicate_error := _api_key_duplicate_error(
+                        self.hass,
+                        api_key,
+                        current_entry_id=reauth_entry.entry_id,
+                    )
+                ):
+                    errors["base"] = duplicate_error
+                if not errors:
+                    new_data = dict(reauth_entry.data)
+                    new_data[CONF_API_KEY] = api_key
+                    new_options = dict(reauth_entry.options)
+                    new_options.pop(CONF_API_KEY, None)
+                    unique_id = _unique_id_from_api_key(api_key)
+                    # Abort current flow, update & reload the entry with new credentials
+                    return self.async_update_reload_and_abort(
+                        reauth_entry,
+                        unique_id=unique_id,
+                        data=new_data,
+                        options=new_options,
+                        reason="reauth_successful",
+                    )
 
         schema = vol.Schema({vol.Required(CONF_API_KEY): api_key_selector()})
         return self.async_show_form(
@@ -298,12 +361,66 @@ class GroqConfigFlow(ConfigFlow, domain=DOMAIN):
 class GroqOptionsFlow(OptionsFlow):
     """Handle options flow for Groq."""
 
+    def _current_entry(self):
+        """Return the config entry being edited by this options flow."""
+        try:
+            entry = getattr(self, "config_entry", None)
+        except ValueError:
+            entry = None
+        if entry is not None:
+            return entry
+
+        hass = getattr(self, "hass", None)
+        config_entries = getattr(hass, "config_entries", None)
+        entry_id = getattr(self, "handler", None)
+        if isinstance(entry_id, tuple):
+            entry_id = entry_id[0] if entry_id else None
+        for getter_name in ("async_get_entry", "async_get_known_entry"):
+            getter = getattr(config_entries, getter_name, None)
+            if getter is None or entry_id is None:
+                continue
+            entry = getter(entry_id)
+            if entry is not None:
+                return entry
+        return None
+
     async def async_step_init(self, user_input: dict | None = None):
+        errors: dict[str, str] = {}
         if user_input is not None:
             user_input = dict(user_input)
             if not user_input.get(CONF_API_KEY):
                 user_input.pop(CONF_API_KEY, None)
-            return self.async_create_entry(title="", data=user_input)
+            else:
+                validation_error = await async_validate_api_key(
+                    self.hass,
+                    user_input[CONF_API_KEY],
+                )
+                errors.update(_api_key_validation_errors(validation_error))
+                current_entry = self._current_entry()
+                current_entry_id = getattr(current_entry, "entry_id", None)
+                if not errors and (
+                    duplicate_error := _api_key_duplicate_error(
+                        self.hass,
+                        user_input[CONF_API_KEY],
+                        current_entry_id=current_entry_id,
+                    )
+                ):
+                    errors["base"] = duplicate_error
+            if not errors:
+                current_entry = self._current_entry()
+                if current_entry is not None and user_input.get(CONF_API_KEY):
+                    new_data = dict(current_entry.data)
+                    new_data[CONF_API_KEY] = user_input[CONF_API_KEY]
+                    new_options = dict(current_entry.options)
+                    new_options.pop(CONF_API_KEY, None)
+                    self.hass.config_entries.async_update_entry(
+                        current_entry,
+                        data=new_data,
+                        options=new_options,
+                        unique_id=_unique_id_from_api_key(user_input[CONF_API_KEY]),
+                    )
+                    user_input = new_options
+                return self.async_create_entry(title="", data=user_input)
         options_schema = vol.Schema(
             {
                 vol.Optional(
@@ -311,7 +428,11 @@ class GroqOptionsFlow(OptionsFlow):
                 ): api_key_selector(),
             }
         )
-        return self.async_show_form(step_id="init", data_schema=options_schema)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=options_schema,
+            errors=errors,
+        )
 
 
 class GroqServiceSubentryFlow(ConfigSubentryFlow):
@@ -384,7 +505,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
             return None
         data = getattr(entry, "data", {}) or {}
         options = getattr(entry, "options", {}) or {}
-        return data.get(CONF_API_KEY) or options.get(CONF_API_KEY)
+        return options.get(CONF_API_KEY) or data.get(CONF_API_KEY)
 
     async def _model_registry(
         self,
@@ -455,6 +576,10 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                     **self._existing_service_data(),
                     **user_input,
                 }
+                self._pending_service_data = sanitize_text_generation_service_data(
+                    self._pending_service_data,
+                    model_registry,
+                )
                 return self.async_show_form(
                     step_id="text_generation_advanced",
                     data_schema=text_generation_advanced_schema(
@@ -467,6 +592,24 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                     **self._existing_service_data(),
                     **user_input,
                 }
+                user_input = sanitize_text_generation_service_data(
+                    user_input,
+                    model_registry,
+                )
+                errors = validate_text_generation_input(user_input, model_registry)
+                if errors:
+                    return self.async_show_form(
+                        step_id=FEATURE_TEXT_GENERATION,
+                        data_schema=text_generation_basic_schema(
+                            user_input,
+                            model_options,
+                            model_registry,
+                        ),
+                        errors={
+                            "base" if field != CONF_NAME else field: reason
+                            for field, reason in errors.items()
+                        },
+                    )
             return self._create_service_entry(FEATURE_TEXT_GENERATION, user_input)
 
         return self.async_show_form(
