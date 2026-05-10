@@ -30,3 +30,7 @@ disallow_incomplete_defs = false
 disallow_untyped_calls = false
 disallow_any_generics = false
 warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = ["homeassistant", "homeassistant.*"]
+ignore_missing_imports = true

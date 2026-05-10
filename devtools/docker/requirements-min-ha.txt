@@ -8,10 +8,15 @@ aiohttp
 async-timeout
 voluptuous
 PyYAML
+PyTurboJPEG==1.8.0
 coverage==7.10.6
 freezegun==1.5.2
+ha-ffmpeg==3.2.2
+hassil==3.5.0
+home-assistant-intents==2026.3.24
 license-expression==30.4.3
 mock-open==1.4.0
+mutagen==1.47.0
 numpy==2.3.2
 paho-mqtt==2.1.0
 pydantic==2.12.2
