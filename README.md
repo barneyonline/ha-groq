@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/ci.yml?branch=main&label=tests)](https://github.com/barneyonline/ha-groq/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/barneyonline/ha-groq/branch/main/graph/badge.svg)](https://codecov.io/gh/barneyonline/ha-groq)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/hassfest.yml?branch=main&label=hassfest)](https://github.com/barneyonline/ha-groq/actions/workflows/hassfest.yml)
-[![Quality Scale](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/quality-scale.yml?branch=main&label=quality%20scale)](https://developers.home-assistant.io/docs/core/integration-quality-scale/)
+[![Quality Scale](https://github.com/barneyonline/ha-groq/actions/workflows/quality-scale.yml/badge.svg?branch=main)](https://github.com/barneyonline/ha-groq/actions/workflows/quality-scale.yml)
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 [![Open Issues](https://img.shields.io/github/issues/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/issues)
