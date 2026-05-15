@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/ci.yml?branch=main&label=tests)](https://github.com/barneyonline/ha-groq/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/barneyonline/ha-groq/branch/main/graph/badge.svg)](https://codecov.io/gh/barneyonline/ha-groq)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/hassfest.yml?branch=main&label=hassfest)](https://github.com/barneyonline/ha-groq/actions/workflows/hassfest.yml)
-[![Quality Scale](https://github.com/barneyonline/ha-groq/actions/workflows/quality-scale.yml/badge.svg?branch=main)](https://github.com/barneyonline/ha-groq/actions/workflows/quality-scale.yml)
+[![Quality Scale](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbarneyonline%2Fha-groq%2Fmain%2Fcustom_components%2Fgroq%2Fmanifest.json&query=%24.quality_scale&label=quality%20scale&cacheSeconds=3600)](https://developers.home-assistant.io/docs/integration_quality_scale_index)
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 [![Open Issues](https://img.shields.io/github/issues/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/issues)
@@ -87,74 +87,6 @@ Advanced Text Generation options include max completion tokens, top P, stop sequ
 
 You can add more than one Groq account. The integration prevents adding the same API key twice.
 
-## Data Updates
-
-Groq requests are made on demand:
-
-- During setup and reauthentication, Home Assistant validates the API key by listing available Groq models.
-- During integration setup, model metadata is refreshed when credentials are available. Built-in model metadata is used as a fallback if Groq is temporarily unreachable.
-- Service actions, Assist, AI Tasks, STT, and TTS call Groq only when used.
-- There is no periodic polling of Groq for entity state.
-
-Prompt caching is local to the Home Assistant process and bounded by the configured cache size and TTL. Groq account rate-limit headers are used for local free-tier protection when enabled.
-
-## Examples
-
-Generate a notification summary:
-
-```yaml
-action: groq.generate_text
-data:
-  service_id: Home Summary
-  prompt: >
-    Summarize the current home status in one sentence for a push notification.
-response_variable: groq_summary
-```
-
-Analyze a camera snapshot:
-
-```yaml
-action: groq.analyze_image
-target:
-  entity_id: camera.front_door
-data:
-  service_id: Front Door Vision
-  prompt: Is there a package visible?
-response_variable: package_check
-```
-
-Create structured data:
-
-```yaml
-action: groq.generate_structured
-data:
-  service_id: Planner
-  prompt: Extract a title and priority from "Water the garden before sunset".
-  schema:
-    type: object
-    properties:
-      title:
-        type: string
-      priority:
-        type: string
-        enum: [low, medium, high]
-    required: [title, priority]
-    additionalProperties: false
-  strict: true
-response_variable: task_data
-```
-
-Speak with a Groq TTS service:
-
-```yaml
-action: tts.speak
-target:
-  entity_id: tts.kitchen_groq
-data:
-  media_player_entity_id: media_player.kitchen
-  message: Dinner is ready.
-```
-
 ## Known Limitations
 
 - This is a cloud integration and will not work without internet access to Groq.
@@ -187,6 +119,7 @@ Removing the integration stops future Groq API calls from Home Assistant. It doe
 
 ## Useful Links
 
+- [Project Wiki](https://github.com/barneyonline/ha-groq/wiki)
 - [Groq Console](https://console.groq.com/)
 - [Groq status page](https://groqstatus.com/)
 - [Groq API reference](https://console.groq.com/docs/api-reference)
