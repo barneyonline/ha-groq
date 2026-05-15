@@ -76,6 +76,39 @@ def _placeholders(value: str) -> set[str]:
     return set(re.findall(r"\{[^{}]+\}", value))
 
 
+def test_supported_translation_locales_are_declared() -> None:
+    root = Path(__file__).resolve().parents[3]
+    translation_dir = root / "custom_components" / DOMAIN / "translations"
+
+    assert {path.stem for path in translation_dir.glob("*.json")} == {
+        "bg",
+        "cs",
+        "da",
+        "de",
+        "el",
+        "en",
+        "en-AU",
+        "en-CA",
+        "en-IE",
+        "en-NZ",
+        "en-US",
+        "es",
+        "et",
+        "fi",
+        "fr",
+        "hu",
+        "it",
+        "lt",
+        "lv",
+        "nb",
+        "nl",
+        "pl",
+        "pt-BR",
+        "ro",
+        "sv",
+    }
+
+
 def test_supported_translations_match_strings_json() -> None:
     root = Path(__file__).resolve().parents[3]
     component_dir = root / "custom_components" / DOMAIN
