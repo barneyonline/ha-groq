@@ -23,7 +23,10 @@ from custom_components.groq.api import (
     normalize_base_url,
 )
 from custom_components.groq.ai_task import GroqAITaskEntity
-from custom_components.groq.conversation import GroqConversationEntity, _chat_log_messages
+from custom_components.groq.conversation import (
+    GroqConversationEntity,
+    _chat_log_messages,
+)
 from custom_components.groq.const import (
     COMPOUND_MODELS,
     CONF_INCLUDE_REASONING,
