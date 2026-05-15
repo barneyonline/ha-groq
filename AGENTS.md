@@ -36,6 +36,14 @@
 
 ## Commit & Pull Request Guidelines
 - Commits: concise, imperative mood (e.g., "Add dynamic voice selector").
+- Before pushing to `origin`, run the full local verification set and fix any failures:
+  - `scripts/test pre-commit run --all-files`
+  - `scripts/strict-typing`
+  - `scripts/test python scripts/validate_quality_scale.py`
+  - `scripts/test python scripts/importtime_profile.py --strict-integration-warnings`
+  - `scripts/test python -m pytest --cov=custom_components.groq --cov-report=term-missing --cov-report=xml --cov-fail-under=100 --junitxml=junit.xml -o junit_family=legacy`
+  - `scripts/test bash -lc "COVERAGE_FILE=/tmp/groq.coverage python -m coverage erase && COVERAGE_FILE=/tmp/groq.coverage python -m coverage run -m pytest tests/components/groq -q && COVERAGE_FILE=/tmp/groq.coverage python -m coverage report -m --include=<changed-custom-components-groq-python-files-comma-separated> --fail-under=100"`
+  - `git diff --check`
 - PRs must include:
   - Clear description and rationale; link related issues.
   - Tests for new logic or bug fixes.
