@@ -2770,6 +2770,16 @@ async def test_image_source_resolution_paths(tmp_path, monkeypatch):
         await _image_url_from_call(
             hass, service_call({ATTR_IMAGE_URL: "data:image/png;base64,abc"})
         )
+    with pytest.raises(ServiceValidationError, match="Image URL"):
+        await _image_url_from_call(
+            hass, service_call({ATTR_IMAGE_URL: "data:image/png;base64"})
+        )
+    assert (
+        await _image_url_from_call(
+            hass, service_call({ATTR_IMAGE_URL: "data:image/png,raw"})
+        )
+        == "data:image/png,raw"
+    )
     monkeypatch.setattr("custom_components.groq.services.MAX_IMAGE_BYTES", 4)
     with patch(
         "custom_components.groq.services.b64decode",

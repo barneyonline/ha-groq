@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 from homeassistant.components import conversation
@@ -78,7 +78,7 @@ def _chat_log_messages(
     current_text: str,
 ) -> list[dict[str, str]]:
     """Return OpenAI-compatible messages from the chat log plus current input."""
-    history = []
+    history: Sequence[Any] = ()
     for attr in ("content", "messages"):
         value = getattr(chat_log, attr, None)
         if isinstance(value, (list, tuple)):

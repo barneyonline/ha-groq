@@ -23,7 +23,7 @@ from custom_components.groq.api import (
     normalize_base_url,
 )
 from custom_components.groq.ai_task import GroqAITaskEntity
-from custom_components.groq.conversation import GroqConversationEntity
+from custom_components.groq.conversation import GroqConversationEntity, _chat_log_messages
 from custom_components.groq.const import (
     COMPOUND_MODELS,
     CONF_INCLUDE_REASONING,
@@ -1246,6 +1246,28 @@ async def test_conversation_entity_limits_assist_history():
     assert len(request.messages) == 13
     assert request.messages[0] == {"role": "user", "content": "turn 18"}
     assert request.messages[-1] == {"role": "user", "content": "latest request"}
+
+
+def test_chat_log_messages_handles_role_fallbacks():
+    class AssistantFallback:
+        content = "Fallback assistant reply"
+
+    class UserFallback:
+        text = "Fallback user request"
+
+    chat_log = SimpleNamespace(
+        content=[
+            AssistantFallback(),
+            UserFallback(),
+            SimpleNamespace(content="ignored"),
+        ]
+    )
+
+    assert _chat_log_messages(chat_log, "current request") == [
+        {"role": "assistant", "content": "Fallback assistant reply"},
+        {"role": "user", "content": "Fallback user request"},
+        {"role": "user", "content": "current request"},
+    ]
 
 
 @pytest.mark.asyncio
