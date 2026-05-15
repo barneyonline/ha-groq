@@ -1,0 +1,350 @@
+{
+  "config": {
+    "initiate_flow": {
+      "user": "Groq-account toevoegen"
+    },
+    "step": {
+      "user": {
+        "title": "Groq toevoegen",
+        "description": "Zie documentatie voor meer informatie.",
+        "data": {
+          "name": "Naam",
+          "api_key": "Voer de Groq API-sleutel in"
+        },
+        "data_description": {
+          "name": "Een vriendelijke naam voor dit Groq-account. Gebruik dit om de API-sleutel of het factureringsproject te identificeren.",
+          "api_key": "Groq API sleutel voor dit account. Voeg nog een Groq-account toe als u een andere sleutel wilt gebruiken voor een afzonderlijke set services."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Authenticeer Groq opnieuw",
+        "description": "Uw inloggegevens zijn niet langer geldig. Voer een nieuwe API-sleutel in.",
+        "data": {
+          "api_key": "Groq API-toets"
+        }
+      },
+      "reconfigure": {
+        "title": "Groq opnieuw configureren",
+        "description": "Werk de Groq-accountnaam bij of vervang de API-sleutel.",
+        "data": {
+          "name": "Naam",
+          "api_key": "Groq API-toets"
+        },
+        "data_description": {
+          "name": "Een vriendelijke naam voor dit Groq-account.",
+          "api_key": "Optionele vervangende API-sleutel. Laat dit leeg om de huidige API-sleutel te behouden."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Groq-account succesvol bijgewerkt."
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken met Groq. Controleer uw netwerkverbinding en probeer het opnieuw.",
+      "duplicate_api_key": "Een ander Groq-account gebruikt deze API-sleutel al.",
+      "invalid_auth": "Ongeldige Groq API-sleutel. Voer een geldige sleutel in.",
+      "wrong_api_key": "Ongeldige API-sleutel. Voer een geldige API-sleutel in.",
+      "invalid_url": "Ongeldige URL. Voer een geldige URL in.",
+      "invalid_enabled_features": "Een of meer geselecteerde functies worden niet ondersteund.",
+      "invalid_response_format": "Ongeldig antwoordformaat.",
+      "unsupported_reasoning_model": "Het geselecteerde model ondersteunt geen redeneeropties.",
+      "unsupported_prompt_caching_model": "Het geselecteerde model ondersteunt geen lokale responscaching.",
+      "unsupported_structured_outputs_model": "Het geselecteerde model ondersteunt geen gestructureerde uitvoer.",
+      "reserved_request_body_option": "Extra opties voor de hoofdtekst van verzoeken kunnen het model, de berichten of de stream niet overschrijven. Gebruik in plaats daarvan de speciale velden.",
+      "max_completion_tokens_exceeded": "Het geselecteerde model ondersteunt niet zoveel maximale voltooiingstokens.",
+      "invalid_voice": "De geselecteerde voice is niet beschikbaar voor het geselecteerde model.",
+      "select_voice_for_model": "Selecteer een stem voor het geselecteerde model.",
+      "required": "Dit veld is verplicht.",
+      "unknown": "Onverwachte fout bij het valideren van de API-sleutel. Probeer het opnieuw.",
+      "unknown_error": "Onverwachte fout — probeer het opnieuw."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Groq-opties configureren",
+        "data": {
+          "api_key": "Groq API-toets"
+        },
+        "data_description": {
+          "api_key": "Optionele vervangende API-sleutel voor dit Groq-account."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Tekstgeneratieservice",
+      "initiate_flow": {
+        "user": "Tekstgeneratie toevoegen",
+        "reconfigure": "Tekstgeneratie opnieuw configureren"
+      },
+      "abort": {
+        "reconfigure_successful": "Tekstgeneratieservice succesvol bijgewerkt."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Tekst genereren",
+          "description": "Mogelijkheden van geselecteerde modellen: {model_capabilities}",
+          "data": {
+            "name": "Naam",
+            "model": "Model",
+            "system_prompt": "Systeemprompt",
+            "temperature": "Temperatuur",
+            "advanced_options": "Geavanceerde verzoekopties configureren",
+            "protect_free_tier": "Gratis Tier-bescherming"
+          },
+          "data_description": {
+            "name": "Een vriendelijke naam voor deze tekstgeneratieservice. Home Assistant gebruikt dit voor de taakentiteiten Assist en AI.",
+            "model": "Het Groq-chatmodel dat wordt gebruikt voor tekstreacties, Assist-gesprekken en taken voor het genereren van gegevens.",
+            "system_prompt": "Instructies voor het model. De standaard komt overeen met de AI-taakprompt van Home Assistant.",
+            "temperature": "Regelt de responsvariatie. Lagere waarden zijn voorspelbaarder; hogere waarden zijn creatiever.",
+            "advanced_options": "Opent geavanceerde bedieningselementen voor minder gebruikelijke Groq-chatverzoekopties.",
+            "protect_free_tier": "Wanneer Groq meldt dat deze service een verzoek- of tokenlimiet heeft bereikt, pauzeert Home Assistant alleen deze service tot de resettijd van Groq voordat er meer verzoeken worden verzonden."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Geavanceerde tekstgeneratie",
+          "data": {
+            "max_tokens": "Max. voltooiingstokens",
+            "top_p": "Top P",
+            "stop": "Stopsequenties",
+            "seed": "Zaad",
+            "service_tier": "Serviceniveau",
+            "stream": "Stream Assist-reacties",
+            "reasoning_effort": "Redeneringsinspanning",
+            "reasoning_format": "Redeneringsformaat",
+            "include_reasoning": "Geef een redenering",
+            "prompt_caching": "Lokale antwoordcache",
+            "structured_outputs": "Gebruik gestructureerde uitvoer",
+            "schema_name": "Schemanaam",
+            "schema": "JSON schema",
+            "strict": "Strikte schemamodus",
+            "request_body_options": "Extra verzoekopbouwopties"
+          },
+          "data_description": {
+            "max_tokens": "Beperkt het aantal tokens dat Groq in het antwoord mag genereren.",
+            "top_p": "Alternatieve bemonsteringscontrole. Lagere waarden beperken het genereren tot meer waarschijnlijke tokens.",
+            "stop": "Eén stopreeks per regel. Het genereren stopt wanneer er een reeks wordt geproduceerd.",
+            "seed": "Best-effort deterministische sampling voor herhaalbare reacties.",
+            "service_tier": "Optionele Groq-verwerkingslaag voor de aanvraag.",
+            "stream": "Streamt Assist-reacties naar het Home Assistant-chatlogboek, indien ondersteund.",
+            "reasoning_effort": "Redeneringsbudget alleen voor ondersteunde redeneermodellen.",
+            "reasoning_format": "Hoe ondersteunde redeneermodellen redeneerinhoud blootleggen.",
+            "include_reasoning": "Vraagt ​​om redeneerinhoud op ondersteunde modellen als er geen redeneerformaat is ingesteld.",
+            "prompt_caching": "Cachet lokaal overeenkomende Home Assistant-servicereacties voor ondersteunde modellen.",
+            "structured_outputs": "Verzoekt JSON die het geconfigureerde schema volgt wanneer deze service wordt gebruikt voor het genereren van gegevens.",
+            "schema_name": "Een korte identificatie die samen met het schema naar Groq wordt verzonden.",
+            "schema": "JSON Schema-object verzonden als response_format.json_schema.schema.",
+            "strict": "Gebruikt Groq beperkte decodering wanneer het geselecteerde model strikt gestructureerde uitvoer ondersteunt.",
+            "request_body_options": "JSON-object samengevoegd in de hoofdtekst van het chatvoltooiingsverzoek. Dit is de geavanceerde passthrough voor elke Groq-chat-create-body-optie die niet wordt weergegeven als een speciaal veld, inclusief citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Spraak-naar-tekst-service",
+      "initiate_flow": {
+        "user": "Spraak-naar-tekst toevoegen",
+        "reconfigure": "Spraak-naar-tekst opnieuw configureren"
+      },
+      "abort": {
+        "reconfigure_successful": "Spraak-naar-tekst-service succesvol bijgewerkt."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Spraak-naar-tekst",
+          "data": {
+            "name": "Naam",
+            "model": "Model",
+            "language": "Taal",
+            "protect_free_tier": "Gratis Tier-bescherming"
+          },
+          "data_description": {
+            "name": "Een beschrijvende naam voor dit exemplaar van de spraak-naar-tekst-service.",
+            "model": "Het Groq Whisper-model dat wordt gebruikt om audio te transcriberen.",
+            "language": "Taalhint verzonden naar Groq voor transcriptie. Standaard ingesteld op de taal die is geconfigureerd in Home Assistant, indien beschikbaar.",
+            "protect_free_tier": "Wanneer Groq meldt dat deze service een verzoek- of tokenlimiet heeft bereikt, pauzeert Home Assistant alleen deze service tot de resettijd van Groq voordat er meer verzoeken worden verzonden."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Tekst-naar-spraak-service",
+      "initiate_flow": {
+        "user": "Tekst-naar-spraak toevoegen",
+        "reconfigure": "Tekst-naar-spraak opnieuw configureren"
+      },
+      "abort": {
+        "reconfigure_successful": "Tekst-naar-spraak-service succesvol bijgewerkt."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Tekst-naar-spraak",
+          "data": {
+            "name": "Naam",
+            "model": "Model",
+            "voice": "Stem",
+            "vocal_directions": "Standaard stemrichtingen",
+            "normalize_audio": "Luidheid inschakelen voor gegenereerde audio (gebruikt meer CPU)",
+            "protect_free_tier": "Gratis Tier-bescherming"
+          },
+          "data_description": {
+            "name": "Een beschrijvende naam voor deze tekst-naar-spraak-service-instantie.",
+            "model": "Het Groq-spraakmodel dat wordt gebruikt om audio te genereren.",
+            "voice": "De stempersoon die door het geselecteerde spraakmodel wordt gebruikt. Als u het model wijzigt, worden stemmen gewist die niet beschikbaar zijn voor het nieuwe model.",
+            "vocal_directions": "Optionele weergavestijl voorafgegaan aan spraak, zoals vrolijk of fluisterend. U kunt een voorinstelling kiezen of uw eigen voorinstelling typen.",
+            "normalize_audio": "Converteert uitvoer naar genormaliseerde MP3 met ffmpeg voor consistentere luidheid op kleine luidsprekers.",
+            "protect_free_tier": "Wanneer Groq meldt dat deze service een aanvraag-, token- of bekende tekenlimiet voor tekst-naar-spraak heeft bereikt, pauzeert Home Assistant alleen deze service tot de resettijd voordat er meer verzoeken worden verzonden."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Beeldherkenningsservice",
+      "initiate_flow": {
+        "user": "Beeldherkenning toevoegen",
+        "reconfigure": "Beeldherkenning opnieuw configureren"
+      },
+      "abort": {
+        "reconfigure_successful": "Beeldherkenningsservice succesvol bijgewerkt."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Beeldherkenning",
+          "data": {
+            "name": "Naam",
+            "model": "Model",
+            "system_prompt": "Systeemprompt",
+            "protect_free_tier": "Gratis Tier-bescherming"
+          },
+          "data_description": {
+            "name": "Een beschrijvende naam voor dit exemplaar van de Image Recognition-service.",
+            "model": "Het Groq vision-model dat wordt gebruikt om afbeeldingen te inspecteren.",
+            "system_prompt": "Optionele instructies die aangeven hoe afbeeldingsvragen worden beantwoord.",
+            "protect_free_tier": "Wanneer Groq meldt dat deze service een verzoek- of tokenlimiet heeft bereikt, pauzeert Home Assistant alleen deze service tot de resettijd van Groq voordat er meer verzoeken worden verzonden."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Taken voor het genereren van gegevens"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Assist"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Spraak-naar-tekst"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Tekst-naar-spraak"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "ffmpeg is vereist voor Groq audionormalisatie",
+      "description": "De Groq tekst-naar-spraakservice {service_name} is geconfigureerd om gegenereerde audio te normaliseren, maar Home Assistant kan ffmpeg niet starten. Installeer ffmpeg op de Home Assistant-host of schakel audionormalisatie uit voor deze Groq tekst-naar-spraak-service."
+    },
+    "model_access": {
+      "title": "Groq-model is niet beschikbaar",
+      "description": "Groq meldde dat het model {model} niet beschikbaar is voor dit account. Controleer de modelnaam in de Groq-console, bevestig dat het model is ingeschakeld voor het account of selecteer een ander Groq-model in deze integratie."
+    },
+    "model_configuration": {
+      "title": "Groq-servicemodelconfiguratie is ongeldig",
+      "description": "De Groq-service {service_name} is geconfigureerd voor het gebruik van model {model}, maar het is niet bekend dat dat model {feature} ondersteunt. Selecteer een model dat dit servicetype ondersteunt."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Meerdere Groq-services komen overeen met service_id: {service_id}"
+    },
+    "config_entry_not_found": {
+      "message": "Groq configuratie-item niet gevonden: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Geen geladen Groq-configuratie-item gevonden"
+    },
+    "multiple_config_entries": {
+      "message": "Er worden meerdere Groq-configuratiegegevens geladen; bieden config_entry_id of service_id"
+    },
+    "service_not_found": {
+      "message": "Groq {service_type}-service niet gevonden: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Meerdere Groq {service_type}-services zijn geconfigureerd; service_id verstrekken\nHet is niet bekend dat"
+    },
+    "unsupported_model": {
+      "message": "Groq-model {model} ondersteuning biedt voor {feature}"
+    },
+    "completion_token_limit": {
+      "message": "Groq model {model} ondersteunt maximaal {limit} voltooiingstokens"
+    },
+    "select_one_camera": {
+      "message": "Selecteer slechts één camera-entiteit"
+    },
+    "camera_capture_failed": {
+      "message": "Kan geen beeld vastleggen van camera-entiteit {entity_id}"
+    },
+    "local_image_path_not_allowed": {
+      "message": "Lokaal afbeeldingspad bevindt zich niet in Home Assistant's allowlist_external_dirs"
+    },
+    "local_image_not_found": {
+      "message": "Lokaal afbeeldingsbestand niet gevonden: {path}"
+    },
+    "local_file_not_image": {
+      "message": "Lokaal bestand is geen afbeelding: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Kan afbeeldingsbestand: {path} niet oplossen"
+    },
+    "selected_media_not_image": {
+      "message": "Het geselecteerde medium is geen afbeelding: {path}"
+    },
+    "image_source_required": {
+      "message": "Selecteer een camera-entiteit, afbeeldingsbestand, lokaal afbeeldingspad of afbeelding URL"
+    },
+    "invalid_image_url": {
+      "message": "Afbeelding URL moet een http-, https- of afbeeldingsgegevens URL zijn"
+    },
+    "image_too_large": {
+      "message": "Geselecteerde afbeelding is te groot; maximale grootte is {limit_mb} MB"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "Lokaal audiopad bevindt zich niet in de allowlist_external_dirs van Home Assistant"
+    },
+    "local_audio_not_found": {
+      "message": "Lokaal audiobestand niet gevonden: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "Lokaal bestand is geen audio: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Kan audiobestand niet oplossen: {path}"
+    },
+    "audio_media_local_required": {
+      "message": "Geselecteerde audio moet worden omgezet in een lokaal bestand"
+    },
+    "selected_media_not_audio": {
+      "message": "Geselecteerde media zijn geen audio: {path}"
+    },
+    "audio_source_required": {
+      "message": "Selecteer een audiobestand of lokaal audiopad"
+    },
+    "audio_too_large": {
+      "message": "Geselecteerde audio is te groot; maximale grootte is {limit_mb} MB"
+    },
+    "request_invalid": {
+      "message": "{message}"
+    }
+  }
+}

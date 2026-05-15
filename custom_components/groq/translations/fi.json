@@ -1,0 +1,350 @@
+{
+  "config": {
+    "initiate_flow": {
+      "user": "Lisää Groq-tili"
+    },
+    "step": {
+      "user": {
+        "title": "Lisää Groq",
+        "description": "Katso lisätietoja dokumentaatiosta.",
+        "data": {
+          "name": "Nimi",
+          "api_key": "Syötä avain Groq API"
+        },
+        "data_description": {
+          "name": "Ystävällinen nimi tälle Groq-tilille. Käytä tätä tunnistaaksesi API-avaimen tai laskutusprojektin.",
+          "api_key": "Groq API -avain tälle tilille. Lisää toinen Groq-tili, jos haluat käyttää eri avainta erilliselle palvelujoukolle."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Todenna Groq uudelleen",
+        "description": "Tunnistetietosi eivät ole enää voimassa. Anna uusi API-avain.",
+        "data": {
+          "api_key": "Groq API -avain"
+        }
+      },
+      "reconfigure": {
+        "title": "Määritä Groq uudelleen",
+        "description": "Päivitä Groq-tilin nimi tai vaihda API-avain.",
+        "data": {
+          "name": "Nimi",
+          "api_key": "Groq API -avain"
+        },
+        "data_description": {
+          "name": "Ystävällinen nimi tälle Groq-tilille.",
+          "api_key": "Valinnainen vara-avain API. Jätä tyhjäksi säilyttääksesi nykyinen API-avain."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Groq-tilin päivitys onnistui."
+    },
+    "error": {
+      "cannot_connect": "Ei voitu muodostaa yhteyttä Groq:hen. Tarkista verkkoyhteytesi ja yritä uudelleen.",
+      "duplicate_api_key": "Toinen Groq-tili käyttää jo tätä API-avainta.",
+      "invalid_auth": "Virheellinen Groq API -avain. Anna kelvollinen avain.",
+      "wrong_api_key": "Virheellinen API-avain. Anna kelvollinen API-avain.",
+      "invalid_url": "Virheellinen URL. Anna kelvollinen URL.",
+      "invalid_enabled_features": "Yhtä tai useampaa valittua ominaisuutta ei tueta.",
+      "invalid_response_format": "Virheellinen vastausmuoto.",
+      "unsupported_reasoning_model": "Valittu malli ei tue päättelyvaihtoehtoja.",
+      "unsupported_prompt_caching_model": "Valittu malli ei tue paikallista vastausten välimuistia.",
+      "unsupported_structured_outputs_model": "Valittu malli ei tue strukturoituja lähtöjä.",
+      "reserved_request_body_option": "Pyynnön lisäasetukset eivät voi ohittaa mallia, viestejä tai streamia. Käytä sen sijaan erityisiä kenttiä.",
+      "max_completion_tokens_exceeded": "Valittu malli ei tue niin montaa enimmäissuoritustunnusta.",
+      "invalid_voice": "Valittu ääni ei ole käytettävissä valitulle mallille.",
+      "select_voice_for_model": "Valitse ääni valitulle mallille.",
+      "required": "Tämä kenttä on pakollinen.",
+      "unknown": "Odottamaton virhe API-avaimen vahvistamisessa. Yritä uudelleen.",
+      "unknown_error": "Odottamaton virhe – yritä uudelleen."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Määritä Groq-asetukset",
+        "data": {
+          "api_key": "Groq API -avain"
+        },
+        "data_description": {
+          "api_key": "Valinnainen korvaava API-avain tälle Groq-tilille."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Tekstin luontipalvelu",
+      "initiate_flow": {
+        "user": "Lisää tekstin luonti",
+        "reconfigure": "Määritä tekstin luominen uudelleen"
+      },
+      "abort": {
+        "reconfigure_successful": "Tekstinluontipalvelu päivitetty onnistuneesti."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Tekstin luominen",
+          "description": "Valittujen mallien ominaisuudet: {model_capabilities}",
+          "data": {
+            "name": "Nimi",
+            "model": "Malli",
+            "system_prompt": "Järjestelmäkehote",
+            "temperature": "Lämpötila",
+            "advanced_options": "Määritä pyynnön lisäasetukset",
+            "protect_free_tier": "Free-Tier Protection"
+          },
+          "data_description": {
+            "name": "Ystävällinen nimi tälle tekstintuotantopalvelulle. Home Assistant käyttää tätä Assist- ja AI-tehtäväkokonaisuuksissa.",
+            "model": "Groq-chat-malli, jota käytetään tekstivastauksiin, Assist-keskusteluihin ja tiedon luomiseen.",
+            "system_prompt": "Mallia ohjaavat ohjeet. Oletusarvo vastaa Home Assistant:n AI-tehtäväkehotetta.",
+            "temperature": "Ohjaa vasteen vaihtelua. Pienemmät arvot ovat paremmin ennustettavissa; korkeammat arvot ovat luovempia.",
+            "advanced_options": "Avaa edistyneet säätimet vähemmän yleisille Groq-chat-pyyntövaihtoehdoille.",
+            "protect_free_tier": "Kun Groq ilmoittaa, että tämä palvelu on saavuttanut pyyntö- tai tunnusrajan, Home Assistant keskeyttää vain tämän palvelun Groq:n nollausaikaan asti ennen kuin lähettää lisää pyyntöjä."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Edistynyt tekstin luominen",
+          "data": {
+            "max_tokens": "Enimmäissuoritusmerkit",
+            "top_p": "Top P",
+            "stop": "Pysäytä sarjat",
+            "seed": "Siemen",
+            "service_tier": "Palvelutaso",
+            "stream": "Suoratoista Assist-vastauksia",
+            "reasoning_effort": "Pohdintaa",
+            "reasoning_format": "Päättelymuoto",
+            "include_reasoning": "Sisällytä perustelut",
+            "prompt_caching": "Paikallinen vastausvälimuisti",
+            "structured_outputs": "Käytä strukturoituja lähtöjä",
+            "schema_name": "Kaavion nimi",
+            "schema": "JSON schema",
+            "strict": "Tiukka kaavatila",
+            "request_body_options": "Pyynnön lisäasetukset"
+          },
+          "data_description": {
+            "max_tokens": "Rajoittaa Groq:n vastauksessa generoimien merkkien määrää.",
+            "top_p": "Vaihtoehtoinen näytteenoton ohjaus. Pienemmät arvot rajoittavat luomisen todennäköisempiin tokeneihin.",
+            "stop": "Yksi pysähdysjakso riviä kohden. Sukupolvi pysähtyy, kun jokin sarja tuotetaan.",
+            "seed": "Paras deterministinen näytteenotto siemen toistettavia vastauksia varten.",
+            "service_tier": "Valinnainen Groq-käsittelytaso pyynnölle.",
+            "stream": "Suoratoistaa Assist-vastaukset Home Assistant-chat-lokiin, kun niitä tuetaan.",
+            "reasoning_effort": "Päättelybudjetti vain tuetuille päättelymalleille.",
+            "reasoning_format": "Kuinka tuetut päättelymallit paljastavat päättelyn sisällön.",
+            "include_reasoning": "Pyytää päättelysisältöä tuetuista malleista, kun päättelymuotoa ei ole asetettu.",
+            "prompt_caching": "Välimuistit, jotka vastaavat Home Assistant-palveluvastauksia paikallisesti tuetuille malleille.",
+            "structured_outputs": "Pyytää JSON, joka noudattaa määritettyä skeemaa, kun tätä palvelua käytetään tietojen luomiseen.",
+            "schema_name": "Lyhyt tunniste, joka on lähetetty numeroon Groq skeeman kanssa.",
+            "schema": "JSON Schema-objekti lähetetään muodossa response_format.json_schema.schema.",
+            "strict": "Käyttää Groq-rajoitettua dekoodausta, kun valittu malli tukee tiukkoja strukturoituja lähtöjä.",
+            "request_body_options": "JSON-objekti yhdistetty keskustelun viimeistelypyynnön runkoon. Tämä on edistynyt läpivienti jokaiselle Groq-keskustelujen luomisvaihtoehdolle, jota ei näytetä erillisenä kenttänä, mukaan lukien citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Puhe-tekstipalvelu",
+      "initiate_flow": {
+        "user": "Lisää puhe tekstiksi",
+        "reconfigure": "Määritä puhe tekstiksi uudelleen"
+      },
+      "abort": {
+        "reconfigure_successful": "Puhe-tekstipalvelun päivitys onnistui."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Puhe tekstiksi",
+          "data": {
+            "name": "Nimi",
+            "model": "Malli",
+            "language": "Kieli",
+            "protect_free_tier": "Free-Tier Protection"
+          },
+          "data_description": {
+            "name": "Ystävällinen nimi tälle puhetekstiksi -palvelun esiintymälle.",
+            "model": "Groq Whisper -malli, jota käytetään äänen litteroimiseen.",
+            "language": "Kielivinkki lähetetty numeroon Groq transkriptiota varten. Oletusasetus on Home Assistant:ssä määritetty kieli, kun se on saatavilla.",
+            "protect_free_tier": "Kun Groq ilmoittaa, että tämä palvelu on saavuttanut pyynnön tai tunnuksen rajan, Home Assistant keskeyttää vain tämän palvelun Groq:n nollausaikaan asti ennen kuin lähettää lisää pyyntöjä."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Tekstistä puheeksi -palvelu",
+      "initiate_flow": {
+        "user": "Lisää tekstistä puheeksi",
+        "reconfigure": "Määritä tekstistä puheeksi uudelleen"
+      },
+      "abort": {
+        "reconfigure_successful": "Tekstistä puheeksi -palvelun päivitys onnistui."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Tekstistä puheeksi",
+          "data": {
+            "name": "Nimi",
+            "model": "Malli",
+            "voice": "Ääni",
+            "vocal_directions": "Äänioletusohjeet",
+            "normalize_audio": "Ota käyttöön luodun äänen voimakkuus (käyttää enemmän prosessoria)",
+            "protect_free_tier": "Free-Tier Protection"
+          },
+          "data_description": {
+            "name": "Ystävällinen nimi tälle tekstistä puheeksi -palvelun esiintymälle.",
+            "model": "Groq-puhemalli, jota käytetään äänen tuottamiseen.",
+            "voice": "Valitun puhemallin käyttämä äänipersoona. Mallin vaihtaminen poistaa äänet, jotka eivät ole käytettävissä uudessa mallissa.",
+            "vocal_directions": "Valinnainen toimitustyyli puheen liitteenä, kuten iloinen tai kuiskaava. Voit valita esiasetuksen tai kirjoittaa oman.",
+            "normalize_audio": "Muuntaa lähdön normalisoiduksi MP3:ksi ffmpeg:n kanssa tasaisemman äänenvoimakkuuden saamiseksi pienissä kaiuttimissa.",
+            "protect_free_tier": "Kun Groq ilmoittaa, että tämä palvelu on saavuttanut pyynnön, tunnuksen tai tunnetun tekstistä puheeksi -merkkirajoituksen, Home Assistant keskeyttää vain tämän palvelun nollausaikaan asti ennen kuin lähettää lisää pyyntöjä."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Kuvantunnistuspalvelu",
+      "initiate_flow": {
+        "user": "Lisää kuvantunnistus",
+        "reconfigure": "Määritä kuvantunnistus uudelleen"
+      },
+      "abort": {
+        "reconfigure_successful": "Kuvantunnistuspalvelun päivitys onnistui."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Kuvantunnistus",
+          "data": {
+            "name": "Nimi",
+            "model": "Malli",
+            "system_prompt": "Järjestelmäkehote",
+            "protect_free_tier": "Free-Tier Protection"
+          },
+          "data_description": {
+            "name": "Ystävällinen nimi tälle Image Recognition -palvelun ilmentymälle.",
+            "model": "Groq-näkömalli, jota käytetään kuvien tarkastamiseen.",
+            "system_prompt": "Valinnaiset ohjeet, jotka ohjaavat kuvakysymyksiin vastaamiseen.",
+            "protect_free_tier": "Kun Groq ilmoittaa, että tämä palvelu on saavuttanut pyyntö- tai tunnusrajan, Home Assistant keskeyttää vain tämän palvelun Groq:n nollausaikaan asti ennen kuin lähettää lisää pyyntöjä."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Tietojen luontitehtävät"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Assist"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Puhe tekstiksi"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Tekstistä puheeksi"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "ffmpeg vaaditaan Groq-äänen normalisointiin",
+      "description": "Groq Tekstistä puheeksi -palvelu {service_name} on määritetty normalisoimaan luotu ääni, mutta Home Assistant ei voinut käynnistää ffmpeg:tä. Asenna ffmpeg Home Assistant-isäntään tai poista äänen normalisointi käytöstä tästä Groq tekstistä puheeksi -palvelusta."
+    },
+    "model_access": {
+      "title": "Groq-malli ei ole saatavilla",
+      "description": "Groq ilmoitti, että malli {model} ei ole saatavilla tälle tilille. Tarkista mallin nimi Groq-konsolista, varmista, että malli on otettu käyttöön tilissä, tai valitse toinen Groq-malli tässä integraatiossa."
+    },
+    "model_configuration": {
+      "title": "Groq-palvelumallin määritys on virheellinen",
+      "description": "Groq-palvelu {service_name} on määritetty käyttämään mallia {model}, mutta tämän mallin ei tiedetä tukevan {feature}:tä. Valitse malli, joka tukee tätä palvelutyyppiä."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Useita Groq-palveluita vastaavat service_id: {service_id}"
+    },
+    "config_entry_not_found": {
+      "message": "Groq-määritysmerkintää ei löytynyt: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Ladattua Groq-asetusmerkintää ei löytynyt"
+    },
+    "multiple_config_entries": {
+      "message": "Ladataan useita Groq-kokoonpanomerkintöjä; tarjoa config_entry_id tai service_id"
+    },
+    "service_not_found": {
+      "message": "Groq {service_type} palvelua ei löydy: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Useita Groq {service_type} -palveluita on määritetty; tarjoa service_id"
+    },
+    "unsupported_model": {
+      "message": "Groq-mallin {model} ei tiedetä tukevan {feature}:tä"
+    },
+    "completion_token_limit": {
+      "message": "Groq-malli {model} tukee korkeintaan {limit}-tokeneja"
+    },
+    "select_one_camera": {
+      "message": "Valitse vain yksi kamerakokonaisuus"
+    },
+    "camera_capture_failed": {
+      "message": "Ei voitu kaapata kuvaa kamerayksiköstä {entity_id}"
+    },
+    "local_image_path_not_allowed": {
+      "message": "Paikallinen kuvapolku ei ole Home Assistant:n allowlist_external_dirs:ssä"
+    },
+    "local_image_not_found": {
+      "message": "Paikallista kuvatiedostoa ei löydy: {path}"
+    },
+    "local_file_not_image": {
+      "message": "Paikallinen tiedosto ei ole kuva: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Kuvatiedostoa ei voitu selvittää: {path}"
+    },
+    "selected_media_not_image": {
+      "message": "Valittu media ei ole kuva: {path}"
+    },
+    "image_source_required": {
+      "message": "Valitse kamerakokonaisuus, kuvatiedosto, paikallinen kuvapolku tai kuva URL"
+    },
+    "invalid_image_url": {
+      "message": "Kuvan URL on oltava http-, https- tai kuvadata URL"
+    },
+    "image_too_large": {
+      "message": "Valittu kuva on liian suuri; enimmäiskoko on {limit_mb} MB"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "Paikallinen äänipolku ei ole Home Assistant:n allowlist_external_dirs:ssä"
+    },
+    "local_audio_not_found": {
+      "message": "Paikallista äänitiedostoa ei löydy: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "Paikallinen tiedosto ei ole ääni: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Äänitiedostoa: {path} ei voitu ratkaista"
+    },
+    "audio_media_local_required": {
+      "message": "Valitun äänen täytyy muodostua paikalliseksi tiedostoksi"
+    },
+    "selected_media_not_audio": {
+      "message": "Valittu media ei ole ääni: {path}"
+    },
+    "audio_source_required": {
+      "message": "Valitse äänitiedosto tai paikallinen äänipolku"
+    },
+    "audio_too_large": {
+      "message": "Valittu ääni on liian suuri; enimmäiskoko on {limit_mb} MB"
+    },
+    "request_invalid": {
+      "message": "{message}"
+    }
+  }
+}

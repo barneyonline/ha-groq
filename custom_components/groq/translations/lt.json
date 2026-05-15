@@ -1,0 +1,350 @@
+{
+  "config": {
+    "initiate_flow": {
+      "user": "Pridėkite Groq paskyrą"
+    },
+    "step": {
+      "user": {
+        "title": "Pridėkite Groq",
+        "description": "Daugiau informacijos rasite dokumentacijoje.",
+        "data": {
+          "name": "Vardas",
+          "api_key": "Įveskite Groq API klavišą"
+        },
+        "data_description": {
+          "name": "Patogus šios Groq paskyros pavadinimas. Naudokite tai norėdami identifikuoti API raktą arba atsiskaitymo projektą.",
+          "api_key": "šios paskyros Groq API raktas. Pridėkite kitą Groq paskyrą, jei norite naudoti kitą raktą atskiram paslaugų rinkiniui."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Iš naujo autentifikuokite Groq",
+        "description": "Jūsų kredencialai nebegalioja. Įveskite naują API raktą.",
+        "data": {
+          "api_key": "Groq API raktas"
+        }
+      },
+      "reconfigure": {
+        "title": "Iš naujo sukonfigūruokite Groq",
+        "description": "Atnaujinkite Groq paskyros pavadinimą arba pakeiskite API raktą.",
+        "data": {
+          "name": "Vardas",
+          "api_key": "Groq API raktas"
+        },
+        "data_description": {
+          "name": "Patogus šios Groq paskyros pavadinimas.",
+          "api_key": "Pasirenkamas pakaitinis API raktas. Palikite tuščią, kad liktų dabartinis API raktas."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Groq paskyra sėkmingai atnaujinta."
+    },
+    "error": {
+      "cannot_connect": "Nepavyko prisijungti prie Groq. Patikrinkite tinklo ryšį ir bandykite dar kartą.",
+      "duplicate_api_key": "Kitoje Groq paskyroje jau naudojamas šis API raktas.",
+      "invalid_auth": "Neteisingas Groq API raktas. Įveskite galiojantį raktą.",
+      "wrong_api_key": "Neteisingas API raktas. Įveskite galiojantį API raktą.",
+      "invalid_url": "Netinkamas URL. Įveskite tinkamą URL.",
+      "invalid_enabled_features": "Viena ar daugiau pasirinktų funkcijų nepalaikomos.",
+      "invalid_response_format": "Netinkamas atsakymo formatas.",
+      "unsupported_reasoning_model": "Pasirinktas modelis nepalaiko samprotavimo parinkčių.",
+      "unsupported_prompt_caching_model": "Pasirinktas modelis nepalaiko vietinio atsakymų kaupimo talpykloje.",
+      "unsupported_structured_outputs_model": "Pasirinktas modelis nepalaiko struktūrinių išėjimų.",
+      "reserved_request_body_option": "Papildomos užklausos turinio parinktys negali nepaisyti modelio, pranešimų ar srauto. Vietoj to naudokite tam skirtus laukus.",
+      "max_completion_tokens_exceeded": "Pasirinktas modelis nepalaiko tiek daug maksimalaus užbaigimo žetonų.",
+      "invalid_voice": "Pasirinktas balsas nepasiekiamas pasirinktam modeliui.",
+      "select_voice_for_model": "Pasirinkite balsą pasirinktam modeliui.",
+      "required": "Šis laukas yra būtinas.",
+      "unknown": "Netikėta klaida tikrinant API raktą. Bandykite dar kartą.",
+      "unknown_error": "Netikėta klaida – bandykite dar kartą."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Konfigūruokite Groq parinktis",
+        "data": {
+          "api_key": "Groq API raktas"
+        },
+        "data_description": {
+          "api_key": "Pasirenkamas šios Groq paskyros pakaitinis API raktas."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Teksto generavimo paslauga",
+      "initiate_flow": {
+        "user": "Pridėti teksto generavimą",
+        "reconfigure": "Iš naujo sukonfigūruoti teksto generavimą"
+      },
+      "abort": {
+        "reconfigure_successful": "Teksto generavimo paslauga sėkmingai atnaujinta."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Teksto generavimas",
+          "description": "Pasirinktos modelio galimybės: {model_capabilities}",
+          "data": {
+            "name": "Vardas",
+            "model": "Modelis",
+            "system_prompt": "Sistemos raginimas",
+            "temperature": "Temperatūra",
+            "advanced_options": "Konfigūruokite išplėstines užklausos parinktis",
+            "protect_free_tier": "Laisvos pakopos apsauga"
+          },
+          "data_description": {
+            "name": "Patogus šios teksto generavimo paslaugos pavadinimas. Home Assistant tai naudoja Assist ir AI užduočių objektams.",
+            "model": "Groq pokalbių modelis, naudojamas tekstiniams atsakymams, Assist pokalbiams ir duomenų generavimo užduotims atlikti.",
+            "system_prompt": "Instrukcijos, pagal kurias vadovaujamasi modeliu. Numatytoji reikšmė atitinka Home Assistant AI užduočių eilutę.",
+            "temperature": "Valdo atsako pokyčius. Mažesnės vertės yra labiau nuspėjamos; didesnės vertybės yra kūrybiškesnės.",
+            "advanced_options": "Atidaro išplėstinius valdiklius, skirtus retesnėms Groq pokalbių užklausų parinktims.",
+            "protect_free_tier": "Kai Groq praneša, kad ši paslauga pasiekė užklausų arba prieigos raktų limitą, Home Assistant pristabdo tik šią paslaugą iki Groq nustatymo iš naujo laiko, prieš išsiųsdama daugiau užklausų."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Išplėstinis teksto generavimas",
+          "data": {
+            "max_tokens": "Maksimalus užbaigimo žetonų skaičius",
+            "top_p": "Į viršų P",
+            "stop": "Sustabdyti sekas",
+            "seed": "Sėkla",
+            "service_tier": "Paslaugų lygis",
+            "stream": "Perduokite Assist atsakymus",
+            "reasoning_effort": "Samprotavimo pastangos",
+            "reasoning_format": "Samprotavimo formatas",
+            "include_reasoning": "Įtraukite samprotavimus",
+            "prompt_caching": "Vietinė atsakymų talpykla",
+            "structured_outputs": "Naudokite struktūrinius išėjimus",
+            "schema_name": "Schemos pavadinimas",
+            "schema": "JSON schema",
+            "strict": "Griežtas schemos režimas",
+            "request_body_options": "Papildomos užklausos turinio parinktys"
+          },
+          "data_description": {
+            "max_tokens": "Apriboja žetonų, kuriuos Groq gali generuoti atsakyme, skaičių.",
+            "top_p": "Alternatyvi mėginių ėmimo kontrolė. Mažesnės vertės apriboja labiau tikėtinų žetonų generavimą.",
+            "stop": "Viena sustojimo seka eilutėje. Gamyba sustabdoma, kai sukuriama kokia nors seka.",
+            "seed": "Geriausia deterministinio atrankos pradžia, skirta pakartotiniams atsakymams.",
+            "service_tier": "Pasirenkama užklausos apdorojimo pakopa Groq.",
+            "stream": "Kai palaikoma, perduoda Assist atsakymus į Home Assistant pokalbių žurnalą.",
+            "reasoning_effort": "Samprotavimo biudžetas tik palaikomiems samprotavimo modeliams.",
+            "reasoning_format": "Kaip palaikomi samprotavimo modeliai atskleidžia samprotavimo turinį.",
+            "include_reasoning": "Prašo samprotavimo turinio palaikomuose modeliuose, kai nenustatytas joks argumentavimo formatas.",
+            "prompt_caching": "Talpyklos, atitinkančios palaikomų modelių Home Assistant paslaugų atsakymus.",
+            "structured_outputs": "Prašo JSON, kuris atitinka sukonfigūruotą schemą, kai ši paslauga naudojama duomenims generuoti.",
+            "schema_name": "Trumpas identifikatorius, išsiųstas į Groq su schema.",
+            "schema": "JSON Schema objektas išsiųstas kaip response_format.json_schema.schema.",
+            "strict": "Naudoja apribotą Groq dekodavimą, kai pasirinktas modelis palaiko griežtus struktūrinius išėjimus.",
+            "request_body_options": "JSON objektas sujungtas į pokalbio užbaigimo užklausos turinį. Tai yra išplėstinis kiekvienos Groq pokalbių kūrimo parinkties perėjimas, kuris nerodomas kaip specialus laukas, įskaitant citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Kalbos į tekstą paslauga",
+      "initiate_flow": {
+        "user": "Pridėti kalbos į tekstą",
+        "reconfigure": "Iš naujo sukonfigūruoti kalbą į tekstą"
+      },
+      "abort": {
+        "reconfigure_successful": "Kalbos į tekstą paslauga sėkmingai atnaujinta."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Iš kalbos į tekstą",
+          "data": {
+            "name": "Vardas",
+            "model": "Modelis",
+            "language": "Kalba",
+            "protect_free_tier": "Laisvos pakopos apsauga"
+          },
+          "data_description": {
+            "name": "Patogus šios kalbos į tekstą paslaugos egzemplioriaus pavadinimas.",
+            "model": "Garsui transkribuoti naudojamas modelis Groq Whisper.",
+            "language": "Kalbos užuomina išsiųsta į Groq transkripcijai. Numatytoji kalba, sukonfigūruota Home Assistant, kai yra.",
+            "protect_free_tier": "Kai Groq praneša, kad ši paslauga pasiekė užklausų arba prieigos raktų limitą, Home Assistant pristabdo tik šią paslaugą iki Groq nustatymo iš naujo laiko, prieš išsiųsdama daugiau užklausų."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Teksto į kalbą paslauga",
+      "initiate_flow": {
+        "user": "Pridėti teksto į kalbą funkciją",
+        "reconfigure": "Iš naujo sukonfigūruokite teksto į kalbą funkciją"
+      },
+      "abort": {
+        "reconfigure_successful": "Teksto į kalbą paslauga sėkmingai atnaujinta."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Tekstas į kalbą",
+          "data": {
+            "name": "Vardas",
+            "model": "Modelis",
+            "voice": "Balsas",
+            "vocal_directions": "Numatytosios balso kryptys",
+            "normalize_audio": "Įjungti generuojamo garso garsumą (naudoja daugiau procesoriaus)",
+            "protect_free_tier": "Laisvos pakopos apsauga"
+          },
+          "data_description": {
+            "name": "Patogus šio teksto į kalbą paslaugos egzemplioriaus pavadinimas.",
+            "model": "Groq kalbos modelis, naudojamas garsui generuoti.",
+            "voice": "Balso asmenybė, naudojama pasirinkto kalbos modelio. Pakeitus modelį išvalomi balsai, kurių nėra naujajame modelyje.",
+            "vocal_directions": "Pasirenkamas pristatymo stilius, pridedamas prie kalbos, pvz., linksmas ar šnabždesys. Galite pasirinkti išankstinį nustatymą arba įvesti savo.",
+            "normalize_audio": "Konvertuoja išvestį į normalizuotą MP3 su ffmpeg, kad mažų garsiakalbių garsumas būtų tolygesnis.",
+            "protect_free_tier": "Kai Groq praneša, kad ši paslauga pasiekė užklausą, prieigos raktą arba žinomą teksto į kalbą simbolių ribą, Home Assistant pristabdo tik šią paslaugą, kol bus nustatyta iš naujo, prieš išsiųsdama daugiau užklausų."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Vaizdo atpažinimo paslauga",
+      "initiate_flow": {
+        "user": "Pridėkite vaizdo atpažinimo funkciją",
+        "reconfigure": "Iš naujo sukonfigūruokite vaizdo atpažinimą"
+      },
+      "abort": {
+        "reconfigure_successful": "Vaizdo atpažinimo paslauga sėkmingai atnaujinta."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Vaizdo atpažinimas",
+          "data": {
+            "name": "Vardas",
+            "model": "Modelis",
+            "system_prompt": "Sistemos raginimas",
+            "protect_free_tier": "Laisvos pakopos apsauga"
+          },
+          "data_description": {
+            "name": "Patogus šio vaizdo atpažinimo paslaugos egzemplioriaus pavadinimas.",
+            "model": "Groq regėjimo modelis, naudojamas vaizdams tikrinti.",
+            "system_prompt": "Pasirenkamos instrukcijos, kaip atsakyti į klausimus apie vaizdą.",
+            "protect_free_tier": "Kai Groq praneša, kad ši paslauga pasiekė užklausų arba prieigos raktų limitą, Home Assistant pristabdo tik šią paslaugą iki Groq nustatymo iš naujo laiko, prieš išsiųsdama daugiau užklausų."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Duomenų generavimo užduotys"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Assist"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Iš kalbos į tekstą"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Tekstas į kalbą"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "ffmpeg reikalingas Groq garso normalizavimui",
+      "description": "Teksto į kalbą paslauga Groq {service_name} sukonfigūruota taip, kad normalizuotų generuojamą garsą, tačiau Home Assistant nepavyko paleisti ffmpeg. Įdiekite ffmpeg Home Assistant priegloboje arba išjunkite šios Groq teksto į kalbą paslaugos garso normalizavimą."
+    },
+    "model_access": {
+      "title": "Groq modelis nepasiekiamas",
+      "description": "Groq pranešė, kad modelis {model} nepasiekiamas šioje paskyroje. Patikrinkite modelio pavadinimą Groq konsolėje, patvirtinkite, kad modelis įgalintas paskyroje, arba pasirinkite kitą Groq modelį šioje integracijoje."
+    },
+    "model_configuration": {
+      "title": "Groq paslaugų modelio konfigūracija neteisinga",
+      "description": "Groq paslauga {service_name} sukonfigūruota naudoti modelį {model}, tačiau žinoma, kad šis modelis nepalaiko {feature}. Pasirinkite modelį, kuris palaiko šį paslaugos tipą."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Kelios Groq paslaugos atitinka service_id: {service_id}"
+    },
+    "config_entry_not_found": {
+      "message": "Groq konfigūracijos įrašas nerastas: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Nerastas įkeltas Groq konfigūracijos įrašas"
+    },
+    "multiple_config_entries": {
+      "message": "Įkeliami keli Groq konfigūracijos įrašai; pateikti config_entry_id arba service_id"
+    },
+    "service_not_found": {
+      "message": "Groq {service_type} paslauga nerasta: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Sukonfigūruotos kelios Groq {service_type} paslaugos; pateikti service_id"
+    },
+    "unsupported_model": {
+      "message": "Groq modelis {model} nepalaiko {feature}"
+    },
+    "completion_token_limit": {
+      "message": "Groq modelis {model} palaiko daugiausiai {limit} užbaigimo žetonų"
+    },
+    "select_one_camera": {
+      "message": "Pasirinkite tik vieną kameros objektą"
+    },
+    "camera_capture_failed": {
+      "message": "Nepavyko užfiksuoti vaizdo iš fotoaparato objekto {entity_id}"
+    },
+    "local_image_path_not_allowed": {
+      "message": "Vietinio vaizdo kelias nėra Home Assistant allowlist_external_dirs"
+    },
+    "local_image_not_found": {
+      "message": "Vietinis vaizdo failas nerastas: {path}"
+    },
+    "local_file_not_image": {
+      "message": "Vietinis failas nėra vaizdas: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Nepavyko išspręsti vaizdo failo: {path}"
+    },
+    "selected_media_not_image": {
+      "message": "Pasirinkta laikmena nėra vaizdas: {path}"
+    },
+    "image_source_required": {
+      "message": "Pasirinkite fotoaparato objektą, vaizdo failą, vietinį vaizdo kelią arba vaizdą URL"
+    },
+    "invalid_image_url": {
+      "message": "Vaizdas URL turi būti http, https arba vaizdo duomenys URL"
+    },
+    "image_too_large": {
+      "message": "Pasirinktas vaizdas per didelis; maksimalus dydis yra {limit_mb} MB"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "Vietinis garso kelias nėra Home Assistant allowlist_external_dirs"
+    },
+    "local_audio_not_found": {
+      "message": "Vietinis garso failas nerastas: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "Vietinis failas nėra garso įrašas: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Nepavyko išspręsti garso failo: {path}"
+    },
+    "audio_media_local_required": {
+      "message": "Pasirinktas garso įrašas turi išsiskirti į vietinį failą"
+    },
+    "selected_media_not_audio": {
+      "message": "Pasirinkta laikmena nėra garso įrašas: {path}"
+    },
+    "audio_source_required": {
+      "message": "Pasirinkite garso failą arba vietinį garso kelią"
+    },
+    "audio_too_large": {
+      "message": "Pasirinktas garsas per didelis; maksimalus dydis yra {limit_mb} MB"
+    },
+    "request_invalid": {
+      "message": "{message}"
+    }
+  }
+}

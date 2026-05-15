@@ -1,0 +1,350 @@
+{
+  "config": {
+    "initiate_flow": {
+      "user": "Lägg till Groq-konto"
+    },
+    "step": {
+      "user": {
+        "title": "Lägg till Groq",
+        "description": "Se dokumentationen för ytterligare information.",
+        "data": {
+          "name": "Namn",
+          "api_key": "Ange Groq API-nyckel"
+        },
+        "data_description": {
+          "name": "Ett vänligt namn för detta Groq-konto. Använd detta för att identifiera API-nyckeln eller faktureringsprojektet.",
+          "api_key": "Groq API nyckel för detta konto. Lägg till ytterligare ett Groq-konto om du vill använda en annan nyckel för en separat uppsättning tjänster."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Autentisera Groq igen",
+        "description": "Dina referenser är inte längre giltiga. Ange en ny API-nyckel.",
+        "data": {
+          "api_key": "Groq API-nyckel"
+        }
+      },
+      "reconfigure": {
+        "title": "Konfigurera om Groq",
+        "description": "Uppdatera Groq-kontonamnet eller byt ut API-nyckeln.",
+        "data": {
+          "name": "Namn",
+          "api_key": "Groq API-nyckel"
+        },
+        "data_description": {
+          "name": "Ett vänligt namn för detta Groq-konto.",
+          "api_key": "Valfri ersättningsnyckel för API. Lämna tomt för att behålla den aktuella API-nyckeln."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Groq-kontot har uppdaterats framgångsrikt."
+    },
+    "error": {
+      "cannot_connect": "Kunde inte ansluta till Groq. Kontrollera din nätverksanslutning och försök igen.",
+      "duplicate_api_key": "Ett annat Groq-konto använder redan denna API-nyckel.",
+      "invalid_auth": "Ogiltig Groq API-nyckel. Ange en giltig nyckel.",
+      "wrong_api_key": "Ogiltig API-nyckel. Ange en giltig API-nyckel.",
+      "invalid_url": "Ogiltig URL. Ange en giltig URL.",
+      "invalid_enabled_features": "En eller flera valda funktioner stöds inte.",
+      "invalid_response_format": "Ogiltigt svarsformat.",
+      "unsupported_reasoning_model": "Den valda modellen stöder inte resonemangsalternativ.",
+      "unsupported_prompt_caching_model": "Den valda modellen stöder inte lokal svarscache.",
+      "unsupported_structured_outputs_model": "Den valda modellen stöder inte strukturerade utdata.",
+      "reserved_request_body_option": "Ytterligare textalternativ för begäran kan inte åsidosätta modell, meddelanden eller stream. Använd de dedikerade fälten istället.",
+      "max_completion_tokens_exceeded": "Den valda modellen stöder inte så många maxavslutande tokens.",
+      "invalid_voice": "Den valda rösten är inte tillgänglig för den valda modellen.",
+      "select_voice_for_model": "Välj en röst för den valda modellen.",
+      "required": "Detta fält är obligatoriskt.",
+      "unknown": "Oväntat fel vid validering av API-nyckeln. Försök igen.",
+      "unknown_error": "Oväntat fel — försök igen."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Konfigurera Groq-alternativ",
+        "data": {
+          "api_key": "Groq API-nyckel"
+        },
+        "data_description": {
+          "api_key": "Valfri ersättningsnyckel för API för detta Groq-konto."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Textgenereringstjänst",
+      "initiate_flow": {
+        "user": "Lägg till textgenerering",
+        "reconfigure": "Konfigurera om textgenerering"
+      },
+      "abort": {
+        "reconfigure_successful": "Textgenereringstjänsten har uppdaterats framgångsrikt."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Textgenerering",
+          "description": "Valda modellfunktioner: {model_capabilities}",
+          "data": {
+            "name": "Namn",
+            "model": "Modell",
+            "system_prompt": "Systemprompt",
+            "temperature": "Temperatur",
+            "advanced_options": "Konfigurera avancerade förfrågningsalternativ",
+            "protect_free_tier": "Free-Leer Protection"
+          },
+          "data_description": {
+            "name": "Ett vänligt namn för denna textgenereringstjänst. Home Assistant använder detta för Assist och AI uppgiftsenheter.",
+            "model": "Groq-chattmodellen som används för textsvar, Assist-konversationer och datagenereringsuppgifter.",
+            "system_prompt": "Instruktioner som vägleder modellen. Standarden matchar Home Assistant:s AI-uppgiftsprompt.",
+            "temperature": "Styr svarsvariation. Lägre värden är mer förutsägbara; högre värden är mer kreativa.",
+            "advanced_options": "Öppnar avancerade kontroller för mindre vanliga Groq chattförfrågningar.",
+            "protect_free_tier": "När Groq rapporterar att denna tjänst har nått en begäran eller token-gräns, pausar Home Assistant endast denna tjänst tills Groq:s återställningstid innan den skickar fler förfrågningar."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Avancerad textgenerering",
+          "data": {
+            "max_tokens": "Max fullbordande tokens",
+            "top_p": "Top P",
+            "stop": "Stoppsekvenser",
+            "seed": "Frö",
+            "service_tier": "Servicenivå",
+            "stream": "Streama Assist-svar",
+            "reasoning_effort": "Resonerande ansträngning",
+            "reasoning_format": "Resoneringsformat",
+            "include_reasoning": "Inkludera resonemang",
+            "prompt_caching": "Lokal svarscache",
+            "structured_outputs": "Använd strukturerade utdata",
+            "schema_name": "Schemanamn",
+            "schema": "JSON schema",
+            "strict": "Strikt schemaläge",
+            "request_body_options": "Ytterligare textalternativ för begäran"
+          },
+          "data_description": {
+            "max_tokens": "Begränsar antalet tokens Groq kan generera i svaret.",
+            "top_p": "Alternativ provtagningskontroll. Lägre värden begränsar genereringen till mer sannolika tokens.",
+            "stop": "En stoppsekvens per rad. Genereringen avbryts när någon sekvens produceras.",
+            "seed": "Best-effort deterministisk samplingsfrö för repeterbara svar.",
+            "service_tier": "Valfri Groq bearbetningsnivå för begäran.",
+            "stream": "Streamar Assist-svar till Home Assistant-chattloggen när det stöds.",
+            "reasoning_effort": "Resonera budget endast för resonemangsmodeller som stöds.",
+            "reasoning_format": "Hur resonemangsmodeller som stöds avslöjar resonemangsinnehåll.",
+            "include_reasoning": "Begär resonemangsinnehåll på modeller som stöds när inget resonemangsformat är inställt.",
+            "prompt_caching": "Cacher som matchar Home Assistant-tjänstsvar lokalt för modeller som stöds.",
+            "structured_outputs": "Begär JSON som följer det konfigurerade schemat när denna tjänst används för datagenerering.",
+            "schema_name": "En kort identifierare skickad till Groq med schemat.",
+            "schema": "JSON Schema-objekt skickat som response_format.json_schema.schema.",
+            "strict": "Använder Groq begränsad avkodning när den valda modellen stöder strikt strukturerade utdata.",
+            "request_body_options": "JSON-objektet slogs samman med begäran om chattslutförande. Detta är den avancerade genomgången för varje Groq chatt-skapande textalternativ som inte visas som ett dedikerat fält, inklusive citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Tal-till-text-tjänst",
+      "initiate_flow": {
+        "user": "Lägg till tal-till-text",
+        "reconfigure": "Konfigurera om tal-till-text"
+      },
+      "abort": {
+        "reconfigure_successful": "Tal-till-text-tjänsten har uppdaterats."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Tal-till-text",
+          "data": {
+            "name": "Namn",
+            "model": "Modell",
+            "language": "Språk",
+            "protect_free_tier": "Free-Leer Protection"
+          },
+          "data_description": {
+            "name": "Ett vänligt namn för denna Tal-till-Text-tjänsteinstans.",
+            "model": "Groq Whisper-modellen som används för att transkribera ljud.",
+            "language": "Språktips skickas till Groq för transkription. Standard för språket som är konfigurerat i Home Assistant när det är tillgängligt.",
+            "protect_free_tier": "När Groq rapporterar att den här tjänsten har nått en begäran eller token-gräns, pausar Home Assistant endast denna tjänst tills Groq återställer tid innan fler förfrågningar skickas."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Text-till-tal-tjänst",
+      "initiate_flow": {
+        "user": "Lägg till text-till-tal",
+        "reconfigure": "Konfigurera om text-till-tal"
+      },
+      "abort": {
+        "reconfigure_successful": "Text-till-tal-tjänsten har uppdaterats."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Text-till-tal",
+          "data": {
+            "name": "Namn",
+            "model": "Modell",
+            "voice": "Röst",
+            "vocal_directions": "Standard vokalanvisningar",
+            "normalize_audio": "Aktivera loudness för genererat ljud (använder mer CPU)",
+            "protect_free_tier": "Free-Leer Protection"
+          },
+          "data_description": {
+            "name": "Ett vänligt namn för denna text-till-tal-tjänsteinstans.",
+            "model": "Groq-talmodellen som används för att generera ljud.",
+            "voice": "Den röstpersona som används av den valda talmodellen. Genom att ändra modellen rensas röster som inte är tillgängliga för den nya modellen.",
+            "vocal_directions": "Valfri leveransstil föregås av tal, till exempel glad eller viskande. Du kan välja en förinställning eller skriva din egen.",
+            "normalize_audio": "Konverterar utsignalen till normaliserad MP3 med ffmpeg för mer konsekvent ljudstyrka på små högtalare.",
+            "protect_free_tier": "När Groq rapporterar att den här tjänsten har nått en begäran, token eller en känd text-till-tal-teckengräns, pausar Home Assistant endast denna tjänst tills återställningstiden innan den skickar fler förfrågningar."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Bildigenkänningstjänst",
+      "initiate_flow": {
+        "user": "Lägg till bildigenkänning",
+        "reconfigure": "Konfigurera om bildigenkänning"
+      },
+      "abort": {
+        "reconfigure_successful": "Bildigenkänningstjänsten har uppdaterats."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Bildigenkänning",
+          "data": {
+            "name": "Namn",
+            "model": "Modell",
+            "system_prompt": "Systemprompt",
+            "protect_free_tier": "Free-Leer Protection"
+          },
+          "data_description": {
+            "name": "Ett vänligt namn för denna tjänsteinstans för bildigenkänning.",
+            "model": "Visionsmodellen Groq som används för att inspektera bilder.",
+            "system_prompt": "Valfria instruktioner som vägleder hur bildfrågor besvaras.",
+            "protect_free_tier": "När Groq rapporterar att den här tjänsten har nått en begäran eller token-gräns, pausar Home Assistant endast denna tjänst tills Groq:s återställningstid innan den skickar fler förfrågningar."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Datagenereringsuppgifter"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Assist"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Tal-till-text"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Text-till-tal"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "ffmpeg krävs för Groq ljudnormalisering",
+      "description": "Groq text-till-tal-tjänsten {service_name} är konfigurerad för att normalisera genererat ljud, men Home Assistant kunde inte starta ffmpeg. Installera ffmpeg på Home Assistant-värden eller stäng av ljudnormalisering för denna Groq text-till-tal-tjänst."
+    },
+    "model_access": {
+      "title": "Groq-modellen är inte tillgänglig",
+      "description": "Groq rapporterade att modellen {model} inte är tillgänglig för detta konto. Kontrollera modellnamnet i Groq-konsolen, bekräfta att modellen är aktiverad för kontot eller välj en annan Groq-modell i denna integration."
+    },
+    "model_configuration": {
+      "title": "Groq tjänstmodellkonfiguration är ogiltig",
+      "description": "Groq-tjänsten {service_name} är konfigurerad att använda modellen {model}, men den modellen är inte känd för att stödja {feature}. Välj en modell som stöder denna tjänstetyp."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Flera Groq-tjänster matchar service_id: {service_id}"
+    },
+    "config_entry_not_found": {
+      "message": "Groq konfigurationspost hittades inte: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Ingen laddad Groq-konfigurationspost hittades"
+    },
+    "multiple_config_entries": {
+      "message": "Flera Groq-konfigurationsposter laddas; tillhandahålla config_entry_id eller service_id"
+    },
+    "service_not_found": {
+      "message": "Groq {service_type} tjänsten hittades inte: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Flera Groq {service_type}-tjänster är konfigurerade; tillhandahålla service_id"
+    },
+    "unsupported_model": {
+      "message": "Groq modell {model} är inte känd för att stödja {feature}"
+    },
+    "completion_token_limit": {
+      "message": "Groq modell {model} stöder som mest {limit} kompletteringstoken"
+    },
+    "select_one_camera": {
+      "message": "Välj endast en kameraenhet"
+    },
+    "camera_capture_failed": {
+      "message": "Kunde inte ta bild från kameraenheten {entity_id}"
+    },
+    "local_image_path_not_allowed": {
+      "message": "Lokal bildsökväg finns inte i Home Assistant:s allowlist_external_dirs"
+    },
+    "local_image_not_found": {
+      "message": "Lokal bildfil hittades inte: {path}"
+    },
+    "local_file_not_image": {
+      "message": "Lokal fil är inte en bild: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Kunde inte lösa bildfilen: {path}"
+    },
+    "selected_media_not_image": {
+      "message": "Valt media är inte en bild: {path}"
+    },
+    "image_source_required": {
+      "message": "Välj en kameraenhet, bildfil, lokal bildsökväg eller bild URL"
+    },
+    "invalid_image_url": {
+      "message": "Bild URL måste vara en http, https eller bilddata URL"
+    },
+    "image_too_large": {
+      "message": "Den valda bilden är för stor; maximal storlek är {limit_mb} MB"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "Lokal ljudsökväg finns inte i Home Assistant:s allowlist_external_dirs"
+    },
+    "local_audio_not_found": {
+      "message": "Lokal ljudfil hittades inte: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "Lokal fil är inte ljud: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Kunde inte lösa ljudfilen: {path}"
+    },
+    "audio_media_local_required": {
+      "message": "Valt ljud måste lösas till en lokal fil"
+    },
+    "selected_media_not_audio": {
+      "message": "Valt media är inte ljud: {path}"
+    },
+    "audio_source_required": {
+      "message": "Välj en ljudfil eller lokal ljudsökväg"
+    },
+    "audio_too_large": {
+      "message": "Det valda ljudet är för stort; maximal storlek är {limit_mb} MB"
+    },
+    "request_invalid": {
+      "message": "{message}"
+    }
+  }
+}

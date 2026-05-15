@@ -1,0 +1,350 @@
+{
+  "config": {
+    "initiate_flow": {
+      "user": "Adăugați un cont Groq"
+    },
+    "step": {
+      "user": {
+        "title": "Adăugați Groq",
+        "description": "Consultați documentația pentru mai multe informații.",
+        "data": {
+          "name": "Nume",
+          "api_key": "Introduceți tasta Groq API"
+        },
+        "data_description": {
+          "name": "Un nume prietenos pentru acest cont Groq. Utilizați aceasta pentru a identifica cheia API sau proiectul de facturare.",
+          "api_key": "Groq API cheie pentru acest cont. Adăugați un alt cont Groq dacă doriți să utilizați o cheie diferită pentru un set separat de servicii."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reautentificați Groq",
+        "description": "Acreditările dvs. nu mai sunt valide. Vă rugăm să introduceți o nouă cheie API.",
+        "data": {
+          "api_key": "Tasta Groq API"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigurați Groq",
+        "description": "Actualizați numele contului Groq sau înlocuiți cheia API.",
+        "data": {
+          "name": "Nume",
+          "api_key": "Groq API cheie"
+        },
+        "data_description": {
+          "name": "Un nume prietenos pentru acest cont Groq.",
+          "api_key": "Cheie de înlocuire opțională API. Lăsați gol pentru a păstra cheia API curentă."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Contul Groq a fost actualizat cu succes."
+    },
+    "error": {
+      "cannot_connect": "Nu s-a putut conecta la Groq. Verificați conexiunea la rețea și încercați din nou.",
+      "duplicate_api_key": "Un alt cont Groq utilizează deja această cheie API.",
+      "invalid_auth": "Cheie Groq API nevalidă. Vă rugăm să introduceți o cheie validă.",
+      "wrong_api_key": "Cheie API nevalidă. Vă rugăm să introduceți o cheie API validă.",
+      "invalid_url": "URL nevalid. Vă rugăm să introduceți un URL valid.",
+      "invalid_enabled_features": "Una sau mai multe caracteristici selectate nu sunt acceptate.",
+      "invalid_response_format": "Format de răspuns nevalid.",
+      "unsupported_reasoning_model": "Modelul selectat nu acceptă opțiuni de raționament.",
+      "unsupported_prompt_caching_model": "Modelul selectat nu acceptă stocarea în cache a răspunsurilor locale.",
+      "unsupported_structured_outputs_model": "Modelul selectat nu acceptă ieșiri structurate.",
+      "reserved_request_body_option": "Opțiunile suplimentare ale corpului cererii nu pot suprascrie modelul, mesajele sau fluxul. Utilizați în schimb câmpurile dedicate.",
+      "max_completion_tokens_exceeded": "Modelul selectat nu acceptă atât de multe jetoane de finalizare maxime.",
+      "invalid_voice": "Vocea selectată nu este disponibilă pentru modelul selectat.",
+      "select_voice_for_model": "Selectați o voce pentru modelul selectat.",
+      "required": "Acest câmp este obligatoriu.",
+      "unknown": "Eroare neașteptată la validarea cheii API. Vă rugăm să încercați din nou.",
+      "unknown_error": "Eroare neașteptată — vă rugăm să încercați din nou."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configurați opțiunile Groq",
+        "data": {
+          "api_key": "Groq API cheie"
+        },
+        "data_description": {
+          "api_key": "Cheie de înlocuire opțională API pentru acest cont Groq."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Serviciul de generare a textului",
+      "initiate_flow": {
+        "user": "Adăugați generare de text",
+        "reconfigure": "Reconfigurați generarea textului"
+      },
+      "abort": {
+        "reconfigure_successful": "Serviciul de generare de text a fost actualizat cu succes."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Generare text",
+          "description": "Capacitățile modelului selectat: {model_capabilities}",
+          "data": {
+            "name": "Nume",
+            "model": "Model",
+            "system_prompt": "Solicitare de sistem",
+            "temperature": "Temperatura",
+            "advanced_options": "Configurați opțiunile avansate de solicitare",
+            "protect_free_tier": "Protecție gratuită"
+          },
+          "data_description": {
+            "name": "Un nume prietenos pentru acest serviciu de generare de text. Home Assistant folosește acest lucru pentru entitățile task Assist și AI.",
+            "model": "Modelul de chat Groq utilizat pentru răspunsuri text, conversații Assist și sarcini de generare de date.",
+            "system_prompt": "Instrucțiuni care ghidează modelul. Valoarea implicită se potrivește cu promptul de activitate AI al lui Home Assistant.",
+            "temperature": "Controlează variația răspunsului. Valorile mai mici sunt mai previzibile; valorile mai mari sunt mai creative.",
+            "advanced_options": "Deschide controale avansate pentru opțiunile de solicitare de chat Groq mai puțin obișnuite.",
+            "protect_free_tier": "Când Groq raportează că acest serviciu a atins o limită de solicitare sau de simbol, Home Assistant întrerupe numai acest serviciu până la momentul de resetare a lui Groq înainte de a trimite mai multe solicitări."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Generare avansată de text",
+          "data": {
+            "max_tokens": "Număr maxim de jetoane de finalizare",
+            "top_p": "Sus P",
+            "stop": "Oprire secvențe",
+            "seed": "Sămânță",
+            "service_tier": "Nivel de serviciu",
+            "stream": "Transmiteți răspunsurile Assist",
+            "reasoning_effort": "Efort de raționament",
+            "reasoning_format": "Format de raționament",
+            "include_reasoning": "Includeți raționamentul",
+            "prompt_caching": "Cache de răspuns local",
+            "structured_outputs": "Utilizați ieșiri structurate",
+            "schema_name": "Numele schemei",
+            "schema": "JSON schema",
+            "strict": "Mod schema strict",
+            "request_body_options": "Opțiuni suplimentare pentru corpul solicitării"
+          },
+          "data_description": {
+            "max_tokens": "Limitează numărul de jetoane pe care Groq le poate genera în răspuns.",
+            "top_p": "Control alternativ de eșantionare. Valorile mai mici restricționează generarea la token-uri mai probabile.",
+            "stop": "O secvență de oprire pe linie. Generarea se oprește atunci când este produsă orice secvență.",
+            "seed": "Semințele de eșantionare deterministă cu cel mai bun efort pentru răspunsuri repetabile.",
+            "service_tier": "Nivelul de procesare Groq opțional pentru cerere.",
+            "stream": "Transmite răspunsurile Assist în jurnalul de chat Home Assistant atunci când este acceptat.",
+            "reasoning_effort": "Bugetul de raționament numai pentru modelele de raționament acceptate.",
+            "reasoning_format": "Modul în care modelele de raționament susținute expun conținutul raționamentului.",
+            "include_reasoning": "Solicită conținut de raționament pe modelele acceptate atunci când nu este setat niciun format de raționament.",
+            "prompt_caching": "Memorează în cache răspunsurile de serviciu Home Assistant la nivel local pentru modelele acceptate.",
+            "structured_outputs": "Solicită JSON care urmează schema configurată atunci când acest serviciu este utilizat pentru generarea de date.",
+            "schema_name": "Un identificator scurt trimis către Groq cu schema.",
+            "schema": "JSON Schema obiect trimis ca response_format.json_schema.schema.",
+            "strict": "Utilizează decodarea constrânsă Groq atunci când modelul selectat acceptă ieșiri structurate stricte.",
+            "request_body_options": "Obiect JSON fuzionat în corpul solicitării de finalizare a chatului. Aceasta este trecerea avansată pentru fiecare opțiune de creare a corpului de chat Groq care nu este afișată ca un câmp dedicat, inclusiv citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Serviciul Speech-to-Text",
+      "initiate_flow": {
+        "user": "Adăugați Speech-to-Text",
+        "reconfigure": "Reconfigurați Speech-to-Text"
+      },
+      "abort": {
+        "reconfigure_successful": "Serviciul Speech-to-Text a fost actualizat cu succes."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Vorbire în text",
+          "data": {
+            "name": "Nume",
+            "model": "Model",
+            "language": "Limba",
+            "protect_free_tier": "Protecție gratuită"
+          },
+          "data_description": {
+            "name": "Un nume prietenos pentru această instanță de serviciu Speech-to-Text.",
+            "model": "Modelul Groq Whisper folosit pentru a transcrie sunetul.",
+            "language": "Sugestie de limbă trimisă către Groq pentru transcriere. Limba configurată în Home Assistant este implicită atunci când este disponibilă.",
+            "protect_free_tier": "Când Groq raportează că acest serviciu a atins o limită de solicitare sau de simbol, Home Assistant întrerupe numai acest serviciu până la timpul de resetare a lui Groq înainte de a trimite mai multe solicitări."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Serviciu text-to-speech",
+      "initiate_flow": {
+        "user": "Adăugați text-to-speech",
+        "reconfigure": "Reconfigurați text-to-speech"
+      },
+      "abort": {
+        "reconfigure_successful": "Serviciul Text-to-Speech a fost actualizat cu succes."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Text-to-speech",
+          "data": {
+            "name": "Nume",
+            "model": "Model",
+            "voice": "Voce",
+            "vocal_directions": "Direcții vocale implicite",
+            "normalize_audio": "Activați volumul pentru sunetul generat (folosește mai mult CPU)",
+            "protect_free_tier": "Protecție gratuită"
+          },
+          "data_description": {
+            "name": "Un nume prietenos pentru această instanță de serviciu Text-to-Speech.",
+            "model": "Modelul de vorbire Groq folosit pentru a genera sunet.",
+            "voice": "Persoana vocală utilizată de modelul de vorbire selectat. Schimbarea modelului șterge vocile care nu sunt disponibile pentru noul model.",
+            "vocal_directions": "Stilul opțional de difuzare antepus vorbirii, cum ar fi vesel sau șoaptă. Puteți alege o presetare sau o puteți introduce pe propria dvs.",
+            "normalize_audio": "Convertește ieșirea în MP3 normalizat cu ffmpeg pentru un volum mai consistent pe difuzoarele mici.",
+            "protect_free_tier": "Când Groq raportează că acest serviciu a atins o cerere, un simbol sau o limită cunoscută de caractere Text-to-Speech, Home Assistant întrerupe numai acest serviciu până la ora de resetare înainte de a trimite mai multe solicitări."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Serviciu de recunoaștere a imaginii",
+      "initiate_flow": {
+        "user": "Adăugați Recunoaștere imagine",
+        "reconfigure": "Reconfigurați Recunoașterea imaginii"
+      },
+      "abort": {
+        "reconfigure_successful": "Serviciul de recunoaștere a imaginii a fost actualizat cu succes."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Recunoașterea imaginii",
+          "data": {
+            "name": "Nume",
+            "model": "Model",
+            "system_prompt": "Solicitare de sistem",
+            "protect_free_tier": "Protecție gratuită"
+          },
+          "data_description": {
+            "name": "Un nume prietenos pentru această instanță de serviciu de recunoaștere a imaginilor.",
+            "model": "Modelul de viziune Groq utilizat pentru inspectarea imaginilor.",
+            "system_prompt": "Instrucțiuni opționale care ghidează modul în care se răspunde la întrebările despre imagini.",
+            "protect_free_tier": "Când Groq raportează că acest serviciu a atins o limită de solicitare sau de simbol, Home Assistant întrerupe numai acest serviciu până la timpul de resetare a lui Groq înainte de a trimite mai multe solicitări."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Sarcini de generare a datelor"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Assist"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Vorbire în text"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Text-to-speech"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "ffmpeg este necesar pentru normalizarea audio Groq",
+      "description": "Serviciul Groq Text-to-Speech {service_name} este configurat pentru a normaliza sunetul generat, dar Home Assistant nu a putut porni ffmpeg. Instalați ffmpeg pe gazda Home Assistant sau dezactivați normalizarea audio pentru acest serviciu Groq Text-to-Speech."
+    },
+    "model_access": {
+      "title": "Modelul Groq nu este disponibil",
+      "description": "Groq a raportat că modelul {model} nu este disponibil pentru acest cont. Verificați numele modelului în Consola Groq, confirmați că modelul este activat pentru cont sau selectați un alt model Groq în această integrare."
+    },
+    "model_configuration": {
+      "title": "Configurația modelului de serviciu Groq este nevalidă",
+      "description": "Serviciul Groq {service_name} este configurat să utilizeze modelul {model}, dar nu se știe că modelul respectiv acceptă {feature}. Selectați un model care acceptă acest tip de serviciu."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Mai multe servicii Groq se potrivesc cu service_id: {service_id}"
+    },
+    "config_entry_not_found": {
+      "message": "Groq intrarea de configurare nu a fost găsită: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Nu a fost găsită nicio intrare de configurare Groq încărcată"
+    },
+    "multiple_config_entries": {
+      "message": "Sunt încărcate mai multe intrări de configurare Groq; furnizați config_entry_id sau service_id"
+    },
+    "service_not_found": {
+      "message": "Groq {service_type} Serviciul nu a fost găsit: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Sunt configurate mai multe servicii Groq {service_type}; furnizați service_id"
+    },
+    "unsupported_model": {
+      "message": "Modelul Groq {model} nu este cunoscut să accepte {feature}"
+    },
+    "completion_token_limit": {
+      "message": "Modelul Groq {model} acceptă cel mult jetoane de finalizare {limit}"
+    },
+    "select_one_camera": {
+      "message": "Selectați o singură entitate cameră"
+    },
+    "camera_capture_failed": {
+      "message": "Nu s-a putut capta imaginea de la entitatea de cameră {entity_id}"
+    },
+    "local_image_path_not_allowed": {
+      "message": "Calea locală a imaginii nu este în Home Assistant allowlist_external_dirs"
+    },
+    "local_image_not_found": {
+      "message": "Fișier imagine local nu a fost găsit: {path}"
+    },
+    "local_file_not_image": {
+      "message": "Fișierul local nu este o imagine: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Nu s-a putut rezolva fișierul imagine: {path}"
+    },
+    "selected_media_not_image": {
+      "message": "Media selectată nu este o imagine: {path}"
+    },
+    "image_source_required": {
+      "message": "Selectați o entitate de cameră, un fișier imagine, o cale locală a imaginii sau o imagine URL"
+    },
+    "invalid_image_url": {
+      "message": "Imaginea URL trebuie să fie un http, https sau date de imagine URL"
+    },
+    "image_too_large": {
+      "message": "Imaginea selectată este prea mare; dimensiunea maximă este {limit_mb} MB"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "Calea audio locală nu este în Home Assistant allowlist_external_dirs"
+    },
+    "local_audio_not_found": {
+      "message": "Fișier audio local nu a fost găsit: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "Fișierul local nu este audio: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Nu s-a putut rezolva fișierul audio: {path}"
+    },
+    "audio_media_local_required": {
+      "message": "Audio selectat trebuie să se rezolve într-un fișier local"
+    },
+    "selected_media_not_audio": {
+      "message": "Media selectată nu este audio: {path}"
+    },
+    "audio_source_required": {
+      "message": "Selectați un fișier audio sau o cale audio locală"
+    },
+    "audio_too_large": {
+      "message": "Sunetul selectat este prea mare; dimensiunea maximă este {limit_mb} MB"
+    },
+    "request_invalid": {
+      "message": "{message}"
+    }
+  }
+}

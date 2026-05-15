@@ -1,0 +1,350 @@
+{
+  "config": {
+    "initiate_flow": {
+      "user": "Lisage Groq konto"
+    },
+    "step": {
+      "user": {
+        "title": "Lisage Groq",
+        "description": "Lisateabe saamiseks vaadake dokumentatsiooni.",
+        "data": {
+          "name": "Nimi",
+          "api_key": "Sisestage võti Groq API"
+        },
+        "data_description": {
+          "name": "Selle Groq konto sõbralik nimi. Kasutage seda API-võtme või arveldusprojekti tuvastamiseks.",
+          "api_key": "Selle konto võti Groq API. Lisage veel üks Groq konto, kui soovite kasutada eraldi teenustekomplekti jaoks teistsugust võtit."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Autentige Groq uuesti",
+        "description": "Teie mandaat enam ei kehti. Sisestage uus API võti.",
+        "data": {
+          "api_key": "võti Groq API"
+        }
+      },
+      "reconfigure": {
+        "title": "Seadistage Groq uuesti",
+        "description": "Värskendage Groq konto nime või asendage võti API.",
+        "data": {
+          "name": "Nimi",
+          "api_key": "võti Groq API"
+        },
+        "data_description": {
+          "name": "Selle Groq konto sõbralik nimi.",
+          "api_key": "Valikuline asendusvõti API. Praeguse võtme API säilitamiseks jätke tühjaks."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Groq konto värskendamine õnnestus."
+    },
+    "error": {
+      "cannot_connect": "Seadmega Groq ei saanud ühendust luua. Kontrollige oma võrguühendust ja proovige uuesti.",
+      "duplicate_api_key": "Teine Groq konto kasutab juba seda API võtit.",
+      "invalid_auth": "Vigane võti Groq API. Sisestage kehtiv võti.",
+      "wrong_api_key": "Vigane võti API. Sisestage kehtiv API võti.",
+      "invalid_url": "Kehtetu URL. Sisestage kehtiv URL.",
+      "invalid_enabled_features": "Ühte või mitut valitud funktsiooni ei toetata.",
+      "invalid_response_format": "Vale vastuse vorming.",
+      "unsupported_reasoning_model": "Valitud mudel ei toeta arutlusvõimalusi.",
+      "unsupported_prompt_caching_model": "Valitud mudel ei toeta kohalikku vastuste vahemällu salvestamist.",
+      "unsupported_structured_outputs_model": "Valitud mudel ei toeta struktureeritud väljundeid.",
+      "reserved_request_body_option": "Taotluse lisavalikud ei saa alistada mudelit, sõnumeid ega voogu. Kasutage selle asemel spetsiaalseid välju.",
+      "max_completion_tokens_exceeded": "Valitud mudel ei toeta nii palju maksimaalseid lõpetamismärke.",
+      "invalid_voice": "Valitud hääl pole valitud mudeli jaoks saadaval.",
+      "select_voice_for_model": "Valige valitud mudeli hääl.",
+      "required": "See väli on kohustuslik.",
+      "unknown": "Ootamatu tõrge võtme API valideerimisel. Palun proovi uuesti.",
+      "unknown_error": "Ootamatu viga – proovige uuesti."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Konfigureerige Groq suvandid",
+        "data": {
+          "api_key": "võti Groq API"
+        },
+        "data_description": {
+          "api_key": "Selle Groq konto valikuline asendusvõti API."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Teksti genereerimise teenus",
+      "initiate_flow": {
+        "user": "Lisa teksti genereerimine",
+        "reconfigure": "Teksti genereerimise uuesti seadistamine"
+      },
+      "abort": {
+        "reconfigure_successful": "Teksti genereerimise teenust värskendati edukalt."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Teksti genereerimine",
+          "description": "Valitud mudeli võimalused: {model_capabilities}",
+          "data": {
+            "name": "Nimi",
+            "model": "Mudel",
+            "system_prompt": "Süsteemi viip",
+            "temperature": "Temperatuur",
+            "advanced_options": "Konfigureerige täpsemad päringu valikud",
+            "protect_free_tier": "Vabatasemeline kaitse"
+          },
+          "data_description": {
+            "name": "Selle teksti genereerimisteenuse sõbralik nimi. Home Assistant kasutab seda Assist ja AI tegumiüksuste jaoks.",
+            "model": "Vestlusmudel Groq, mida kasutatakse tekstivastaste, Assist vestluste ja andmete genereerimise ülesannete jaoks.",
+            "system_prompt": "Juhised, mis juhivad mudelit. Vaikimisi vastab Home Assistant AI tegumiviibale.",
+            "temperature": "Kontrollib vastuse varieerumist. Madalamad väärtused on prognoositavamad; kõrgemad väärtused on loomingulisemad.",
+            "advanced_options": "Avab täpsemad juhtelemendid vähemlevinud Groq vestlustaotluste valikute jaoks.",
+            "protect_free_tier": "Kui Groq teatab, et see teenus on jõudnud päringu või loa limiidini, peatab Home Assistant ainult selle teenuse kuni Groq lähtestamisajani, enne kui saadab rohkem taotlusi."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Täiustatud teksti genereerimine",
+          "data": {
+            "max_tokens": "Maksimaalne lõpetamisluba",
+            "top_p": "Ülemine P",
+            "stop": "Peatage jadad",
+            "seed": "Seemne",
+            "service_tier": "Teenuse tase",
+            "stream": "Voogesitage Assist vastuseid",
+            "reasoning_effort": "Arutlustöö",
+            "reasoning_format": "Põhjendusvorm",
+            "include_reasoning": "Kaasake arutluskäik",
+            "prompt_caching": "Kohalik vastuste vahemälu",
+            "structured_outputs": "Kasutage struktureeritud väljundeid",
+            "schema_name": "Skeemi nimi",
+            "schema": "JSON schema",
+            "strict": "Range skeemirežiim",
+            "request_body_options": "Taotluse lisavalikud"
+          },
+          "data_description": {
+            "max_tokens": "Piirab žetoonide arvu, mida Groq võib vastuses genereerida.",
+            "top_p": "Alternatiivne diskreetimiskontroll. Madalamad väärtused piiravad tõenäolisemate märkide loomist.",
+            "stop": "Üks peatusjärjestus rea kohta. Genereerimine peatub, kui toodetakse mis tahes jada.",
+            "seed": "Parima jõupingutusega deterministliku proovivõtu seeme korduvate vastuste jaoks.",
+            "service_tier": "Taotluse valikuline töötlemistasand Groq.",
+            "stream": "Voogesitab Assist vastused Home Assistant vestluslogi, kui seda toetatakse.",
+            "reasoning_effort": "Põhjenduseelarve ainult toetatud arutlusmudelite jaoks.",
+            "reasoning_format": "Kuidas toetatud arutlusmudelid arutlussisu paljastavad.",
+            "include_reasoning": "Nõuab põhjendatud sisu toetatud mudelitel, kui arutlusvormingut pole määratud.",
+            "prompt_caching": "Vahemälu, mis vastavad Home Assistant teenuse vastustele toetatud mudelite jaoks kohapeal.",
+            "structured_outputs": "Nõuab JSON, mis järgib konfigureeritud skeemi, kui seda teenust kasutatakse andmete genereerimiseks.",
+            "schema_name": "Lühike identifikaator, mis saadeti numbrile Groq koos skeemiga.",
+            "schema": "JSON Schema objekt saadeti kui response_format.json_schema.schema.",
+            "strict": "Kasutab Groq piiratud dekodeerimist, kui valitud mudel toetab rangelt struktureeritud väljundeid.",
+            "request_body_options": "JSON objekt liideti vestluse lõpetamise taotluse kehasse. See on täpsem läbipääs igale Groq vestluse keha loomise valikule, mida ei kuvata spetsiaalse väljana, sealhulgas citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Kõne-teksti teenus",
+      "initiate_flow": {
+        "user": "Lisa kõne tekstiks",
+        "reconfigure": "Konfigureerige kõne tekstiks ümber"
+      },
+      "abort": {
+        "reconfigure_successful": "Kõne-teksti teenuse värskendamine õnnestus."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Kõnest tekstiks",
+          "data": {
+            "name": "Nimi",
+            "model": "Mudel",
+            "language": "Keel",
+            "protect_free_tier": "Vabatasemeline kaitse"
+          },
+          "data_description": {
+            "name": "Selle kõneteksti teenuse eksemplari sõbralik nimi.",
+            "model": "Heli transkribeerimiseks kasutatav mudel Groq Whisper.",
+            "language": "Keelevihje saadeti transkriptsiooniks numbrile Groq. Vaikimisi on Home Assistant-s konfigureeritud keel, kui see on saadaval.",
+            "protect_free_tier": "Kui Groq teatab, et see teenus on jõudnud päringu või lubade limiidini, peatab Home Assistant ainult selle teenuse kuni Groq lähtestamisajani, enne kui saadab rohkem päringuid."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Kõnesünteesi teenus",
+      "initiate_flow": {
+        "user": "Lisa tekst kõneks",
+        "reconfigure": "Konfigureerige kõnesünteesi ümber"
+      },
+      "abort": {
+        "reconfigure_successful": "Kõnesünteesi teenuse värskendamine õnnestus."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Tekst kõneks",
+          "data": {
+            "name": "Nimi",
+            "model": "Mudel",
+            "voice": "Hääl",
+            "vocal_directions": "Vaikimisi häälejuhised",
+            "normalize_audio": "Luba genereeritud heli valjus (kasutab rohkem protsessorit)",
+            "protect_free_tier": "Vabatasemeline kaitse"
+          },
+          "data_description": {
+            "name": "Sõbralik nimi kõnesünteesi teenuse eksemplarile.",
+            "model": "Heli genereerimiseks kasutatav kõnemudel Groq.",
+            "voice": "Valitud kõnemudeli kasutatav häälisiku. Mudeli muutmine kustutab hääled, mis pole uue mudeli jaoks saadaval.",
+            "vocal_directions": "Kõnele lisatud valikuline esitusviis, näiteks rõõmsameelne või sosin. Saate valida eelseadistuse või sisestada oma.",
+            "normalize_audio": "Teisendab väljundi normaliseeritud MP3-ks koos ffmpeg-ga, et tagada ühtlasem helitugevus väikestes kõlarites.",
+            "protect_free_tier": "Kui Groq teatab, et see teenus on jõudnud päringu, loa või teadaoleva kõnesündroomi tähemärgipiiranguni, peatab Home Assistant ainult selle teenuse kuni lähtestamisajani, enne kui saadab rohkem päringuid."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Pildituvastusteenus",
+      "initiate_flow": {
+        "user": "Lisage pildituvastus",
+        "reconfigure": "Seadistage pildituvastus uuesti"
+      },
+      "abort": {
+        "reconfigure_successful": "Pildituvastusteenuse värskendamine õnnestus."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Pildituvastus",
+          "data": {
+            "name": "Nimi",
+            "model": "Mudel",
+            "system_prompt": "Süsteemi viip",
+            "protect_free_tier": "Vabatasemeline kaitse"
+          },
+          "data_description": {
+            "name": "Selle pildituvastusteenuse eksemplari sõbralik nimi.",
+            "model": "Piltide kontrollimiseks kasutatav nägemismudel Groq.",
+            "system_prompt": "Valikulised juhised, mis aitavad vastata pildi küsimustele.",
+            "protect_free_tier": "Kui Groq teatab, et see teenus on jõudnud päringu või loa limiidini, peatab Home Assistant ainult selle teenuse kuni Groq lähtestamisajani, enne kui saadab rohkem taotlusi."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Andmete genereerimise ülesanded"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Assist"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Kõnest tekstiks"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Tekst kõneks"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "ffmpeg on vajalik Groq heli normaliseerimiseks",
+      "description": "Kõnesünteesi teenus Groq {service_name} on konfigureeritud genereeritud heli normaliseerimiseks, kuid Home Assistant ei saanud teenust ffmpeg käivitada. Installige ffmpeg Home Assistant hosti või lülitage selle kõnesündroomi teenuse Groq heli normaliseerimine välja."
+    },
+    "model_access": {
+      "title": "Groq mudel pole saadaval",
+      "description": "Groq teatas, et mudel {model} pole selle konto jaoks saadaval. Kontrollige Groq konsoolis mudeli nime, veenduge, et mudel on konto jaoks lubatud, või valige selles integratsioonis mõni muu Groq mudel."
+    },
+    "model_configuration": {
+      "title": "Groq teenusemudeli konfiguratsioon on kehtetu",
+      "description": "Teenus Groq {service_name} on konfigureeritud kasutama mudelit {model}, kuid see mudel teadaolevalt ei toeta {feature}. Valige mudel, mis seda teenusetüüpi toetab."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Mitu Groq teenust vastab service_id: {service_id}"
+    },
+    "config_entry_not_found": {
+      "message": "Groq konfiguratsioonikirjet ei leitud: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Laaditud Groq konfiguratsioonikirjet ei leitud"
+    },
+    "multiple_config_entries": {
+      "message": "Laaditakse mitu Groq konfiguratsioonikirjet; pakkuda config_entry_id või service_id"
+    },
+    "service_not_found": {
+      "message": "Groq {service_type} teenust ei leitud: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Konfigureeritud on mitu Groq {service_type} teenust; pakkuda service_id"
+    },
+    "unsupported_model": {
+      "message": "Groq mudel {model} teadaolevalt ei toeta {feature}"
+    },
+    "completion_token_limit": {
+      "message": "Groq mudel {model} toetab maksimaalselt {limit} lõpetamismärke"
+    },
+    "select_one_camera": {
+      "message": "Valige ainult üks kaamera olem"
+    },
+    "camera_capture_failed": {
+      "message": "Kaameraüksusest {entity_id} ei saanud pilti jäädvustada"
+    },
+    "local_image_path_not_allowed": {
+      "message": "Kohaliku pildi tee ei ole Home Assistant-s allowlist_external_dirs"
+    },
+    "local_image_not_found": {
+      "message": "Kohalikku pildifaili ei leitud: {path}"
+    },
+    "local_file_not_image": {
+      "message": "Kohalik fail ei ole pilt: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Pildifaili ei õnnestunud lahendada: {path}"
+    },
+    "selected_media_not_image": {
+      "message": "Valitud kandja ei ole pilt: {path}"
+    },
+    "image_source_required": {
+      "message": "Valige kaamera olem, pildifail, kohalik pilditee või kujutis URL"
+    },
+    "invalid_image_url": {
+      "message": "Pilt URL peab olema http, https või pildiandmed URL"
+    },
+    "image_too_large": {
+      "message": "Valitud pilt on liiga suur; maksimaalne suurus on {limit_mb} MB"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "Kohalik helitee pole Home Assistant seadmes allowlist_external_dirs"
+    },
+    "local_audio_not_found": {
+      "message": "Kohalikku helifaili ei leitud: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "Kohalik fail ei ole heli: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Helifaili ei õnnestunud lahendada: {path}"
+    },
+    "audio_media_local_required": {
+      "message": "Valitud heli peab lahendama kohaliku faili"
+    },
+    "selected_media_not_audio": {
+      "message": "Valitud meedium ei ole heli: {path}"
+    },
+    "audio_source_required": {
+      "message": "Valige helifail või kohalik helitee"
+    },
+    "audio_too_large": {
+      "message": "Valitud heli on liiga suur; maksimaalne suurus on {limit_mb} MB"
+    },
+    "request_invalid": {
+      "message": "{message}"
+    }
+  }
+}
