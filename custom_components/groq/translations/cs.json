@@ -313,6 +313,12 @@
     "image_source_required": {
       "message": "Vyberte entitu fotoaparátu, soubor obrázku, cestu k místnímu obrázku nebo adresu URL obrázku"
     },
+    "invalid_image_url": {
+      "message": "Adresa URL obrázku musí být HTTP, HTTPS nebo datová adresa URL obrázku"
+    },
+    "image_too_large": {
+      "message": "Vybraný obrázek je příliš velký; maximální velikost je {limit_mb} MB"
+    },
     "local_audio_path_not_allowed": {
       "message": "Místní zvuková cesta není v allowlist_external_dirs Home Assistant"
     },
@@ -333,6 +339,9 @@
     },
     "audio_source_required": {
       "message": "Vyberte zvukový soubor nebo místní zvukovou cestu"
+    },
+    "audio_too_large": {
+      "message": "Vybrané audio je příliš velké; maximální velikost je {limit_mb} MB"
     },
     "request_invalid": {
       "message": "{message}"

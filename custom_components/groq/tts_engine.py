@@ -4,6 +4,7 @@ TTS Engine for Groq.
 
 from __future__ import annotations
 from collections.abc import Mapping
+from hashlib import sha256
 import json
 import logging
 import asyncio
@@ -244,7 +245,14 @@ class GroqTTSEngine:
 
         cache_key = (model, voice, response_format, text)
         if cache_key in self._cache:
-            _LOGGER.debug("Returning cached audio for %s", cache_key)
+            text_hash = sha256(text.encode("utf-8")).hexdigest()[:12]
+            _LOGGER.debug(
+                "Returning cached audio for model=%s voice=%s format=%s text_hash=%s",
+                model,
+                voice,
+                response_format,
+                text_hash,
+            )
             self._cache.move_to_end(cache_key)
             return AudioResponse(self._cache[cache_key])
 

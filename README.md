@@ -38,7 +38,7 @@ Provided response actions:
 - `groq.analyze_image`: ask a question about a camera image, media image, local image, or image URL.
 - `groq.extract_text_from_image`: OCR-style text extraction from an image.
 - `groq.transcribe_audio`: transcribe a local or media-source audio file.
-- `groq.clear_cache`: clear the local prompt cache for a Groq account.
+- `groq.clear_cache`: clear the local response cache for a Groq account.
 - `groq.list_models`: list models visible to a Groq account.
 
 Each configured Groq service creates its own Home Assistant device and the relevant entity for that platform. Text generation services can create Assist and AI Task entities. Speech-to-text and text-to-speech services create STT and TTS entities.
@@ -83,7 +83,7 @@ After adding an account, open the Groq integration page and add one or more serv
 - Text-to-Speech: name, model, voice, optional vocal directions, optional audio normalization, and free-tier protection.
 - Image Recognition: name, model, system prompt, and free-tier protection.
 
-Advanced Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, prompt caching, structured output schema, strict schema mode, and additional Groq request body options.
+Advanced Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, structured output schema, strict schema mode, and additional Groq request body options.
 
 You can add more than one Groq account. The integration prevents adding the same API key twice.
 

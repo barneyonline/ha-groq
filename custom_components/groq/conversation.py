@@ -45,6 +45,56 @@ from .text_generation import (
 )
 
 PARALLEL_UPDATES = 1
+MAX_HISTORY_MESSAGES = 12
+
+
+def _content_role(content: Any) -> str | None:
+    """Return a chat role for a Home Assistant chat-log content item."""
+    if isinstance(content, dict):
+        role = content.get("role")
+        return role if role in {"user", "assistant"} else None
+    role = getattr(content, "role", None)
+    if role in {"user", "assistant"}:
+        return role
+    class_name = content.__class__.__name__.lower()
+    if "assistant" in class_name:
+        return "assistant"
+    if "user" in class_name:
+        return "user"
+    return None
+
+
+def _content_text(content: Any) -> str | None:
+    """Return text for a Home Assistant chat-log content item."""
+    if isinstance(content, dict):
+        text = content.get("content") or content.get("text")
+    else:
+        text = getattr(content, "content", None) or getattr(content, "text", None)
+    return text if isinstance(text, str) and text else None
+
+
+def _chat_log_messages(
+    chat_log: conversation.ChatLog,
+    current_text: str,
+) -> list[dict[str, str]]:
+    """Return OpenAI-compatible messages from the chat log plus current input."""
+    history = []
+    for attr in ("content", "messages"):
+        value = getattr(chat_log, attr, None)
+        if isinstance(value, (list, tuple)):
+            history = value
+            break
+    messages: list[dict[str, str]] = []
+    for item in history:
+        role = _content_role(item)
+        text = _content_text(item)
+        if role and text:
+            messages.append({"role": role, "content": text})
+    if len(messages) > MAX_HISTORY_MESSAGES:
+        messages = messages[-MAX_HISTORY_MESSAGES:]
+    if not messages or messages[-1] != {"role": "user", "content": current_text}:
+        messages.append({"role": "user", "content": current_text})
+    return messages
 
 
 async def async_setup_entry(
@@ -124,6 +174,7 @@ class GroqConversationEntity(ConversationEntity):
         request = TextGenerationRequest(
             prompt=user_input.text,
             model=service_model(self._config_entry, self._service_data),
+            messages=_chat_log_messages(chat_log, user_input.text),
             system_prompt=system_prompt,
             temperature=service_temperature(self._config_entry, self._service_data),
             max_tokens=service_max_tokens(

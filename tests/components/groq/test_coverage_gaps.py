@@ -1299,11 +1299,14 @@ async def test_config_flow_dynamic_model_and_locale_fallback_branches(monkeypatc
         "async_show_form",
         lambda **kwargs: {"type": "form", **kwargs},
     )
-    monkeypatch.setattr(
-        config_flow,
-        "async_get_model_registry",
-        lambda hass, api_key: asyncio.sleep(0, result=GroqModelRegistry()),
-    )
+    model_registry_calls = 0
+
+    async def counted_model_registry(_hass, _api_key):
+        nonlocal model_registry_calls
+        model_registry_calls += 1
+        return GroqModelRegistry()
+
+    monkeypatch.setattr(config_flow, "async_get_model_registry", counted_model_registry)
     result = await flow.async_step_text_to_speech(
         {
             CONF_NAME: "TTS",
@@ -1313,12 +1316,16 @@ async def test_config_flow_dynamic_model_and_locale_fallback_branches(monkeypatc
     )
     assert result["type"] == "form"
     assert result["errors"] == {CONF_VOICE: "invalid_voice"}
+    await flow._model_registry()
+    assert model_registry_calls == 1
 
     async def raise_value_registry(_hass, _api_key):
         raise ValueError("invalid_auth")
 
     monkeypatch.setattr(config_flow, "async_get_model_registry", raise_value_registry)
-    registry = await flow._model_registry()
+    failed_flow = config_flow.GroqServiceSubentryFlow()
+    failed_flow.hass = DummyHass()
+    registry = await failed_flow._model_registry()
     assert registry.models_for_feature(GroqFeature.TEXT_GENERATION)
 
 
@@ -2476,7 +2483,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
                 ATTR_CONFIG_ENTRY_ID: "entry-id",
                 ATTR_SERVICE_ID: "vision-id",
                 ATTR_PROMPT: "p",
-                ATTR_IMAGE_URL: "url",
+                ATTR_IMAGE_URL: "https://example.test/image.jpg",
             }
         )
     )
@@ -2487,7 +2494,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
                 ATTR_CONFIG_ENTRY_ID: "entry-id",
                 ATTR_SERVICE_ID: "vision-id",
                 ATTR_PROMPT: "p",
-                ATTR_IMAGE_URL: "url",
+                ATTR_IMAGE_URL: "https://example.test/image.jpg",
             }
         )
     )
@@ -2498,7 +2505,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
                 ATTR_CONFIG_ENTRY_ID: "entry-id",
                 ATTR_SERVICE_ID: "vision-id",
                 ATTR_PROMPT: "p",
-                ATTR_IMAGE_URL: "url",
+                ATTR_IMAGE_URL: "https://example.test/image.jpg",
             }
         )
     )
@@ -2509,7 +2516,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
                 ATTR_CONFIG_ENTRY_ID: "entry-id",
                 ATTR_SERVICE_ID: "vision-id",
                 ATTR_PROMPT: "p",
-                ATTR_IMAGE_URL: "url",
+                ATTR_IMAGE_URL: "https://example.test/image.jpg",
             }
         )
     )
@@ -2749,6 +2756,32 @@ async def test_image_source_resolution_paths(tmp_path, monkeypatch):
         )
         == "https://example/image.jpg"
     )
+    assert (
+        await _image_url_from_call(
+            hass, service_call({ATTR_IMAGE_URL: "data:image/png;base64,YWJj"})
+        )
+        == "data:image/png;base64,YWJj"
+    )
+    with pytest.raises(ServiceValidationError, match="Image URL"):
+        await _image_url_from_call(
+            hass, service_call({ATTR_IMAGE_URL: "file:///tmp/snapshot.jpg"})
+        )
+    with pytest.raises(ServiceValidationError, match="Image URL"):
+        await _image_url_from_call(
+            hass, service_call({ATTR_IMAGE_URL: "data:image/png;base64,abc"})
+        )
+    monkeypatch.setattr("custom_components.groq.services.MAX_IMAGE_BYTES", 4)
+    with patch(
+        "custom_components.groq.services.b64decode",
+        side_effect=AssertionError("oversized image should not be decoded"),
+    ):
+        with pytest.raises(ServiceValidationError, match="too large"):
+            await _image_url_from_call(
+                hass,
+                service_call({ATTR_IMAGE_URL: "data:image/png;base64,YWJjZGU="}),
+            )
+    with pytest.raises(ServiceValidationError, match="too large"):
+        await _image_from_local_path(hass, str(image_path))
     with pytest.raises(ServiceValidationError, match="Select a camera entity"):
         await _image_url_from_call(hass, service_call({}))
 
@@ -2835,12 +2868,16 @@ async def test_audio_source_resolution_paths(tmp_path, monkeypatch):
     assert await _audio_from_call(
         hass, service_call({ATTR_AUDIO_PATH: str(audio_path)})
     ) == (b"audio", "voice.wav")
+    monkeypatch.setattr("custom_components.groq.services.MAX_AUDIO_BYTES", 4)
+    audio_path.write_bytes(b"audio!")
+    with pytest.raises(ServiceValidationError, match="too large"):
+        await _audio_from_local_path(hass, str(audio_path))
     with pytest.raises(ServiceValidationError, match="Select an audio file"):
         await _audio_from_call(hass, service_call({}))
 
 
 @pytest.mark.asyncio
-async def test_stt_setup_properties_wav_error_and_empty_results():
+async def test_stt_setup_properties_wav_error_and_empty_results(monkeypatch):
     entry = DummyEntry()
     entry.subentries = {
         "skip": SimpleNamespace(data={"service_type": "other"}),
@@ -2898,6 +2935,10 @@ async def test_stt_setup_properties_wav_error_and_empty_results():
         async def async_transcribe_audio(self, **kwargs):
             raise GroqApiError("bad")
 
+    class AuthClient(DummyClient):
+        async def async_transcribe_audio(self, **kwargs):
+            raise ConfigEntryAuthFailed("bad credentials")
+
     empty = GroqSTTEntity(entry, {"model": "whisper-large-v3"}, EmptyClient())
     assert (
         await empty.async_process_audio_stream(
@@ -2924,6 +2965,37 @@ async def test_stt_setup_properties_wav_error_and_empty_results():
                 channel=stt.AudioChannels.CHANNEL_MONO,
             ),
             stream(),
+        )
+    ).result == stt.SpeechResultState.ERROR
+    auth = GroqSTTEntity(entry, {"model": "whisper-large-v3"}, AuthClient())
+    with pytest.raises(ConfigEntryAuthFailed):
+        await auth.async_process_audio_stream(
+            stt.SpeechMetadata(
+                language="en-US",
+                format=stt.AudioFormats.OGG,
+                codec=stt.AudioCodecs.OPUS,
+                bit_rate=stt.AudioBitRates.BITRATE_16,
+                sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
+                channel=stt.AudioChannels.CHANNEL_MONO,
+            ),
+            stream(),
+        )
+
+    async def oversized_stream():
+        yield b"12345"
+
+    monkeypatch.setattr("custom_components.groq.stt.MAX_STT_AUDIO_BYTES", 4)
+    assert (
+        await entity.async_process_audio_stream(
+            stt.SpeechMetadata(
+                language="en-US",
+                format=stt.AudioFormats.OGG,
+                codec=stt.AudioCodecs.OPUS,
+                bit_rate=stt.AudioBitRates.BITRATE_16,
+                sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
+                channel=stt.AudioChannels.CHANNEL_MONO,
+            ),
+            oversized_stream(),
         )
     ).result == stt.SpeechResultState.ERROR
 

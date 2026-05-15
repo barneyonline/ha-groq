@@ -228,7 +228,7 @@ def service_prompt_caching(
     config_entry: ConfigEntry,
     service_data: dict[str, Any],
 ) -> bool:
-    """Return whether Groq prompt caching is enabled for the model."""
+    """Return whether local response caching is enabled for the model."""
     return bool(entry_value(config_entry, service_data, CONF_PROMPT_CACHING, False))
 
 
@@ -403,7 +403,7 @@ def is_reasoning_model(model: str) -> bool:
 
 
 def is_prompt_caching_model(model: str) -> bool:
-    """Return whether the selected model supports Groq prompt caching."""
+    """Return whether the selected model supports local response caching."""
     return model in PROMPT_CACHING_MODELS
 
 

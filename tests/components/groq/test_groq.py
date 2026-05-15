@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import pytest
 from unittest.mock import patch
 
@@ -259,6 +260,25 @@ async def test_async_get_tts_free_tier_guard_ignores_cache_hits():
             await engine.async_get_tts(DummyHass(), "same message")
 
     assert len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_async_get_tts_cache_hit_log_redacts_text(caplog):
+    session = DummyCaptureSession()
+    engine = GroqTTSEngine(
+        "api-key",
+        ORPHEUS_ENGLISH_VOICE,
+        ORPHEUS_ENGLISH_MODEL,
+        "https://api.groq.com/openai/v1/audio/speech",
+    )
+
+    with patch.object(tts_engine, "async_get_clientsession", return_value=session):
+        await engine.async_get_tts(DummyHass(), "private spoken message")
+        with caplog.at_level(logging.DEBUG, logger="custom_components.groq.tts_engine"):
+            await engine.async_get_tts(DummyHass(), "private spoken message")
+
+    assert "private spoken message" not in caplog.text
+    assert "text_hash=" in caplog.text
 
 
 def test_local_free_tier_guard_can_be_disabled():

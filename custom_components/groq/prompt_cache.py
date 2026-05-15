@@ -1,4 +1,4 @@
-"""Small in-memory prompt cache used by response services."""
+"""Small in-memory response cache used by response services."""
 
 from __future__ import annotations
 
@@ -18,11 +18,10 @@ class PromptCacheEntry:
 
 
 class GroqPromptCache:
-    """LRU cache for reusable prompt responses.
+    """LRU cache for reusable service responses.
 
-    Groq's hosted prompt caching is API-side behavior; this cache is intentionally
-    local and conservative. It avoids adding undocumented payload fields while
-    providing a reusable foundation for Home Assistant response services.
+    This intentionally local cache avoids adding undocumented payload fields while
+    providing reusable response caching for Home Assistant response services.
     """
 
     def __init__(self, max_size: int = 128, default_ttl: int | None = 300) -> None:

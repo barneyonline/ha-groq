@@ -14,7 +14,7 @@ The requested feature set is:
 - OCR and image recognition
 - Reasoning
 - Structured outputs
-- Prompt caching
+- Local response caching
 
 ## Design Goals
 
@@ -126,7 +126,7 @@ FEATURE_PLATFORMS = {
 }
 ```
 
-OCR/image recognition, structured outputs, prompt cache administration, and
+OCR/image recognition, structured outputs, local response cache administration, and
 one-shot text generation should be services because they return data and do not
 map cleanly to long-lived Home Assistant state. If an image preview is later
 useful, add an optional `image` platform entity for the last generated/analyzed

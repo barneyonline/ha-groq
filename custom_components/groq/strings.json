@@ -48,7 +48,7 @@
             "invalid_enabled_features": "One or more selected features are not supported.",
             "invalid_response_format": "Invalid response format.",
             "unsupported_reasoning_model": "The selected model does not support reasoning options.",
-            "unsupported_prompt_caching_model": "The selected model does not support Groq prompt caching.",
+      "unsupported_prompt_caching_model": "The selected model does not support local response caching.",
             "unsupported_structured_outputs_model": "The selected model does not support structured outputs.",
             "reserved_request_body_option": "Additional request body options cannot override model, messages, or stream. Use the dedicated fields instead.",
             "max_completion_tokens_exceeded": "The selected model does not support that many max completion tokens.",
@@ -115,7 +115,7 @@
                         "reasoning_effort": "Reasoning effort",
                         "reasoning_format": "Reasoning format",
                         "include_reasoning": "Include reasoning",
-                        "prompt_caching": "Prompt caching",
+                        "prompt_caching": "Local response cache",
                         "structured_outputs": "Use structured outputs",
                         "schema_name": "Schema name",
                         "schema": "JSON schema",
@@ -132,7 +132,7 @@
                         "reasoning_effort": "Reasoning budget for supported reasoning models only.",
                         "reasoning_format": "How supported reasoning models expose reasoning content.",
                         "include_reasoning": "Requests reasoning content on supported models when no reasoning format is set.",
-                        "prompt_caching": "Enables Groq prompt caching for supported models. Groq applies caching automatically for repeated prefix content.",
+                        "prompt_caching": "Caches matching Home Assistant service responses locally for supported models.",
                         "structured_outputs": "Requests JSON that follows the configured schema when this service is used for data generation.",
                         "schema_name": "A short identifier sent to Groq with the schema.",
                         "schema": "JSON Schema object sent as response_format.json_schema.schema.",
@@ -313,6 +313,12 @@
         "image_source_required": {
             "message": "Select a camera entity, image file, local image path, or image URL"
         },
+        "invalid_image_url": {
+            "message": "Image URL must be an http, https, or image data URL"
+        },
+        "image_too_large": {
+            "message": "Selected image is too large; maximum size is {limit_mb} MB"
+        },
         "local_audio_path_not_allowed": {
             "message": "Local audio path is not in Home Assistant's allowlist_external_dirs"
         },
@@ -333,6 +339,9 @@
         },
         "audio_source_required": {
             "message": "Select an audio file or local audio path"
+        },
+        "audio_too_large": {
+            "message": "Selected audio is too large; maximum size is {limit_mb} MB"
         },
         "request_invalid": {
             "message": "{message}"

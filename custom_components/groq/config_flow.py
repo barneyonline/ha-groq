@@ -506,6 +506,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
         self._service_type: str | None = None
         self._pending_service_data: dict[str, Any] = {}
         self._tts_model_context: str | None = None
+        self._model_registry_cache: dict[str, GroqModelRegistry] = {}
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Add a Groq service subentry."""
@@ -576,10 +577,15 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
     ) -> GroqModelRegistry:
         """Return discovered model metadata for the active account key."""
         api_key = self._account_api_key()
+        cache_key = api_key or ""
+        if cache_key in self._model_registry_cache:
+            return self._model_registry_cache[cache_key]
         try:
-            return await async_get_model_registry(self.hass, api_key)
+            registry = await async_get_model_registry(self.hass, api_key)
         except ValueError:
-            return GroqModelRegistry()
+            registry = GroqModelRegistry()
+        self._model_registry_cache[cache_key] = registry
+        return registry
 
     async def _model_options(
         self,

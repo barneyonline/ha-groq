@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from base64 import b64encode
+from base64 import b64decode, b64encode
+from binascii import Error as BinasciiError
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from hashlib import sha256
@@ -10,6 +11,7 @@ import json
 import mimetypes
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import voluptuous as vol
 
@@ -110,6 +112,8 @@ SERVICE_EXTRACT_TEXT_FROM_IMAGE = "extract_text_from_image"
 SERVICE_TRANSCRIBE_AUDIO = "transcribe_audio"
 SERVICE_CLEAR_CACHE = "clear_cache"
 SERVICE_LIST_MODELS = "list_models"
+MAX_IMAGE_BYTES = 20 * 1024 * 1024
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 _REGISTERED = "services_registered"
 _SERVICES_YAML = Path(__file__).with_name("services.yaml")
@@ -563,7 +567,7 @@ def _request_cache_fields(request: TextGenerationRequest) -> dict[str, Any]:
 
 
 def _prompt_cache_allowed(runtime: GroqRuntimeData, model: str) -> bool:
-    """Return whether prompt caching should apply for this model."""
+    """Return whether local response caching should apply for this model."""
     return runtime.feature_registry.is_enabled(
         GroqFeature.PROMPT_CACHING
     ) and runtime.model_registry.supports(model, GroqFeature.PROMPT_CACHING)
@@ -574,7 +578,7 @@ def _cache_get(
     model: str,
     key: str,
 ) -> ServiceResponse | None:
-    """Return a cached response when prompt caching is enabled."""
+    """Return a cached response when local response caching is enabled."""
     if not _prompt_cache_allowed(runtime, model):
         return None
     cached = runtime.prompt_cache.get(key)
@@ -590,7 +594,7 @@ def _cache_set(
     key: str,
     response: ServiceResponse,
 ) -> None:
-    """Store a response when prompt caching is enabled."""
+    """Store a response when local response caching is enabled."""
     if _prompt_cache_allowed(runtime, model):
         runtime.prompt_cache.set(key, response)
 
@@ -599,6 +603,81 @@ def _image_data_url(content: bytes, content_type: str | None) -> str:
     """Return an image data URL from binary content."""
     media_type = content_type or "image/jpeg"
     return f"data:{media_type};base64,{b64encode(content).decode('ascii')}"
+
+
+def _ensure_size_limit(
+    size: int,
+    limit: int,
+    translation_key: str,
+    media_type: str,
+) -> None:
+    """Raise when a local media payload is too large to buffer safely."""
+    if size <= limit:
+        return
+    raise _service_error(
+        translation_key,
+        f"Selected {media_type} is too large; maximum size is "
+        f"{limit // 1024 // 1024} MB",
+        limit_mb=limit // 1024 // 1024,
+    )
+
+
+def _validate_image_url(image_url: str) -> str:
+    """Return a supported image URL or raise a service validation error."""
+    parsed = urlparse(image_url)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return image_url
+    if parsed.scheme == "data" and image_url.lower().startswith("data:image/"):
+        _validate_data_image_size(image_url)
+        return image_url
+    raise _service_error(
+        "invalid_image_url",
+        "Image URL must be an http, https, or image data URL",
+        url=image_url,
+    )
+
+
+def _base64_decoded_size_upper_bound(payload: str) -> int:
+    """Return the largest decoded byte size a base64 payload can produce."""
+    padding = len(payload) - len(payload.rstrip("="))
+    return ((len(payload) + 3) // 4) * 3 - min(padding, 2)
+
+
+def _validate_data_image_size(image_url: str) -> None:
+    """Raise when an inline image data URL is too large to process safely."""
+    try:
+        metadata, payload = image_url.split(",", 1)
+    except (BinasciiError, ValueError) as err:
+        raise _service_error(
+            "invalid_image_url",
+            "Image URL must be an http, https, or image data URL",
+            url=image_url,
+        ) from err
+    if ";base64" not in metadata.lower():
+        # Percent-encoded data URLs are not worth decoding here; cap the raw
+        # payload size so callers cannot bypass the same guard.
+        _ensure_size_limit(
+            len(payload.encode("utf-8")),
+            MAX_IMAGE_BYTES,
+            "image_too_large",
+            "image",
+        )
+        return
+    _ensure_size_limit(
+        _base64_decoded_size_upper_bound(payload),
+        MAX_IMAGE_BYTES,
+        "image_too_large",
+        "image",
+    )
+    try:
+        decoded_size = len(b64decode(payload, validate=True))
+    except ValueError as err:
+        raise _service_error(
+            "invalid_image_url",
+            "Image URL must be an http, https, or image data URL",
+            url=image_url,
+        ) from err
+    _ensure_size_limit(decoded_size, MAX_IMAGE_BYTES, "image_too_large", "image")
 
 
 async def _image_from_camera_target(
@@ -632,12 +711,21 @@ async def _image_from_camera_target(
             f"Could not capture image from camera entity {camera_entities[0]}",
             entity_id=camera_entities[0],
         ) from err
+    _ensure_size_limit(
+        len(image.content),
+        MAX_IMAGE_BYTES,
+        "image_too_large",
+        "image",
+    )
     return _image_data_url(image.content, image.content_type)
 
 
 async def _image_from_local_path(hass: HomeAssistant, image_path: str) -> str:
     """Return a data URL from an allowlisted local image path."""
-    allowed = await hass.async_add_executor_job(hass.config.is_allowed_path, image_path)
+    allowed = await hass.async_add_executor_job(
+        hass.config.is_allowed_path,
+        image_path,
+    )
     if not allowed:
         raise _service_error(
             "local_image_path_not_allowed",
@@ -657,6 +745,8 @@ async def _image_from_local_path(hass: HomeAssistant, image_path: str) -> str:
             f"Local file is not an image: {image_path}",
             path=image_path,
         )
+    size = await hass.async_add_executor_job(lambda: path.stat().st_size)
+    _ensure_size_limit(size, MAX_IMAGE_BYTES, "image_too_large", "image")
     content = await hass.async_add_executor_job(path.read_bytes)
     return _image_data_url(content, content_type)
 
@@ -676,7 +766,7 @@ async def _image_from_media_source(hass: HomeAssistant, image_file: str) -> str:
     if media.path is not None:
         return await _image_from_local_path(hass, str(media.path))
     if media.mime_type and media.mime_type.startswith("image/"):
-        return media.url
+        return _validate_image_url(media.url)
     raise _service_error(
         "selected_media_not_image",
         f"Selected media is not an image: {image_file}",
@@ -693,7 +783,7 @@ async def _image_url_from_call(hass: HomeAssistant, call: ServiceCall) -> str:
     if image_path := call.data.get(ATTR_IMAGE_PATH):
         return await _image_from_local_path(hass, image_path)
     if image_url := call.data.get(ATTR_IMAGE_URL):
-        return image_url
+        return _validate_image_url(image_url)
     raise _service_error(
         "image_source_required",
         "Select a camera entity, image file, local image path, or image URL",
@@ -704,7 +794,10 @@ async def _audio_from_local_path(
     hass: HomeAssistant, audio_path: str
 ) -> tuple[bytes, str]:
     """Return audio bytes and filename from an allowlisted local path."""
-    allowed = await hass.async_add_executor_job(hass.config.is_allowed_path, audio_path)
+    allowed = await hass.async_add_executor_job(
+        hass.config.is_allowed_path,
+        audio_path,
+    )
     if not allowed:
         raise _service_error(
             "local_audio_path_not_allowed",
@@ -724,6 +817,8 @@ async def _audio_from_local_path(
             f"Local file is not audio: {audio_path}",
             path=audio_path,
         )
+    size = await hass.async_add_executor_job(lambda: path.stat().st_size)
+    _ensure_size_limit(size, MAX_AUDIO_BYTES, "audio_too_large", "audio")
     content = await hass.async_add_executor_job(path.read_bytes)
     return content, path.name
 

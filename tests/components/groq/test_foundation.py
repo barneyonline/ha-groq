@@ -284,7 +284,7 @@ def test_payload_builders_use_openai_compatible_shapes():
         VisionRequest(
             prompt="Describe",
             model="meta-llama/llama-4-scout-17b-16e-instruct",
-            image_url="data:image/png;base64,abc",
+            image_url="data:image/png;base64,YWJj",
         )
     )
 
@@ -295,7 +295,7 @@ def test_payload_builders_use_openai_compatible_shapes():
                 {"type": "text", "text": "Describe"},
                 {
                     "type": "image_url",
-                    "image_url": {"url": "data:image/png;base64,abc"},
+                    "image_url": {"url": "data:image/png;base64,YWJj"},
                 },
             ],
         }
@@ -1154,7 +1154,7 @@ async def test_analyze_image_service_uses_image_subentry_defaults():
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
                     ATTR_SERVICE_ID: "vision-service",
                     "prompt": "What is shown?",
-                    "image_url": "data:image/png;base64,abc",
+                    "image_url": "data:image/png;base64,YWJj",
                 }
             )
         )
@@ -1184,6 +1184,10 @@ async def test_conversation_entity_generates_assist_response():
     client = DummyTextClient("Turned on the lights.")
     entity = GroqConversationEntity(DummyHass(), entry, service_data, client)
     chat_log = DummyChatLog()
+    chat_log.content = [
+        {"role": "user", "content": "What is the kitchen status?"},
+        SimpleNamespace(role="assistant", content="The kitchen lights are off."),
+    ]
 
     result = await entity._async_handle_message(
         SimpleNamespace(
@@ -1200,9 +1204,48 @@ async def test_conversation_entity_generates_assist_response():
     request = client.requests[0]
     assert request.model == "llama-3.1-8b-instant"
     assert request.prompt == "Turn on the kitchen lights"
+    assert request.messages == [
+        {"role": "user", "content": "What is the kitchen status?"},
+        {"role": "assistant", "content": "The kitchen lights are off."},
+        {"role": "user", "content": "Turn on the kitchen lights"},
+    ]
     assert DEFAULT_SYSTEM_PROMPT in request.system_prompt
     assert "Prefer brief replies." in request.system_prompt
     assert request.temperature == 0.2
+
+
+@pytest.mark.asyncio
+async def test_conversation_entity_limits_assist_history():
+    entry = DummyEntry()
+    service_data = {
+        "unique_id": "assist-service",
+        "name": "Groq Assist",
+        "model": "llama-3.1-8b-instant",
+        "system_prompt": DEFAULT_SYSTEM_PROMPT,
+        "stream": False,
+    }
+    client = DummyTextClient("Done.")
+    entity = GroqConversationEntity(DummyHass(), entry, service_data, client)
+    chat_log = DummyChatLog()
+    chat_log.content = [
+        {"role": "user" if index % 2 == 0 else "assistant", "content": f"turn {index}"}
+        for index in range(30)
+    ]
+
+    await entity._async_handle_message(
+        SimpleNamespace(
+            text="latest request",
+            language="en",
+            agent_id="conversation.groq_assist",
+            extra_system_prompt=None,
+        ),
+        chat_log,
+    )
+
+    request = client.requests[0]
+    assert len(request.messages) == 13
+    assert request.messages[0] == {"role": "user", "content": "turn 18"}
+    assert request.messages[-1] == {"role": "user", "content": "latest request"}
 
 
 @pytest.mark.asyncio

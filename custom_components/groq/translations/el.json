@@ -313,6 +313,12 @@
     "image_source_required": {
       "message": "Επιλέξτε μια οντότητα κάμερας, αρχείο εικόνας, τοπική διαδρομή εικόνας ή διεύθυνση URL εικόνας"
     },
+    "invalid_image_url": {
+      "message": "Το URL εικόνας πρέπει να είναι HTTP, HTTPS ή URL δεδομένων εικόνας"
+    },
+    "image_too_large": {
+      "message": "Η επιλεγμένη εικόνα είναι πολύ μεγάλη· το μέγιστο μέγεθος είναι {limit_mb} MB"
+    },
     "local_audio_path_not_allowed": {
       "message": "Η τοπική διαδρομή ήχου δεν βρίσκεται στο Home Assistant του allowlist_external_dirs"
     },
@@ -333,6 +339,9 @@
     },
     "audio_source_required": {
       "message": "Επιλέξτε ένα αρχείο ήχου ή μια τοπική διαδρομή ήχου"
+    },
+    "audio_too_large": {
+      "message": "Ο επιλεγμένος ήχος είναι πολύ μεγάλος· το μέγιστο μέγεθος είναι {limit_mb} MB"
     },
     "request_invalid": {
       "message": "{message}"

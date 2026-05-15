@@ -88,7 +88,7 @@ FEATURE_DESCRIPTORS: dict[GroqFeature, GroqFeatureDescriptor] = {
     ),
     GroqFeature.PROMPT_CACHING: GroqFeatureDescriptor(
         feature=GroqFeature.PROMPT_CACHING,
-        name="Prompt caching",
+        name="Local response cache",
         required_capabilities=frozenset(),
         platforms=frozenset(),
         services=frozenset({"clear_cache"}),

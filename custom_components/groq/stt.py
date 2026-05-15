@@ -11,6 +11,7 @@ import wave
 from homeassistant.components import stt
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
@@ -33,6 +34,7 @@ from .runtime import async_get_runtime
 _LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
+MAX_STT_AUDIO_BYTES = 25 * 1024 * 1024
 
 
 def _stt_service_data(config_entry: ConfigEntry) -> list[dict[str, Any]]:
@@ -151,6 +153,12 @@ class GroqSTTEntity(stt.SpeechToTextEntity):
         """Transcribe an audio stream."""
         audio = bytearray()
         async for chunk in stream:
+            if len(audio) + len(chunk) > MAX_STT_AUDIO_BYTES:
+                _LOGGER.warning(
+                    "Groq speech transcription audio exceeded %d MB limit",
+                    MAX_STT_AUDIO_BYTES // 1024 // 1024,
+                )
+                return stt.SpeechResult(None, stt.SpeechResultState.ERROR)
             audio.extend(chunk)
         audio_data = bytes(audio)
         filename = f"audio.{metadata.format.value}"
@@ -181,7 +189,9 @@ class GroqSTTEntity(stt.SpeechToTextEntity):
                     )
                 ),
             )
-        except GroqApiError:
+        except ConfigEntryAuthFailed:
+            raise
+        except (GroqApiError, HomeAssistantError):
             _LOGGER.exception("Error during Groq speech transcription")
             return stt.SpeechResult(None, stt.SpeechResultState.ERROR)
 

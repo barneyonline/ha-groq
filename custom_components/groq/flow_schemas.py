@@ -246,7 +246,7 @@ def text_generation_model_capability_summary(
     if GroqCapability.REASONING in capabilities:
         supported.append("reasoning")
     if GroqCapability.PROMPT_CACHING in capabilities:
-        supported.append("prompt caching")
+        supported.append("local response caching")
     if GroqCapability.COMPOUND in capabilities:
         supported.append("Groq Compound tools")
     if GroqCapability.VISION in capabilities:
@@ -621,7 +621,7 @@ def validate_text_generation_input(
     """Return validation errors for text generation options."""
     errors: dict[str, str] = {}
     model = str(user_input.get(CONF_MODEL, ""))
-    # Reasoning, prompt caching, and strict structured outputs are model-scoped
+    # Reasoning, local response caching, and strict structured outputs are model-scoped
     # Groq features. Validate here so unsupported combinations fail in the setup
     # UI instead of later during Assist or service execution.
     has_reasoning_options = any(

@@ -40,6 +40,7 @@ class TextGenerationRequest:
 
     prompt: str
     model: str
+    messages: list[dict[str, str]] | None = None
     system_prompt: str | None = None
     temperature: float | None = None
     max_tokens: int | None = None
@@ -107,10 +108,13 @@ def normalize_base_url(url: str | None) -> str:
 
 def build_text_generation_payload(request: TextGenerationRequest) -> dict[str, Any]:
     """Build an OpenAI-compatible chat completion payload."""
-    messages: list[dict[str, str]] = []
+    messages: list[dict[str, str]] = (
+        list(request.messages)
+        if request.messages is not None
+        else [{"role": "user", "content": request.prompt}]
+    )
     if request.system_prompt:
-        messages.append({"role": "system", "content": request.system_prompt})
-    messages.append({"role": "user", "content": request.prompt})
+        messages.insert(0, {"role": "system", "content": request.system_prompt})
 
     payload: dict[str, Any] = {
         "model": request.model,

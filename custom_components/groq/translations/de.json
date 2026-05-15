@@ -313,6 +313,12 @@
     "image_source_required": {
       "message": "Wählen Sie eine Kameraentität, eine Bilddatei, einen lokalen Bildpfad oder eine Bild-URL aus"
     },
+    "invalid_image_url": {
+      "message": "Die Bild-URL muss eine HTTP-, HTTPS- oder Bild-Daten-URL sein"
+    },
+    "image_too_large": {
+      "message": "Das ausgewählte Bild ist zu groß; die maximale Größe beträgt {limit_mb} MB"
+    },
     "local_audio_path_not_allowed": {
       "message": "Der lokale Audiopfad befindet sich nicht im allowlist_external_dirs von Home Assistant"
     },
@@ -333,6 +339,9 @@
     },
     "audio_source_required": {
       "message": "Wählen Sie eine Audiodatei oder einen lokalen Audiopfad aus"
+    },
+    "audio_too_large": {
+      "message": "Das ausgewählte Audio ist zu groß; die maximale Größe beträgt {limit_mb} MB"
     },
     "request_invalid": {
       "message": "{message}"
