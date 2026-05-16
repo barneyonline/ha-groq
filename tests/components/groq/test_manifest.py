@@ -24,7 +24,7 @@ def test_manifest_metadata_is_consistent() -> None:
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["loggers"] == []
     assert manifest["quality_scale"] == "platinum"
-    assert manifest["requirements"] == []
+    assert manifest["requirements"] == ["jsonschema==4.26.0"]
     assert manifest["version"] == "1.0.2"
     assert "single_config_entry" not in manifest
     assert manifest["documentation"].endswith("ha-groq")

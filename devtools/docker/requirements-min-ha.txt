@@ -8,6 +8,7 @@ aiohttp
 async-timeout
 voluptuous
 PyYAML
+jsonschema==4.26.0
 PyTurboJPEG==1.8.0
 coverage==7.10.6
 freezegun==1.5.2

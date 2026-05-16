@@ -8,11 +8,6 @@ import pytest
 import voluptuous as vol
 from homeassistant.components import conversation, stt
 from homeassistant.components.ai_task import AITaskEntityFeature, GenDataTask
-from homeassistant.components.conversation.chat_log import (
-    Attachment,
-    ChatLog,
-    UserContent,
-)
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_LLM_HASS_API, Platform
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
@@ -379,6 +374,18 @@ class DummyToolAPI(llm.API):
             llm_context=llm_context,
             tools=[DummyStateTool()],
         )
+
+
+async def async_dummy_tool_chat_log() -> DummyToolChatLog:
+    """Return a dummy chat log with Home Assistant tools populated."""
+    chat_log = DummyToolChatLog()
+    await chat_log.async_provide_llm_data(
+        SimpleNamespace(platform="groq"),
+        user_llm_hass_api=None,
+        user_llm_prompt=DEFAULT_SYSTEM_PROMPT,
+        user_extra_system_prompt=None,
+    )
+    return chat_log
 
 
 class DummyEntry:
@@ -2246,7 +2253,7 @@ async def test_conversation_entity_limits_unresolved_tool_iterations():
 
 
 @pytest.mark.asyncio
-async def test_conversation_entity_uses_real_chat_log_llm_prompt(hass):
+async def test_conversation_entity_uses_real_chat_log_llm_prompt():
     entry = DummyEntry()
     service_data = {
         "unique_id": "assist-service",
@@ -2256,8 +2263,8 @@ async def test_conversation_entity_uses_real_chat_log_llm_prompt(hass):
         "stream": False,
     }
     client = DummyTextClient("Done.")
-    entity = GroqConversationEntity(hass, entry, service_data, client)
-    chat_log = ChatLog(hass, "conversation-id")
+    entity = GroqConversationEntity(DummyHass(), entry, service_data, client)
+    chat_log = DummyToolChatLog()
 
     result = await entity._async_handle_message(
         SimpleNamespace(
@@ -2283,43 +2290,30 @@ async def test_conversation_entity_uses_real_chat_log_llm_prompt(hass):
 
 
 @pytest.mark.asyncio
-async def test_conversation_entity_uses_real_chat_log_tool_execution(hass):
-    unregister = llm.async_register_api(
-        hass,
-        DummyToolAPI(hass=hass, id="test_tools", name="Test Tools"),
-    )
-    try:
-        entry = DummyEntry()
-        service_data = {
-            "unique_id": "assist-service",
-            "name": "Groq Assist",
-            "model": "openai/gpt-oss-20b",
-            "system_prompt": DEFAULT_SYSTEM_PROMPT,
-            "stream": False,
-            CONF_LLM_HASS_API: ["test_tools"],
-        }
-        client = DummyRealToolTextClient()
-        entity = GroqConversationEntity(hass, entry, service_data, client)
-        chat_log = ChatLog(hass, "conversation-id")
+async def test_conversation_entity_uses_real_chat_log_tool_execution():
+    entry = DummyEntry()
+    service_data = {
+        "unique_id": "assist-service",
+        "name": "Groq Assist",
+        "model": "openai/gpt-oss-20b",
+        "system_prompt": DEFAULT_SYSTEM_PROMPT,
+        "stream": False,
+        CONF_LLM_HASS_API: ["test_tools"],
+    }
+    client = DummyRealToolTextClient()
+    entity = GroqConversationEntity(DummyHass(), entry, service_data, client)
+    chat_log = DummyToolChatLog()
 
-        result = await entity._async_handle_message(
-            SimpleNamespace(
-                text="Is the kitchen light on?",
-                language="en",
-                agent_id="conversation.groq_assist",
-                extra_system_prompt=None,
-                as_llm_context=lambda domain: llm.LLMContext(
-                    platform=domain,
-                    context=None,
-                    language="en",
-                    assistant=None,
-                    device_id=None,
-                ),
-            ),
-            chat_log,
-        )
-    finally:
-        unregister()
+    result = await entity._async_handle_message(
+        SimpleNamespace(
+            text="Is the kitchen light on?",
+            language="en",
+            agent_id="conversation.groq_assist",
+            extra_system_prompt=None,
+            as_llm_context=lambda domain: SimpleNamespace(platform=domain),
+        ),
+        chat_log,
+    )
 
     assert result.conversation_id == "conversation-id"
     assert result.response.speech["plain"]["speech"] == "The kitchen light is on."
@@ -2327,7 +2321,7 @@ async def test_conversation_entity_uses_real_chat_log_tool_execution(hass):
         "role": "tool",
         "tool_call_id": "call_real",
         "name": "GetState",
-        "content": '{"entity_id":"light.kitchen","state":"on"}',
+        "content": '{"state":"on"}',
     }
 
 
@@ -2508,7 +2502,7 @@ async def test_ai_task_image_attachment_guardrails(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_uses_task_llm_api_tools(hass):
+async def test_ai_task_entity_uses_task_llm_api_tools():
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2516,24 +2510,12 @@ async def test_ai_task_entity_uses_task_llm_api_tools(hass):
         "model": "openai/gpt-oss-20b",
     }
     client = DummyRealToolTextClient()
-    entity = GroqAITaskEntity(hass, entry, service_data, client)
+    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
         instructions="Is the kitchen light on?",
-        llm_api=DummyToolAPI(hass=hass, id="task_tools", name="Task Tools"),
     )
-    chat_log = ChatLog(hass, "conversation-id")
-    await chat_log.async_provide_llm_data(
-        llm.LLMContext(
-            platform="groq",
-            context=None,
-            language="en",
-            assistant=None,
-            device_id=None,
-        ),
-        user_llm_hass_api=task.llm_api,
-    )
-    chat_log.async_add_user_content(UserContent(task.instructions))
+    chat_log = await async_dummy_tool_chat_log()
 
     result = await entity._async_generate_data(task, chat_log)
 
@@ -2541,16 +2523,16 @@ async def test_ai_task_entity_uses_task_llm_api_tools(hass):
     assert result.data == "The kitchen light is on."
     assert client.requests[0].tools[0]["function"]["name"] == "GetState"
     assert client.requests[0].tool_choice == "auto"
-    assert client.requests[1].messages[-1] == {
+    assert {
         "role": "tool",
         "tool_call_id": "call_real",
         "name": "GetState",
-        "content": '{"entity_id":"light.kitchen","state":"on"}',
-    }
+        "content": '{"state":"on"}',
+    } in client.requests[1].messages
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_uses_tools_with_structure_and_image(hass, tmp_path):
+async def test_ai_task_entity_uses_tools_with_structure_and_image(tmp_path):
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2558,11 +2540,11 @@ async def test_ai_task_entity_uses_tools_with_structure_and_image(hass, tmp_path
         "model": "meta-llama/llama-4-scout-17b-16e-instruct",
     }
     client = DummyStructuredToolTextClient()
-    entity = GroqAITaskEntity(hass, entry, service_data, client)
+    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
     image_path = tmp_path / "snapshot.png"
     image_path.write_bytes(b"image bytes")
     attachments = [
-        Attachment(
+        SimpleNamespace(
             media_content_id="media-source://camera/snapshot",
             mime_type="image/png",
             path=image_path,
@@ -2573,22 +2555,8 @@ async def test_ai_task_entity_uses_tools_with_structure_and_image(hass, tmp_path
         instructions="Summarize this camera image and kitchen light state.",
         structure=vol.Schema({vol.Required("summary"): str}),
         attachments=attachments,
-        llm_api=DummyToolAPI(hass=hass, id="task_tools", name="Task Tools"),
     )
-    chat_log = ChatLog(hass, "conversation-id")
-    await chat_log.async_provide_llm_data(
-        llm.LLMContext(
-            platform="groq",
-            context=None,
-            language="en",
-            assistant=None,
-            device_id=None,
-        ),
-        user_llm_hass_api=task.llm_api,
-    )
-    chat_log.async_add_user_content(
-        UserContent(task.instructions, attachments=attachments)
-    )
+    chat_log = await async_dummy_tool_chat_log()
 
     result = await entity._async_generate_data(task, chat_log)
 
@@ -2614,7 +2582,7 @@ async def test_ai_task_entity_uses_tools_with_structure_and_image(hass, tmp_path
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_validates_service_schema_with_tools(hass):
+async def test_ai_task_entity_validates_service_schema_with_tools():
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2629,24 +2597,12 @@ async def test_ai_task_entity_validates_service_schema_with_tools(hass):
         },
     }
     client = DummyStructuredToolTextClient('{"summary":"The kitchen light is on."}')
-    entity = GroqAITaskEntity(hass, entry, service_data, client)
+    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
         instructions="Summarize the kitchen light state.",
-        llm_api=DummyToolAPI(hass=hass, id="task_tools", name="Task Tools"),
     )
-    chat_log = ChatLog(hass, "conversation-id")
-    await chat_log.async_provide_llm_data(
-        llm.LLMContext(
-            platform="groq",
-            context=None,
-            language="en",
-            assistant=None,
-            device_id=None,
-        ),
-        user_llm_hass_api=task.llm_api,
-    )
-    chat_log.async_add_user_content(UserContent(task.instructions))
+    chat_log = await async_dummy_tool_chat_log()
 
     result = await entity._async_generate_data(task, chat_log)
 
@@ -2658,7 +2614,7 @@ async def test_ai_task_entity_validates_service_schema_with_tools(hass):
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_rejects_invalid_service_schema_tool_result(hass):
+async def test_ai_task_entity_rejects_invalid_service_schema_tool_result():
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2673,31 +2629,19 @@ async def test_ai_task_entity_rejects_invalid_service_schema_tool_result(hass):
         },
     }
     client = DummyStructuredToolTextClient('{"wrong":"shape"}')
-    entity = GroqAITaskEntity(hass, entry, service_data, client)
+    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
         instructions="Summarize the kitchen light state.",
-        llm_api=DummyToolAPI(hass=hass, id="task_tools", name="Task Tools"),
     )
-    chat_log = ChatLog(hass, "conversation-id")
-    await chat_log.async_provide_llm_data(
-        llm.LLMContext(
-            platform="groq",
-            context=None,
-            language="en",
-            assistant=None,
-            device_id=None,
-        ),
-        user_llm_hass_api=task.llm_api,
-    )
-    chat_log.async_add_user_content(UserContent(task.instructions))
+    chat_log = await async_dummy_tool_chat_log()
 
     with pytest.raises(HomeAssistantError, match="requested structure"):
         await entity._async_generate_data(task, chat_log)
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_rejects_invalid_service_schema_with_tools(hass):
+async def test_ai_task_entity_rejects_invalid_service_schema_with_tools():
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2710,31 +2654,19 @@ async def test_ai_task_entity_rejects_invalid_service_schema_with_tools(hass):
         },
     }
     client = DummyStructuredToolTextClient('{"summary":"The kitchen light is on."}')
-    entity = GroqAITaskEntity(hass, entry, service_data, client)
+    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
         instructions="Summarize the kitchen light state.",
-        llm_api=DummyToolAPI(hass=hass, id="task_tools", name="Task Tools"),
     )
-    chat_log = ChatLog(hass, "conversation-id")
-    await chat_log.async_provide_llm_data(
-        llm.LLMContext(
-            platform="groq",
-            context=None,
-            language="en",
-            assistant=None,
-            device_id=None,
-        ),
-        user_llm_hass_api=task.llm_api,
-    )
-    chat_log.async_add_user_content(UserContent(task.instructions))
+    chat_log = await async_dummy_tool_chat_log()
 
     with pytest.raises(HomeAssistantError, match="requested structure"):
         await entity._async_generate_data(task, chat_log)
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_rejects_unresolved_service_schema_ref_with_tools(hass):
+async def test_ai_task_entity_rejects_unresolved_service_schema_ref_with_tools():
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2747,31 +2679,19 @@ async def test_ai_task_entity_rejects_unresolved_service_schema_ref_with_tools(h
         },
     }
     client = DummyStructuredToolTextClient('{"summary":"The kitchen light is on."}')
-    entity = GroqAITaskEntity(hass, entry, service_data, client)
+    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
         instructions="Summarize the kitchen light state.",
-        llm_api=DummyToolAPI(hass=hass, id="task_tools", name="Task Tools"),
     )
-    chat_log = ChatLog(hass, "conversation-id")
-    await chat_log.async_provide_llm_data(
-        llm.LLMContext(
-            platform="groq",
-            context=None,
-            language="en",
-            assistant=None,
-            device_id=None,
-        ),
-        user_llm_hass_api=task.llm_api,
-    )
-    chat_log.async_add_user_content(UserContent(task.instructions))
+    chat_log = await async_dummy_tool_chat_log()
 
     with pytest.raises(HomeAssistantError, match="requested structure"):
         await entity._async_generate_data(task, chat_log)
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_rejects_malformed_service_schema_tool_result(hass):
+async def test_ai_task_entity_rejects_malformed_service_schema_tool_result():
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2785,24 +2705,12 @@ async def test_ai_task_entity_rejects_malformed_service_schema_tool_result(hass)
         },
     }
     client = DummyStructuredToolTextClient("not json")
-    entity = GroqAITaskEntity(hass, entry, service_data, client)
+    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
         instructions="Summarize the kitchen light state.",
-        llm_api=DummyToolAPI(hass=hass, id="task_tools", name="Task Tools"),
     )
-    chat_log = ChatLog(hass, "conversation-id")
-    await chat_log.async_provide_llm_data(
-        llm.LLMContext(
-            platform="groq",
-            context=None,
-            language="en",
-            assistant=None,
-            device_id=None,
-        ),
-        user_llm_hass_api=task.llm_api,
-    )
-    chat_log.async_add_user_content(UserContent(task.instructions))
+    chat_log = await async_dummy_tool_chat_log()
 
     with pytest.raises(HomeAssistantError, match="requested structure"):
         await entity._async_generate_data(task, chat_log)
