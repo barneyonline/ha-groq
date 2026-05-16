@@ -235,15 +235,20 @@ class GroqAITaskEntity(AITaskEntity):
         tool_choice: str | dict[str, Any] | None = None,
     ) -> TextGenerationRequest:
         """Build a text generation request from the configured service."""
+        resolved_system_prompt: str | None
         if system_prompt is _SYSTEM_PROMPT_UNSET:
-            system_prompt = service_system_prompt(
+            resolved_system_prompt = service_system_prompt(
                 self._config_entry, self._service_data
             )
+        elif isinstance(system_prompt, str) or system_prompt is None:
+            resolved_system_prompt = system_prompt
+        else:
+            raise TypeError("system_prompt must be a string, None, or unset")
         return TextGenerationRequest(
             prompt=instructions,
             model=service_model(self._config_entry, self._service_data),
             messages=messages,
-            system_prompt=system_prompt,
+            system_prompt=resolved_system_prompt,
             tools=tools,
             tool_choice=tool_choice,
             temperature=service_temperature(self._config_entry, self._service_data),
@@ -524,10 +529,10 @@ class GroqAITaskEntity(AITaskEntity):
                 return await self._async_generate_json_fallback(
                     task, chat_log, instructions
                 )
-            data: Any = response["data"]
+            structured_data: Any = response["data"]
             if task.structure is not None:
                 try:
-                    data = task.structure(data)
+                    structured_data = task.structure(structured_data)
                 except vol.Invalid as err:
                     raise HomeAssistantError(
                         "Groq returned data that did not match the requested structure"
@@ -539,5 +544,5 @@ class GroqAITaskEntity(AITaskEntity):
 
         return GenDataTaskResult(
             conversation_id=chat_log.conversation_id,
-            data=data,
+            data=structured_data,
         )
