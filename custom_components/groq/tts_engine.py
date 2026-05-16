@@ -391,12 +391,16 @@ class GroqTTSEngine:
                 raise
             except HomeAssistantError:
                 raise
-            except (aiohttp.ClientError, HTTPError, URLError) as net_err:
+            except (aiohttp.ClientError, TimeoutError, HTTPError, URLError) as net_err:
                 status_code = getattr(net_err, "status", None) or getattr(
                     net_err, "code", None
                 )
                 error_body = getattr(net_err, "message", None)
-                self._mark_unavailable("Network error calling Groq TTS API")
+                is_timeout = isinstance(net_err, TimeoutError)
+                if is_timeout:
+                    self._mark_unavailable("Timed out calling Groq TTS API")
+                else:
+                    self._mark_unavailable("Network error calling Groq TTS API")
                 error_hint = ""
                 if error_body and "1010" in str(error_body):
                     error_hint = " (Check model access in the Groq Console and confirm the selected TTS model is enabled for your account.)"
@@ -406,6 +410,10 @@ class GroqTTSEngine:
                     await asyncio.sleep(1)
                     _LOGGER.debug("Retrying HTTP call (attempt %d)", attempt + 1)
                     continue
+                if is_timeout:
+                    raise HomeAssistantError(
+                        "Timed out while fetching TTS audio from Groq API"
+                    ) from net_err
                 raise HomeAssistantError(
                     f"Network error occurred while fetching TTS audio (HTTP {status_code}): {error_body}{error_hint}"
                 ) from net_err
