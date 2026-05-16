@@ -37,7 +37,8 @@
       }
     },
     "abort": {
-      "reconfigure_successful": "Groq account updated successfully."
+      "reconfigure_successful": "Groq account updated successfully.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
     },
     "error": {
       "cannot_connect": "Could not connect to Groq. Please check your network connection and try again.",
@@ -56,7 +57,8 @@
       "select_voice_for_model": "Select a voice for the selected model.",
       "required": "This field is required.",
       "unknown": "Unexpected error validating the API key. Please try again.",
-      "unknown_error": "Unexpected error — please try again."
+      "unknown_error": "Unexpected error — please try again.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
     }
   },
   "options": {
@@ -92,7 +94,8 @@
             "system_prompt": "System prompt",
             "temperature": "Temperature",
             "advanced_options": "Configure advanced request options",
-            "protect_free_tier": "Free-Tier Protection"
+            "protect_free_tier": "Free-Tier Protection",
+            "llm_hass_api": "Home Assistant LLM API"
           },
           "data_description": {
             "name": "A friendly name for this text generation service. Home Assistant uses this for Assist and AI task entities.",
@@ -100,7 +103,8 @@
             "system_prompt": "Instructions that guide the model. The default matches Home Assistant's AI task prompt.",
             "temperature": "Controls response variation. Lower values are more predictable; higher values are more creative.",
             "advanced_options": "Opens advanced controls for less common Groq chat request options.",
-            "protect_free_tier": "When Groq reports that this service has reached a request or token limit, Home Assistant pauses only this service until Groq's reset time before sending more requests."
+            "protect_free_tier": "When Groq reports that this service has reached a request or token limit, Home Assistant pauses only this service until Groq's reset time before sending more requests.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
           }
         },
         "text_generation_advanced": {

@@ -37,7 +37,8 @@
       }
     },
     "abort": {
-      "reconfigure_successful": "Groq акаунтът е актуализиран успешно."
+      "reconfigure_successful": "Groq акаунтът е актуализиран успешно.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
     },
     "error": {
       "cannot_connect": "Не може да се свърже с Groq. Моля, проверете мрежовата си връзка и опитайте отново.",
@@ -56,7 +57,8 @@
       "select_voice_for_model": "Изберете глас за избрания модел.",
       "required": "Това поле е задължително.",
       "unknown": "Неочаквана грешка при валидиране на ключа API. Моля, опитайте отново.",
-      "unknown_error": "Неочаквана грешка — моля, опитайте отново."
+      "unknown_error": "Неочаквана грешка — моля, опитайте отново.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
     }
   },
   "options": {
@@ -92,7 +94,8 @@
             "system_prompt": "Системна подкана",
             "temperature": "Температура",
             "advanced_options": "Конфигуриране на разширени опции за заявка",
-            "protect_free_tier": "Безплатна защита"
+            "protect_free_tier": "Безплатна защита",
+            "llm_hass_api": "Home Assistant LLM API"
           },
           "data_description": {
             "name": "Приветливо име за тази услуга за генериране на текст. Home Assistant използва това за Assist и AI обекти на задачи.",
@@ -100,7 +103,8 @@
             "system_prompt": "Инструкции, които ръководят модела. По подразбиране съвпада с подканата за задача Home Assistant на AI.",
             "temperature": "Контролира вариацията на отговора. По-ниските стойности са по-предвидими; по-високите стойности са по-креативни.",
             "advanced_options": "Отваря разширени контроли за по-рядко срещани Groq опции за заявки за чат.",
-            "protect_free_tier": "Когато Groq съобщи, че тази услуга е достигнала лимит на заявка или токен, Home Assistant поставя на пауза само тази услуга до времето за нулиране на Groq, преди да изпрати още заявки."
+            "protect_free_tier": "Когато Groq съобщи, че тази услуга е достигнала лимит на заявка или токен, Home Assistant поставя на пауза само тази услуга до времето за нулиране на Groq, преди да изпрати още заявки.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
           }
         },
         "text_generation_advanced": {

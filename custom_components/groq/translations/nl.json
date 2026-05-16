@@ -37,7 +37,8 @@
       }
     },
     "abort": {
-      "reconfigure_successful": "Groq-account succesvol bijgewerkt."
+      "reconfigure_successful": "Groq-account succesvol bijgewerkt.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
     },
     "error": {
       "cannot_connect": "Kan geen verbinding maken met Groq. Controleer uw netwerkverbinding en probeer het opnieuw.",
@@ -56,7 +57,8 @@
       "select_voice_for_model": "Selecteer een stem voor het geselecteerde model.",
       "required": "Dit veld is verplicht.",
       "unknown": "Onverwachte fout bij het valideren van de API-sleutel. Probeer het opnieuw.",
-      "unknown_error": "Onverwachte fout — probeer het opnieuw."
+      "unknown_error": "Onverwachte fout — probeer het opnieuw.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
     }
   },
   "options": {
@@ -92,7 +94,8 @@
             "system_prompt": "Systeemprompt",
             "temperature": "Temperatuur",
             "advanced_options": "Geavanceerde verzoekopties configureren",
-            "protect_free_tier": "Gratis Tier-bescherming"
+            "protect_free_tier": "Gratis Tier-bescherming",
+            "llm_hass_api": "Home Assistant LLM API"
           },
           "data_description": {
             "name": "Een vriendelijke naam voor deze tekstgeneratieservice. Home Assistant gebruikt dit voor de taakentiteiten Assist en AI.",
@@ -100,7 +103,8 @@
             "system_prompt": "Instructies voor het model. De standaard komt overeen met de AI-taakprompt van Home Assistant.",
             "temperature": "Regelt de responsvariatie. Lagere waarden zijn voorspelbaarder; hogere waarden zijn creatiever.",
             "advanced_options": "Opent geavanceerde bedieningselementen voor minder gebruikelijke Groq-chatverzoekopties.",
-            "protect_free_tier": "Wanneer Groq meldt dat deze service een verzoek- of tokenlimiet heeft bereikt, pauzeert Home Assistant alleen deze service tot de resettijd van Groq voordat er meer verzoeken worden verzonden."
+            "protect_free_tier": "Wanneer Groq meldt dat deze service een verzoek- of tokenlimiet heeft bereikt, pauzeert Home Assistant alleen deze service tot de resettijd van Groq voordat er meer verzoeken worden verzonden.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
           }
         },
         "text_generation_advanced": {

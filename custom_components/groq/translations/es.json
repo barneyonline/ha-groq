@@ -37,7 +37,8 @@
       }
     },
     "abort": {
-      "reconfigure_successful": "Cuenta Groq actualizada correctamente."
+      "reconfigure_successful": "Cuenta Groq actualizada correctamente.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
     },
     "error": {
       "cannot_connect": "No se pudo conectar con Groq. Verifique su conexión de red e inténtelo nuevamente.",
@@ -56,7 +57,8 @@
       "select_voice_for_model": "Selecciona una voz para el modelo seleccionado.",
       "required": "Este campo es obligatorio.",
       "unknown": "Error inesperado al validar la clave API. Por favor inténtalo de nuevo.",
-      "unknown_error": "Error inesperado. Inténtalo de nuevo."
+      "unknown_error": "Error inesperado. Inténtalo de nuevo.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
     }
   },
   "options": {
@@ -92,7 +94,8 @@
             "system_prompt": "Aviso del sistema",
             "temperature": "Temperatura",
             "advanced_options": "Configurar opciones avanzadas de solicitud",
-            "protect_free_tier": "Protección de nivel gratuito"
+            "protect_free_tier": "Protección de nivel gratuito",
+            "llm_hass_api": "Home Assistant LLM API"
           },
           "data_description": {
             "name": "Un nombre descriptivo para este servicio de generación de texto. Home Assistant usa esto para las entidades de tareas Assist y AI.",
@@ -100,7 +103,8 @@
             "system_prompt": "Instrucciones que guían el modelo. El valor predeterminado coincide con el mensaje de tarea AI de Home Assistant.",
             "temperature": "Controla la variación de respuesta. Los valores más bajos son más predecibles; Los valores más altos son más creativos.",
             "advanced_options": "Abre controles avanzados para opciones de solicitud de chat Groq menos comunes.",
-            "protect_free_tier": "Cuando Groq informa que este servicio ha alcanzado un límite de solicitudes o tokens, Home Assistant pausa solo este servicio hasta el tiempo de reinicio de Groq antes de enviar más solicitudes."
+            "protect_free_tier": "Cuando Groq informa que este servicio ha alcanzado un límite de solicitudes o tokens, Home Assistant pausa solo este servicio hasta el tiempo de reinicio de Groq antes de enviar más solicitudes.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
           }
         },
         "text_generation_advanced": {

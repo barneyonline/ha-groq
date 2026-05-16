@@ -37,7 +37,8 @@
       }
     },
     "abort": {
-      "reconfigure_successful": "Groq konto värskendamine õnnestus."
+      "reconfigure_successful": "Groq konto värskendamine õnnestus.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
     },
     "error": {
       "cannot_connect": "Seadmega Groq ei saanud ühendust luua. Kontrollige oma võrguühendust ja proovige uuesti.",
@@ -56,7 +57,8 @@
       "select_voice_for_model": "Valige valitud mudeli hääl.",
       "required": "See väli on kohustuslik.",
       "unknown": "Ootamatu tõrge võtme API valideerimisel. Palun proovi uuesti.",
-      "unknown_error": "Ootamatu viga – proovige uuesti."
+      "unknown_error": "Ootamatu viga – proovige uuesti.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
     }
   },
   "options": {
@@ -92,7 +94,8 @@
             "system_prompt": "Süsteemi viip",
             "temperature": "Temperatuur",
             "advanced_options": "Konfigureerige täpsemad päringu valikud",
-            "protect_free_tier": "Vabatasemeline kaitse"
+            "protect_free_tier": "Vabatasemeline kaitse",
+            "llm_hass_api": "Home Assistant LLM API"
           },
           "data_description": {
             "name": "Selle teksti genereerimisteenuse sõbralik nimi. Home Assistant kasutab seda Assist ja AI tegumiüksuste jaoks.",
@@ -100,7 +103,8 @@
             "system_prompt": "Juhised, mis juhivad mudelit. Vaikimisi vastab Home Assistant AI tegumiviibale.",
             "temperature": "Kontrollib vastuse varieerumist. Madalamad väärtused on prognoositavamad; kõrgemad väärtused on loomingulisemad.",
             "advanced_options": "Avab täpsemad juhtelemendid vähemlevinud Groq vestlustaotluste valikute jaoks.",
-            "protect_free_tier": "Kui Groq teatab, et see teenus on jõudnud päringu või loa limiidini, peatab Home Assistant ainult selle teenuse kuni Groq lähtestamisajani, enne kui saadab rohkem taotlusi."
+            "protect_free_tier": "Kui Groq teatab, et see teenus on jõudnud päringu või loa limiidini, peatab Home Assistant ainult selle teenuse kuni Groq lähtestamisajani, enne kui saadab rohkem taotlusi.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
           }
         },
         "text_generation_advanced": {

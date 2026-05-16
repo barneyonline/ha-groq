@@ -17,6 +17,7 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import llm
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.core import callback
 
@@ -191,6 +192,15 @@ def _model_ids_for_feature(
     """Return model ids for a feature, falling back only when discovery is empty."""
     model_ids = [model.model_id for model in registry.models_for_feature(feature)]
     return model_ids or fallback
+
+
+def _llm_api_select_options(hass) -> list[dict[str, str]]:
+    """Return available Home Assistant LLM API selector options."""
+    try:
+        apis = llm.async_get_apis(hass)
+    except (AttributeError, KeyError, TypeError):
+        return []
+    return [{"label": api.name, "value": api.id} for api in apis]
 
 
 async def async_validate_api_key(hass, api_key: str) -> str | None:
@@ -628,6 +638,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                         user_input,
                         model_options,
                         model_registry,
+                        llm_api_options=_llm_api_select_options(self.hass),
                     ),
                     errors=errors,
                     description_placeholders={
@@ -673,6 +684,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                             user_input,
                             model_options,
                             model_registry,
+                            llm_api_options=_llm_api_select_options(self.hass),
                         ),
                         errors={
                             "base" if field != CONF_NAME else field: reason
@@ -687,6 +699,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                 self._existing_service_data(),
                 model_options,
                 model_registry,
+                llm_api_options=_llm_api_select_options(self.hass),
             ),
             description_placeholders={
                 "model_capabilities": text_generation_model_capability_summary(

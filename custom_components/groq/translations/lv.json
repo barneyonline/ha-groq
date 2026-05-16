@@ -37,7 +37,8 @@
       }
     },
     "abort": {
-      "reconfigure_successful": "Groq konts ir veiksmīgi atjaunināts."
+      "reconfigure_successful": "Groq konts ir veiksmīgi atjaunināts.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
     },
     "error": {
       "cannot_connect": "Nevarēja izveidot savienojumu ar Groq. Lūdzu, pārbaudiet tīkla savienojumu un mēģiniet vēlreiz.",
@@ -56,7 +57,8 @@
       "select_voice_for_model": "Izvēlieties balsi izvēlētajam modelim.",
       "required": "Šis lauks ir obligāts.",
       "unknown": "Negaidīta kļūda, apstiprinot API atslēgu. Lūdzu, mēģiniet vēlreiz.",
-      "unknown_error": "Negaidīta kļūda — lūdzu, mēģiniet vēlreiz."
+      "unknown_error": "Negaidīta kļūda — lūdzu, mēģiniet vēlreiz.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
     }
   },
   "options": {
@@ -92,7 +94,8 @@
             "system_prompt": "Sistēmas uzvedne",
             "temperature": "Temperatūra",
             "advanced_options": "Konfigurējiet papildu pieprasījuma opcijas",
-            "protect_free_tier": "Brīvā līmeņa aizsardzība"
+            "protect_free_tier": "Brīvā līmeņa aizsardzība",
+            "llm_hass_api": "Home Assistant LLM API"
           },
           "data_description": {
             "name": "Draudzīgs nosaukums šim teksta ģenerēšanas pakalpojumam. Home Assistant to izmanto Assist un AI uzdevumu entītijām.",
@@ -100,7 +103,8 @@
             "system_prompt": "Norādījumi, kas vada modeli. Noklusējums atbilst Home Assistant AI uzdevuma uzvednei.",
             "temperature": "Kontrolē atbildes variācijas. Zemākas vērtības ir vairāk paredzamas; augstākas vērtības ir radošākas.",
             "advanced_options": "Atver papildu vadīklas retāk sastopamām Groq tērzēšanas pieprasījuma opcijām.",
-            "protect_free_tier": "Kad Groq ziņo, ka šis pakalpojums ir sasniedzis pieprasījuma vai pilnvaras ierobežojumu, Home Assistant aptur tikai šo pakalpojumu līdz Groq atiestatīšanas laikam, pirms tiek nosūtīti papildu pieprasījumi."
+            "protect_free_tier": "Kad Groq ziņo, ka šis pakalpojums ir sasniedzis pieprasījuma vai pilnvaras ierobežojumu, Home Assistant aptur tikai šo pakalpojumu līdz Groq atiestatīšanas laikam, pirms tiek nosūtīti papildu pieprasījumi.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
           }
         },
         "text_generation_advanced": {

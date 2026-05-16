@@ -37,6 +37,7 @@
       }
     },
     "abort": {
+      "reauth_successful": "Vše je připraveno. Groq byl znovu připojen s novým klíčem API.",
       "reconfigure_successful": "Účet Groq byl úspěšně aktualizován."
     },
     "error": {
@@ -50,7 +51,8 @@
       "unsupported_reasoning_model": "Vybraný model nepodporuje možnosti uvažování.",
       "unsupported_prompt_caching_model": "Vybraný model nepodporuje místní ukládání odpovědí do mezipaměti.",
       "unsupported_structured_outputs_model": "Vybraný model nepodporuje strukturované výstupy.",
-      "reserved_request_body_option": "Další možnosti těla požadavku nemohou přepsat model, zprávy nebo stream. Místo toho použijte vyhrazená pole.",
+      "unsupported_tool_calling_model": "Vybraný model není známý podporou volání nástrojů Home Assistant.",
+      "reserved_request_body_option": "Další možnosti těla požadavku nemohou přepsat model, zprávy, stream, tools nebo tool_choice. Místo toho použijte vyhrazená pole.",
       "max_completion_tokens_exceeded": "Vybraný model nepodporuje tolik tokenů maximálního dokončení.",
       "invalid_voice": "Vybraný hlas není pro vybraný model dostupný.",
       "select_voice_for_model": "Vyberte hlas pro vybraný model.",
@@ -90,6 +92,7 @@
             "name": "Jméno",
             "model": "Modelka",
             "system_prompt": "Systémová výzva",
+            "llm_hass_api": "Home Assistant LLM API",
             "temperature": "Teplota",
             "advanced_options": "Nakonfigurujte pokročilé možnosti požadavku",
             "protect_free_tier": "Bezplatná ochrana"
@@ -98,6 +101,7 @@
             "name": "Popisný název pro tuto službu generování textu. Home Assistant to používá pro entity úloh Assist a AI.",
             "model": "Chatovací model Groq používaný pro textové odpovědi, konverzace Assist a úlohy generování dat.",
             "system_prompt": "Pokyny, které vedou model. Výchozí nastavení odpovídá příkazovému řádku AI Home Assistant.",
+            "llm_hass_api": "Home Assistant LLM API, která tento agent Assist může používat pro volání nástrojů. Ponechte prázdné, chcete-li přístup k nástrojům Home Assistant zakázat.",
             "temperature": "Řídí variace odezvy. Nižší hodnoty jsou předvídatelnější; vyšší hodnoty jsou kreativnější.",
             "advanced_options": "Otevírá pokročilé ovládací prvky pro méně obvyklé možnosti žádosti o chat Groq.",
             "protect_free_tier": "Když Groq ohlásí, že tato služba dosáhla limitu požadavku nebo tokenu, Home Assistant pozastaví pouze tuto službu do doby resetování Groq před odesláním dalších požadavků."

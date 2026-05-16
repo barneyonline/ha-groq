@@ -37,7 +37,8 @@
       }
     },
     "abort": {
-      "reconfigure_successful": "Groq fiók sikeresen frissítve."
+      "reconfigure_successful": "Groq fiók sikeresen frissítve.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
     },
     "error": {
       "cannot_connect": "Nem sikerült csatlakozni a Groq-hez. Kérjük, ellenőrizze a hálózati kapcsolatot, és próbálja újra.",
@@ -56,7 +57,8 @@
       "select_voice_for_model": "Válasszon hangot a kiválasztott modellhez.",
       "required": "Ezt a mezőt kötelező kitölteni.",
       "unknown": "Váratlan hiba a API kulcs érvényesítésekor. Kérjük, próbálja újra.",
-      "unknown_error": "Váratlan hiba – kérjük, próbálja újra."
+      "unknown_error": "Váratlan hiba – kérjük, próbálja újra.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
     }
   },
   "options": {
@@ -92,7 +94,8 @@
             "system_prompt": "Rendszerkérdés",
             "temperature": "Hőmérséklet",
             "advanced_options": "Speciális kérési beállítások konfigurálása",
-            "protect_free_tier": "Free-Tier Protection"
+            "protect_free_tier": "Free-Tier Protection",
+            "llm_hass_api": "Home Assistant LLM API"
           },
           "data_description": {
             "name": "Barátságos név ennek a szöveggeneráló szolgáltatásnak. A Home Assistant ezt használja a Assist és AI feladat entitásokhoz.",
@@ -100,7 +103,8 @@
             "system_prompt": "A modellhez vezető utasítások. Az alapértelmezett érték megegyezik a Home Assistant AI feladatsorával.",
             "temperature": "A válaszváltoztatást szabályozza. Az alacsonyabb értékek kiszámíthatóbbak; a magasabb értékek kreatívabbak.",
             "advanced_options": "Megnyitja a speciális vezérlőket a kevésbé gyakori Groq csevegési kérési lehetőségekhez.",
-            "protect_free_tier": "Amikor a Groq azt jelenti, hogy ez a szolgáltatás elérte a kérések vagy token korlátot, a Home Assistant csak ezt a szolgáltatást szünetelteti a Groq visszaállítási idejéig, mielőtt további kéréseket küldene."
+            "protect_free_tier": "Amikor a Groq azt jelenti, hogy ez a szolgáltatás elérte a kérések vagy token korlátot, a Home Assistant csak ezt a szolgáltatást szünetelteti a Groq visszaállítási idejéig, mielőtt további kéréseket küldene.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
           }
         },
         "text_generation_advanced": {

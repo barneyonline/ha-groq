@@ -37,7 +37,8 @@
       }
     },
     "abort": {
-      "reconfigure_successful": "Groq-kontot har uppdaterats framgångsrikt."
+      "reconfigure_successful": "Groq-kontot har uppdaterats framgångsrikt.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
     },
     "error": {
       "cannot_connect": "Kunde inte ansluta till Groq. Kontrollera din nätverksanslutning och försök igen.",
@@ -56,7 +57,8 @@
       "select_voice_for_model": "Välj en röst för den valda modellen.",
       "required": "Detta fält är obligatoriskt.",
       "unknown": "Oväntat fel vid validering av API-nyckeln. Försök igen.",
-      "unknown_error": "Oväntat fel — försök igen."
+      "unknown_error": "Oväntat fel — försök igen.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
     }
   },
   "options": {
@@ -92,7 +94,8 @@
             "system_prompt": "Systemprompt",
             "temperature": "Temperatur",
             "advanced_options": "Konfigurera avancerade förfrågningsalternativ",
-            "protect_free_tier": "Free-Leer Protection"
+            "protect_free_tier": "Free-Leer Protection",
+            "llm_hass_api": "Home Assistant LLM API"
           },
           "data_description": {
             "name": "Ett vänligt namn för denna textgenereringstjänst. Home Assistant använder detta för Assist och AI uppgiftsenheter.",
@@ -100,7 +103,8 @@
             "system_prompt": "Instruktioner som vägleder modellen. Standarden matchar Home Assistant:s AI-uppgiftsprompt.",
             "temperature": "Styr svarsvariation. Lägre värden är mer förutsägbara; högre värden är mer kreativa.",
             "advanced_options": "Öppnar avancerade kontroller för mindre vanliga Groq chattförfrågningar.",
-            "protect_free_tier": "När Groq rapporterar att denna tjänst har nått en begäran eller token-gräns, pausar Home Assistant endast denna tjänst tills Groq:s återställningstid innan den skickar fler förfrågningar."
+            "protect_free_tier": "När Groq rapporterar att denna tjänst har nått en begäran eller token-gräns, pausar Home Assistant endast denna tjänst tills Groq:s återställningstid innan den skickar fler förfrågningar.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
           }
         },
         "text_generation_advanced": {

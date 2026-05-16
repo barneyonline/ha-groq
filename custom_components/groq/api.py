@@ -30,7 +30,9 @@ AUDIO_TRANSCRIPTIONS_PATH = "/audio/transcriptions"
 JSON_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
 STREAM_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
 MODEL_DETAIL_CONCURRENCY = 5
-RESERVED_CHAT_BODY_OPTIONS = frozenset({"messages", "model", "stream"})
+RESERVED_CHAT_BODY_OPTIONS = frozenset(
+    {"messages", "model", "stream", "tool_choice", "tools"}
+)
 
 _CLIENTSESSION_FACTORY: Callable[[HomeAssistant], aiohttp.ClientSession] | None = None
 
@@ -69,8 +71,10 @@ class TextGenerationRequest:
 
     prompt: str
     model: str
-    messages: list[dict[str, str]] | None = None
+    messages: list[dict[str, Any]] | None = None
     system_prompt: str | None = None
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: str | dict[str, Any] | None = None
     temperature: float | None = None
     max_tokens: int | None = None
     top_p: float | None = None
@@ -113,6 +117,7 @@ class ChatCompletionResult:
     usage: dict[str, Any]
     raw: dict[str, Any]
     reasoning: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
     executed_tools: list[dict[str, Any]] | None = None
     usage_breakdown: dict[str, Any] | None = None
 
@@ -137,7 +142,7 @@ def normalize_base_url(url: str | None) -> str:
 
 def build_text_generation_payload(request: TextGenerationRequest) -> dict[str, Any]:
     """Build an OpenAI-compatible chat completion payload."""
-    messages: list[dict[str, str]] = (
+    messages: list[dict[str, Any]] = (
         list(request.messages)
         if request.messages is not None
         else [{"role": "user", "content": request.prompt}]
@@ -181,6 +186,10 @@ def build_text_generation_payload(request: TextGenerationRequest) -> dict[str, A
                 if value is not None and key not in RESERVED_CHAT_BODY_OPTIONS
             }
         )
+    if request.tools is not None:
+        payload["tools"] = request.tools
+    if request.tool_choice is not None:
+        payload["tool_choice"] = request.tool_choice
     return payload
 
 
@@ -241,6 +250,8 @@ def extract_chat_text(payload: dict[str, Any]) -> str:
                 parts.append(part["text"])
         if parts:
             return "\n".join(parts)
+    if extract_tool_calls(payload):
+        return ""
     raise GroqResponseError("Groq response did not include text content")
 
 
@@ -251,6 +262,32 @@ def extract_chat_reasoning(payload: dict[str, Any]) -> str | None:
         return None
     reasoning = message.get("reasoning") or message.get("reasoning_content")
     return reasoning if isinstance(reasoning, str) else None
+
+
+def extract_tool_calls(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Extract assistant tool calls from an OpenAI-compatible chat response."""
+    message = _extract_chat_message(payload)
+    if message is None:
+        return None
+    tool_calls = message.get("tool_calls")
+    if not isinstance(tool_calls, list):
+        return None
+
+    parsed_calls: list[dict[str, Any]] = []
+    for tool_call in tool_calls:
+        if not isinstance(tool_call, dict):
+            continue
+        parsed_call = dict(tool_call)
+        function = parsed_call.get("function")
+        if isinstance(function, dict):
+            parsed_function = dict(function)
+            arguments = parsed_function.get("arguments")
+            if isinstance(arguments, str):
+                with suppress(json.JSONDecodeError):
+                    parsed_function["parsed_arguments"] = json.loads(arguments)
+            parsed_call["function"] = parsed_function
+        parsed_calls.append(parsed_call)
+    return parsed_calls or None
 
 
 def extract_executed_tools(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
@@ -509,6 +546,7 @@ class GroqApiClient:
             usage=usage if isinstance(usage, dict) else {},
             raw=payload,
             reasoning=extract_chat_reasoning(payload),
+            tool_calls=extract_tool_calls(payload),
             executed_tools=extract_executed_tools(payload),
             usage_breakdown=(
                 payload.get("usage_breakdown")

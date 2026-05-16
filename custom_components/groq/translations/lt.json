@@ -37,7 +37,8 @@
       }
     },
     "abort": {
-      "reconfigure_successful": "Groq paskyra sėkmingai atnaujinta."
+      "reconfigure_successful": "Groq paskyra sėkmingai atnaujinta.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
     },
     "error": {
       "cannot_connect": "Nepavyko prisijungti prie Groq. Patikrinkite tinklo ryšį ir bandykite dar kartą.",
@@ -56,7 +57,8 @@
       "select_voice_for_model": "Pasirinkite balsą pasirinktam modeliui.",
       "required": "Šis laukas yra būtinas.",
       "unknown": "Netikėta klaida tikrinant API raktą. Bandykite dar kartą.",
-      "unknown_error": "Netikėta klaida – bandykite dar kartą."
+      "unknown_error": "Netikėta klaida – bandykite dar kartą.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
     }
   },
   "options": {
@@ -92,7 +94,8 @@
             "system_prompt": "Sistemos raginimas",
             "temperature": "Temperatūra",
             "advanced_options": "Konfigūruokite išplėstines užklausos parinktis",
-            "protect_free_tier": "Laisvos pakopos apsauga"
+            "protect_free_tier": "Laisvos pakopos apsauga",
+            "llm_hass_api": "Home Assistant LLM API"
           },
           "data_description": {
             "name": "Patogus šios teksto generavimo paslaugos pavadinimas. Home Assistant tai naudoja Assist ir AI užduočių objektams.",
@@ -100,7 +103,8 @@
             "system_prompt": "Instrukcijos, pagal kurias vadovaujamasi modeliu. Numatytoji reikšmė atitinka Home Assistant AI užduočių eilutę.",
             "temperature": "Valdo atsako pokyčius. Mažesnės vertės yra labiau nuspėjamos; didesnės vertybės yra kūrybiškesnės.",
             "advanced_options": "Atidaro išplėstinius valdiklius, skirtus retesnėms Groq pokalbių užklausų parinktims.",
-            "protect_free_tier": "Kai Groq praneša, kad ši paslauga pasiekė užklausų arba prieigos raktų limitą, Home Assistant pristabdo tik šią paslaugą iki Groq nustatymo iš naujo laiko, prieš išsiųsdama daugiau užklausų."
+            "protect_free_tier": "Kai Groq praneša, kad ši paslauga pasiekė užklausų arba prieigos raktų limitą, Home Assistant pristabdo tik šią paslaugą iki Groq nustatymo iš naujo laiko, prieš išsiųsdama daugiau užklausų.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
           }
         },
         "text_generation_advanced": {

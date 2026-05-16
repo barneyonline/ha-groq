@@ -6,6 +6,7 @@ from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.helpers.selector import selector
 
 from .const import (
@@ -87,7 +88,7 @@ def _model_default(
 def _supports_model_option(
     registry: GroqModelRegistry | None,
     model: str,
-    feature: GroqFeature,
+    feature: GroqFeature | GroqCapability,
 ) -> bool:
     """Return whether a model supports an optional Groq feature."""
     if not model:
@@ -238,15 +239,19 @@ def text_generation_model_capability_summary(
     supported: list[str] = []
     unsupported: list[str] = []
     supported.append("Assist")
+    supported.append("data generation tasks")
     if GroqCapability.STRUCTURED_OUTPUTS in capabilities:
-        supported.append("data generation tasks")
         supported.append("structured outputs")
     else:
-        unsupported.append("data generation tasks")
+        unsupported.append("structured outputs")
     if GroqCapability.REASONING in capabilities:
         supported.append("reasoning")
     if GroqCapability.PROMPT_CACHING in capabilities:
         supported.append("local response caching")
+    if GroqCapability.TOOL_CALLING in capabilities:
+        supported.append("Home Assistant tool calls")
+    else:
+        unsupported.append("Home Assistant tool calls")
     if GroqCapability.COMPOUND in capabilities:
         supported.append("Groq Compound tools")
     if GroqCapability.VISION in capabilities:
@@ -441,6 +446,8 @@ def text_generation_basic_schema(
     user_input: dict[str, Any] | None = None,
     model_options: list[str] | None = None,
     model_registry: GroqModelRegistry | None = None,
+    *,
+    llm_api_options: list[dict[str, str]] | None = None,
 ) -> vol.Schema:
     """Return the basic text generation service schema."""
     values = user_input or {}
@@ -469,6 +476,18 @@ def text_generation_basic_schema(
                 CONF_SYSTEM_PROMPT,
                 default=values.get(CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT),
             ): selector({"text": {"multiline": True}}),
+            vol.Optional(
+                CONF_LLM_HASS_API,
+                default=values.get(CONF_LLM_HASS_API, []),
+            ): selector(
+                {
+                    "select": {
+                        "options": llm_api_options or [],
+                        "multiple": True,
+                        "mode": "list",
+                    }
+                }
+            ),
             vol.Optional(
                 CONF_TEMPERATURE,
                 default=values.get(CONF_TEMPERATURE, DEFAULT_TEXT_TEMPERATURE),
@@ -597,6 +616,7 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
     # defaults instead of storing meaningless overrides.
     for key in (
         CONF_ADVANCED_OPTIONS,
+        CONF_LLM_HASS_API,
         CONF_LANGUAGE,
         CONF_REASONING_EFFORT,
         CONF_REASONING_FORMAT,
@@ -605,6 +625,8 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
     ):
         if data.get(key) in ("", None):
             data.pop(key, None)
+    if not data.get(CONF_LLM_HASS_API):
+        data.pop(CONF_LLM_HASS_API, None)
     if not data.get(CONF_REQUEST_BODY_OPTIONS):
         data.pop(CONF_REQUEST_BODY_OPTIONS, None)
     if not data.get(CONF_SCHEMA):
@@ -643,6 +665,12 @@ def validate_text_generation_input(
         model_registry, model, GroqFeature.STRUCTURED_OUTPUTS
     ):
         errors[CONF_MODEL] = "unsupported_structured_outputs_model"
+    if user_input.get(CONF_LLM_HASS_API) and not _supports_model_option(
+        model_registry,
+        model,
+        GroqCapability.TOOL_CALLING,
+    ):
+        errors[CONF_LLM_HASS_API] = "unsupported_tool_calling_model"
     active_registry = model_registry or GroqModelRegistry()
     if body_error := request_body_options_validation_error(
         active_registry,
