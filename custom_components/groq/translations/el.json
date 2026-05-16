@@ -37,6 +37,7 @@
       }
     },
     "abort": {
+      "reauth_successful": "Όλα είναι έτοιμα. Το Groq επανασυνδέθηκε με το νέο κλειδί API.",
       "reconfigure_successful": "Ο λογαριασμός Groq ενημερώθηκε με επιτυχία."
     },
     "error": {
@@ -50,7 +51,8 @@
       "unsupported_reasoning_model": "Το επιλεγμένο μοντέλο δεν υποστηρίζει επιλογές συλλογισμού.",
       "unsupported_prompt_caching_model": "Το επιλεγμένο μοντέλο δεν υποστηρίζει προσωρινή αποθήκευση προτροπής Groq.",
       "unsupported_structured_outputs_model": "Το επιλεγμένο μοντέλο δεν υποστηρίζει δομημένες εξόδους.",
-      "reserved_request_body_option": "Οι πρόσθετες επιλογές σώματος αιτήματος δεν μπορούν να παρακάμψουν το μοντέλο, τα μηνύματα ή τη ροή. Χρησιμοποιήστε τα ειδικά πεδία.",
+      "unsupported_tool_calling_model": "Το επιλεγμένο μοντέλο δεν είναι γνωστό ότι υποστηρίζει κλήσεις εργαλείων Home Assistant.",
+      "reserved_request_body_option": "Οι πρόσθετες επιλογές σώματος αιτήματος δεν μπορούν να παρακάμψουν το μοντέλο, τα μηνύματα, τη ροή, τα tools ή το tool_choice. Χρησιμοποιήστε τα ειδικά πεδία.",
       "max_completion_tokens_exceeded": "Το επιλεγμένο μοντέλο δεν υποστηρίζει τόσα μέγιστα διακριτικά ολοκλήρωσης.",
       "invalid_voice": "Η επιλεγμένη φωνή δεν είναι διαθέσιμη για το επιλεγμένο μοντέλο.",
       "select_voice_for_model": "Επιλέξτε μια φωνή για το επιλεγμένο μοντέλο.",
@@ -90,6 +92,7 @@
             "name": "Ονομα",
             "model": "Μοντέλο",
             "system_prompt": "Προτροπή συστήματος",
+            "llm_hass_api": "Home Assistant LLM API",
             "temperature": "Θερμοκρασία",
             "advanced_options": "Διαμόρφωση σύνθετων επιλογών αιτήματος",
             "protect_free_tier": "Προστασία ελεύθερου επιπέδου"
@@ -98,6 +101,7 @@
             "name": "Ένα φιλικό όνομα για αυτήν την υπηρεσία δημιουργίας κειμένου. Το Home Assistant το χρησιμοποιεί για οντότητες εργασιών Assist και AI.",
             "model": "Το μοντέλο συνομιλίας Groq χρησιμοποιείται για απαντήσεις κειμένου, συνομιλίες υποβοήθησης και εργασίες δημιουργίας δεδομένων.",
             "system_prompt": "Οδηγίες που καθοδηγούν το μοντέλο. Η προεπιλογή ταιριάζει με την προτροπή εργασιών AI του Home Assistant.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access.",
             "temperature": "Ελέγχει τη διακύμανση απόκρισης. Οι χαμηλότερες τιμές είναι πιο προβλέψιμες. Οι υψηλότερες αξίες είναι πιο δημιουργικές.",
             "advanced_options": "Ανοίγει τα σύνθετα στοιχεία ελέγχου για τις λιγότερο κοινές επιλογές αιτήματος συνομιλίας Groq.",
             "protect_free_tier": "Όταν το Groq αναφέρει ότι αυτή η υπηρεσία έχει φτάσει σε ένα όριο αιτήματος ή διακριτικού, το Home Assistant διακόπτει μόνο αυτήν την υπηρεσία μέχρι τον χρόνο επαναφοράς του Groq πριν στείλει περισσότερα αιτήματα."
@@ -137,7 +141,7 @@
             "schema_name": "Ένα σύντομο αναγνωριστικό στάλθηκε στο Groq με το σχήμα.",
             "schema": "Το αντικείμενο JSON Schema στάλθηκε ως response_format.json_schema.schema.",
             "strict": "Χρησιμοποιεί περιορισμένη αποκωδικοποίηση Groq όταν το επιλεγμένο μοντέλο υποστηρίζει αυστηρές δομημένες εξόδους.",
-            "request_body_options": "Το αντικείμενο JSON συγχωνεύτηκε στο σώμα αιτήματος ολοκλήρωσης συνομιλίας. Αυτή είναι η προηγμένη διέλευση για κάθε επιλογή Groq δημιουργίας σώματος συνομιλίας που δεν εμφανίζεται ως αποκλειστικό πεδίο, including citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+            "request_body_options": "Το αντικείμενο JSON συγχωνεύτηκε στο σώμα αιτήματος ολοκλήρωσης συνομιλίας. Αυτή είναι η προηγμένη διέλευση για κάθε επιλογή Groq δημιουργίας σώματος συνομιλίας που δεν εμφανίζεται ως αποκλειστικό πεδίο, including citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, top_logprobs, and user."
           }
         }
       }

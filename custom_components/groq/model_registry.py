@@ -24,6 +24,7 @@ class GroqCapability(StrEnum):
     STRUCTURED_OUTPUTS = "structured_outputs"
     PROMPT_CACHING = "prompt_caching"
     COMPOUND = "compound"
+    TOOL_CALLING = "tool_calling"
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +72,7 @@ BUILT_IN_MODELS: dict[str, GroqModel] = {
         capabilities=frozenset(
             {
                 GroqCapability.TEXT_GENERATION,
+                GroqCapability.TOOL_CALLING,
             }
         ),
     ),
@@ -81,6 +83,7 @@ BUILT_IN_MODELS: dict[str, GroqModel] = {
         capabilities=frozenset(
             {
                 GroqCapability.TEXT_GENERATION,
+                GroqCapability.TOOL_CALLING,
             }
         ),
     ),
@@ -94,6 +97,7 @@ BUILT_IN_MODELS: dict[str, GroqModel] = {
                 GroqCapability.REASONING,
                 GroqCapability.STRUCTURED_OUTPUTS,
                 GroqCapability.PROMPT_CACHING,
+                GroqCapability.TOOL_CALLING,
             }
         ),
     ),
@@ -107,6 +111,7 @@ BUILT_IN_MODELS: dict[str, GroqModel] = {
                 GroqCapability.REASONING,
                 GroqCapability.STRUCTURED_OUTPUTS,
                 GroqCapability.PROMPT_CACHING,
+                GroqCapability.TOOL_CALLING,
             }
         ),
     ),
@@ -130,6 +135,7 @@ BUILT_IN_MODELS: dict[str, GroqModel] = {
             {
                 GroqCapability.TEXT_GENERATION,
                 GroqCapability.REASONING,
+                GroqCapability.TOOL_CALLING,
             }
         ),
     ),
@@ -164,6 +170,7 @@ BUILT_IN_MODELS: dict[str, GroqModel] = {
                 GroqCapability.TEXT_GENERATION,
                 GroqCapability.VISION,
                 GroqCapability.STRUCTURED_OUTPUTS,
+                GroqCapability.TOOL_CALLING,
             }
         ),
     ),
@@ -175,6 +182,7 @@ BUILT_IN_MODELS: dict[str, GroqModel] = {
             {
                 GroqCapability.TEXT_GENERATION,
                 GroqCapability.VISION,
+                GroqCapability.TOOL_CALLING,
             }
         ),
     ),
@@ -239,7 +247,6 @@ def infer_capabilities(model_id: str) -> frozenset[GroqCapability]:
         capabilities.add(GroqCapability.PROMPT_CACHING)
     if model_id in STRUCTURED_OUTPUTS_MODELS:
         capabilities.add(GroqCapability.STRUCTURED_OUTPUTS)
-
     return frozenset(capabilities)
 
 

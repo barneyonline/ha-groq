@@ -1400,11 +1400,18 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
         },
         registry,
     ) == {"request_body_options": "reserved_request_body_option"}
+    assert validate_text_generation_input(
+        {
+            "model": "openai/gpt-oss-20b",
+            "request_body_options": {"tools": []},
+        },
+        registry,
+    ) == {"request_body_options": "reserved_request_body_option"}
     assert "integration-managed fields" in (
         text_generation_module.request_body_options_error_message(
             registry,
             "groq/compound",
-            {"stream": True},
+            {"tool_choice": "auto"},
         )
         or ""
     )
@@ -3197,7 +3204,15 @@ async def test_ai_task_and_conversation_setup_properties():
                 CONF_NAME: "Assistant",
                 CONF_MODEL: "openai/gpt-oss-20b",
             },
-        )
+        ),
+        "unsupported-text": SimpleNamespace(
+            subentry_id="unsupported-text-id",
+            data={
+                CONF_SERVICE_TYPE: FEATURE_TEXT_GENERATION,
+                CONF_NAME: "Unsupported Text",
+                CONF_MODEL: "whisper-large-v3",
+            },
+        ),
     }
     runtime = build_runtime(DummyHass(), entry)
     runtime.client = DummyClient()
@@ -3229,9 +3244,10 @@ async def test_ai_task_and_conversation_setup_properties():
         entry,
         add_ai_entities,
     )
-    assert ai_entities == []
-    assert ai_subentry_ids == []
+    assert len(ai_entities) == 1
+    assert ai_subentry_ids == ["text-id"]
 
+    del entry.subentries["unsupported-text"]
     conversation_entities = []
     conversation_subentry_ids = []
 

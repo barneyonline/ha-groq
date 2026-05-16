@@ -8,7 +8,7 @@ from unittest.mock import patch
 import aiohttp
 import pytest
 from homeassistant import data_entry_flow
-from homeassistant.const import Platform
+from homeassistant.const import CONF_LLM_HASS_API, Platform
 from homeassistant.exceptions import HomeAssistantError
 
 import custom_components.groq as integration
@@ -931,6 +931,55 @@ async def test_text_generation_subentry_flow_uses_advanced_step(monkeypatch):
             "service_type": "text_generation",
         },
     }
+
+
+@pytest.mark.asyncio
+async def test_text_generation_subentry_flow_stores_llm_hass_api(monkeypatch):
+    flow = config_flow.GroqServiceSubentryFlow()
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(
+        config_flow.llm,
+        "async_get_apis",
+        lambda _hass: [SimpleNamespace(id="assist", name="Assist")],
+    )
+
+    form = await flow.async_step_text_generation()
+    assert form["type"] == "form"
+    assert form["data_schema"](
+        {
+            "name": "Text Service",
+            "model": "llama-3.1-8b-instant",
+            CONF_LLM_HASS_API: ["assist"],
+        }
+    )[CONF_LLM_HASS_API] == ["assist"]
+
+    result = await flow.async_step_text_generation(
+        {
+            "name": "Text Service",
+            "model": "llama-3.1-8b-instant",
+            CONF_LLM_HASS_API: ["assist"],
+        }
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_LLM_HASS_API] == ["assist"]
+
+
+@pytest.mark.asyncio
+async def test_text_generation_subentry_flow_omits_empty_llm_hass_api(monkeypatch):
+    flow = config_flow.GroqServiceSubentryFlow()
+    _patch_flow_common(monkeypatch, flow)
+
+    result = await flow.async_step_text_generation(
+        {
+            "name": "Text Service",
+            "model": "llama-3.1-8b-instant",
+            CONF_LLM_HASS_API: [],
+        }
+    )
+
+    assert result["type"] == "create_entry"
+    assert CONF_LLM_HASS_API not in result["data"]
 
 
 @pytest.mark.asyncio

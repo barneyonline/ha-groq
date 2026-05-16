@@ -37,6 +37,7 @@
       }
     },
     "abort": {
+      "reauth_successful": "Alles erledigt. Groq wurde mit dem neuen API-Schlüssel erneut verbunden.",
       "reconfigure_successful": "Groq-Konto erfolgreich aktualisiert."
     },
     "error": {
@@ -50,7 +51,8 @@
       "unsupported_reasoning_model": "Das ausgewählte Modell unterstützt keine Argumentationsoptionen.",
       "unsupported_prompt_caching_model": "Das ausgewählte Modell unterstützt kein Groq-Eingabeaufforderungs-Caching.",
       "unsupported_structured_outputs_model": "Das ausgewählte Modell unterstützt keine strukturierten Ausgaben.",
-      "reserved_request_body_option": "Zusätzliche Optionen für den Anforderungstext können Modell, Nachrichten oder Stream nicht überschreiben. Verwenden Sie stattdessen die dafür vorgesehenen Felder.",
+      "unsupported_tool_calling_model": "Das ausgewählte Modell unterstützt bekanntermaßen keine Home Assistant-Toolaufrufe.",
+      "reserved_request_body_option": "Zusätzliche Optionen für den Anforderungstext können Modell, Nachrichten, Stream, tools oder tool_choice nicht überschreiben. Verwenden Sie stattdessen die dafür vorgesehenen Felder.",
       "max_completion_tokens_exceeded": "Das ausgewählte Modell unterstützt nicht so viele maximale Abschlusstoken.",
       "invalid_voice": "Die ausgewählte Stimme ist für das ausgewählte Modell nicht verfügbar.",
       "select_voice_for_model": "Wählen Sie eine Stimme für das ausgewählte Modell.",
@@ -90,6 +92,7 @@
             "name": "Name",
             "model": "Modell",
             "system_prompt": "Systemaufforderung",
+            "llm_hass_api": "Home Assistant LLM API",
             "temperature": "Temperatur",
             "advanced_options": "Konfigurieren Sie erweiterte Anfrageoptionen",
             "protect_free_tier": "Free-Tier-Schutz"
@@ -98,6 +101,7 @@
             "name": "Ein benutzerfreundlicher Name für diesen Textgenerierungsdienst. Home Assistant verwendet dies für Assist- und AI-Aufgabeneinheiten.",
             "model": "Das Groq-Chat-Modell, das für Textantworten, Assist-Gespräche und Datengenerierungsaufgaben verwendet wird.",
             "system_prompt": "Anweisungen, die das Modell leiten. Die Standardeinstellung entspricht der KI-Aufgabenaufforderung von Home Assistant.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access.",
             "temperature": "Steuert Antwortvariationen. Niedrigere Werte sind vorhersehbarer; Höhere Werte sind kreativer.",
             "advanced_options": "Öffnet erweiterte Steuerelemente für weniger häufige Groq-Chat-Anfrageoptionen.",
             "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs- oder Token-Limit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit von Groq, bevor weitere Anforderungen gesendet werden."
@@ -137,7 +141,7 @@
             "schema_name": "Eine kurze Kennung, die mit dem Schema an Groq gesendet wird.",
             "schema": "JSON-Schemaobjekt, gesendet als response_format.json_schema.schema.",
             "strict": "Verwendet die eingeschränkte Groq-Dekodierung, wenn das ausgewählte Modell streng strukturierte Ausgaben unterstützt.",
-            "request_body_options": "Das JSON-Objekt wurde in den Text der Chat-Abschlussanforderung eingefügt. Dies ist der erweiterte Passthrough für jede Groq-Chat-Textkörper-Erstellungsoption, die nicht als eigenes Feld angezeigt wird, including citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+            "request_body_options": "Das JSON-Objekt wurde in den Text der Chat-Abschlussanforderung eingefügt. Dies ist der erweiterte Passthrough für jede Groq-Chat-Textkörper-Erstellungsoption, die nicht als eigenes Feld angezeigt wird, including citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, top_logprobs, and user."
           }
         }
       }

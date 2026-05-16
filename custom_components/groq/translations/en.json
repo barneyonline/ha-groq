@@ -37,6 +37,7 @@
       }
     },
     "abort": {
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key.",
       "reconfigure_successful": "Groq account updated successfully."
     },
     "error": {
@@ -50,7 +51,8 @@
       "unsupported_reasoning_model": "The selected model does not support reasoning options.",
       "unsupported_prompt_caching_model": "The selected model does not support local response caching.",
       "unsupported_structured_outputs_model": "The selected model does not support structured outputs.",
-      "reserved_request_body_option": "Additional request body options cannot override model, messages, or stream. Use the dedicated fields instead.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "reserved_request_body_option": "Additional request body options cannot override model, messages, stream, tools, or tool_choice. Use the dedicated fields instead.",
       "max_completion_tokens_exceeded": "The selected model does not support that many max completion tokens.",
       "invalid_voice": "The selected voice is not available for the selected model.",
       "select_voice_for_model": "Select a voice for the selected model.",
@@ -90,6 +92,7 @@
             "name": "Name",
             "model": "Model",
             "system_prompt": "System prompt",
+            "llm_hass_api": "Home Assistant LLM API",
             "temperature": "Temperature",
             "advanced_options": "Configure advanced request options",
             "protect_free_tier": "Free-Tier Protection"
@@ -98,6 +101,7 @@
             "name": "A friendly name for this text generation service. Home Assistant uses this for Assist and AI task entities.",
             "model": "The Groq chat model used for text responses, Assist conversations, and data generation tasks.",
             "system_prompt": "Instructions that guide the model. The default matches Home Assistant's AI task prompt.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access.",
             "temperature": "Controls response variation. Lower values are more predictable; higher values are more creative.",
             "advanced_options": "Opens advanced controls for less common Groq chat request options.",
             "protect_free_tier": "When Groq reports that this service has reached a request or token limit, Home Assistant pauses only this service until Groq's reset time before sending more requests."
@@ -137,7 +141,7 @@
             "schema_name": "A short identifier sent to Groq with the schema.",
             "schema": "JSON Schema object sent as response_format.json_schema.schema.",
             "strict": "Uses Groq constrained decoding when the selected model supports strict structured outputs.",
-            "request_body_options": "JSON object merged into the chat completion request body. This is the advanced passthrough for every Groq chat-create body option not shown as a dedicated field, including citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+            "request_body_options": "JSON object merged into the chat completion request body. This is the advanced passthrough for every Groq chat-create body option not shown as a dedicated field, including citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, top_logprobs, and user."
           }
         }
       }
