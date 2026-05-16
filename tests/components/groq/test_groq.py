@@ -97,6 +97,47 @@ async def test_api_clientsession_helper_preloads_with_executor(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_api_clientsession_helper_falls_back_without_executor(monkeypatch):
+    from custom_components.groq import api
+
+    calls = []
+
+    def factory(hass):
+        return ("session", hass)
+
+    def load_factory():
+        calls.append("load")
+        return factory
+
+    monkeypatch.setattr(api, "_CLIENTSESSION_FACTORY", None)
+    monkeypatch.setattr(api, "_load_clientsession_factory", load_factory)
+
+    await api.async_preload_clientsession_helper(SimpleNamespace())
+
+    assert api.async_get_clientsession("hass") == ("session", "hass")
+    assert calls == ["load"]
+
+
+def test_api_clientsession_helper_loads_on_direct_use(monkeypatch):
+    from custom_components.groq import api
+
+    calls = []
+
+    def factory(hass):
+        return ("session", hass)
+
+    def load_factory():
+        calls.append("load")
+        return factory
+
+    monkeypatch.setattr(api, "_CLIENTSESSION_FACTORY", None)
+    monkeypatch.setattr(api, "_load_clientsession_factory", load_factory)
+
+    assert api.async_get_clientsession("hass") == ("session", "hass")
+    assert calls == ["load"]
+
+
+@pytest.mark.asyncio
 async def test_tts_clientsession_helper_preloads_with_executor(monkeypatch):
     calls = []
 
@@ -119,6 +160,23 @@ async def test_tts_clientsession_helper_preloads_with_executor(monkeypatch):
 
     assert tts_engine.async_get_clientsession("hass") == ("tts-session", "hass")
     assert calls == ["executor", "load"]
+
+
+def test_tts_clientsession_helper_loads_on_direct_use(monkeypatch):
+    calls = []
+
+    def factory(hass):
+        return ("tts-session", hass)
+
+    def load_factory():
+        calls.append("load")
+        return factory
+
+    monkeypatch.setattr(tts_engine, "_CLIENTSESSION_FACTORY", None)
+    monkeypatch.setattr(tts_engine, "_load_clientsession_factory", load_factory)
+
+    assert tts_engine.async_get_clientsession("hass") == ("tts-session", "hass")
+    assert calls == ["load"]
 
 
 @pytest.mark.asyncio
