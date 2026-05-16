@@ -65,6 +65,23 @@ class DummySession:
         raise aiohttp.ClientError("boom")
 
 
+class DummyTimeoutResponse:
+    async def __aenter__(self):
+        raise asyncio.TimeoutError
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class DummyTimeoutSession:
+    def __init__(self):
+        self.calls = []
+
+    def post(self, *args, **kwargs):
+        self.calls.append({"args": args, "kwargs": kwargs})
+        return DummyTimeoutResponse()
+
+
 class DummyHass:
     pass
 
@@ -188,6 +205,26 @@ async def test_async_get_tts_network_error():
     ):
         with pytest.raises(HomeAssistantError):
             await engine.async_get_tts(DummyHass(), "hi")
+
+
+@pytest.mark.asyncio
+async def test_async_get_tts_timeout_is_not_logged_as_unknown(caplog, monkeypatch):
+    engine = GroqTTSEngine(None, "voice", "model", "http://example.com")
+    session = DummyTimeoutSession()
+
+    async def no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(tts_engine.asyncio, "sleep", no_sleep)
+    with patch.object(tts_engine, "async_get_clientsession", return_value=session):
+        with caplog.at_level(logging.DEBUG):
+            with pytest.raises(HomeAssistantError, match="Timed out"):
+                await engine.async_get_tts(DummyHass(), "hi")
+
+    assert len(session.calls) == 2
+    assert "Timed out calling Groq TTS API" in caplog.text
+    assert "Unknown error in async_get_tts" not in caplog.text
+    assert engine.available is False
 
 
 class DummyResponse:
