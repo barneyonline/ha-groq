@@ -8,13 +8,12 @@ import json
 import logging
 from asyncio import CancelledError
 from dataclasses import dataclass
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable
 from urllib.parse import quote, urljoin
 
 import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import VERSION
 from .errors import GroqApiError, GroqResponseError
@@ -32,6 +31,36 @@ JSON_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
 STREAM_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
 MODEL_DETAIL_CONCURRENCY = 5
 RESERVED_CHAT_BODY_OPTIONS = frozenset({"messages", "model", "stream"})
+
+_CLIENTSESSION_FACTORY: Callable[[HomeAssistant], aiohttp.ClientSession] | None = None
+
+
+def _load_clientsession_factory() -> Callable[[HomeAssistant], aiohttp.ClientSession]:
+    """Import and return Home Assistant's shared session helper."""
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession as _get
+
+    return _get
+
+
+async def async_preload_clientsession_helper(hass: HomeAssistant) -> None:
+    """Load the session helper before request handling reaches latency-sensitive code."""
+    global _CLIENTSESSION_FACTORY
+    if _CLIENTSESSION_FACTORY is not None:
+        return
+    if hasattr(hass, "async_add_executor_job"):
+        _CLIENTSESSION_FACTORY = await hass.async_add_executor_job(
+            _load_clientsession_factory
+        )
+        return
+    _CLIENTSESSION_FACTORY = _load_clientsession_factory()
+
+
+def async_get_clientsession(hass: HomeAssistant) -> aiohttp.ClientSession:
+    """Return Home Assistant's shared aiohttp session."""
+    global _CLIENTSESSION_FACTORY
+    if _CLIENTSESSION_FACTORY is None:
+        _CLIENTSESSION_FACTORY = _load_clientsession_factory()
+    return _CLIENTSESSION_FACTORY(hass)
 
 
 @dataclass(frozen=True, slots=True)

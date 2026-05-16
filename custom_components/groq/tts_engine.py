@@ -3,7 +3,7 @@ TTS Engine for Groq.
 """
 
 from __future__ import annotations
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from hashlib import sha256
 import json
 import logging
@@ -13,7 +13,6 @@ from collections import OrderedDict, deque
 
 import aiohttp
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from asyncio import CancelledError
 
 from homeassistant.exceptions import HomeAssistantError, ConfigEntryAuthFailed
@@ -25,6 +24,36 @@ _LOGGER = logging.getLogger(__name__)
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_DAY_SECONDS = 24 * 60 * 60
 TTS_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+
+_CLIENTSESSION_FACTORY: Callable[[HomeAssistant], aiohttp.ClientSession] | None = None
+
+
+def _load_clientsession_factory() -> Callable[[HomeAssistant], aiohttp.ClientSession]:
+    """Import and return Home Assistant's shared session helper."""
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession as _get
+
+    return _get
+
+
+async def async_preload_clientsession_helper(hass: HomeAssistant) -> None:
+    """Load the session helper before first TTS request handling."""
+    global _CLIENTSESSION_FACTORY
+    if _CLIENTSESSION_FACTORY is not None:
+        return
+    if hasattr(hass, "async_add_executor_job"):
+        _CLIENTSESSION_FACTORY = await hass.async_add_executor_job(
+            _load_clientsession_factory
+        )
+        return
+    _CLIENTSESSION_FACTORY = _load_clientsession_factory()
+
+
+def async_get_clientsession(hass: HomeAssistant) -> aiohttp.ClientSession:
+    """Return Home Assistant's shared aiohttp session."""
+    global _CLIENTSESSION_FACTORY
+    if _CLIENTSESSION_FACTORY is None:
+        _CLIENTSESSION_FACTORY = _load_clientsession_factory()
+    return _CLIENTSESSION_FACTORY(hass)
 
 
 def _payload_mentions_model_access(payload: object) -> bool:
@@ -85,6 +114,10 @@ class GroqTTSEngine:
         self._protect_free_tier = protect_free_tier
         self._request_timestamps: deque[float] = deque()
         self._token_timestamps: deque[tuple[float, int]] = deque()
+        self._minute_request_timestamps: deque[float] = deque()
+        self._minute_token_timestamps: deque[tuple[float, int]] = deque()
+        self._daily_token_total = 0
+        self._minute_token_total = 0
         self._available = True
         self._unavailable_reason: str | None = None
 
@@ -119,27 +152,38 @@ class GroqTTSEngine:
         return GROQ_FREE_TIER_LIMITS.get(model or self._model)
 
     def _prune_local_usage(self, now: float) -> None:
-        """Drop local rate-limit records outside the rolling 24-hour window."""
+        """Drop local rate-limit records outside active rolling windows."""
         oldest_daily = now - RATE_LIMIT_DAY_SECONDS
         while self._request_timestamps and self._request_timestamps[0] <= oldest_daily:
             self._request_timestamps.popleft()
         while self._token_timestamps and self._token_timestamps[0][0] <= oldest_daily:
-            self._token_timestamps.popleft()
+            _timestamp, tokens = self._token_timestamps.popleft()
+            self._daily_token_total = max(0, self._daily_token_total - tokens)
+
+        oldest_minute = now - RATE_LIMIT_WINDOW_SECONDS
+        while (
+            self._minute_request_timestamps
+            and self._minute_request_timestamps[0] <= oldest_minute
+        ):
+            self._minute_request_timestamps.popleft()
+        while (
+            self._minute_token_timestamps
+            and self._minute_token_timestamps[0][0] <= oldest_minute
+        ):
+            _timestamp, tokens = self._minute_token_timestamps.popleft()
+            self._minute_token_total = max(0, self._minute_token_total - tokens)
 
     def _local_usage(self, now: float) -> tuple[int, int, int, int]:
         """Return local request/token usage for minute and day windows."""
-        minute_start = now - RATE_LIMIT_WINDOW_SECONDS
-        minute_requests = sum(
-            1 for timestamp in self._request_timestamps if timestamp > minute_start
-        )
+        self._prune_local_usage(now)
+        minute_requests = len(self._minute_request_timestamps)
         daily_requests = len(self._request_timestamps)
-        minute_tokens = sum(
-            tokens
-            for timestamp, tokens in self._token_timestamps
-            if timestamp > minute_start
+        return (
+            minute_requests,
+            daily_requests,
+            self._minute_token_total,
+            self._daily_token_total,
         )
-        daily_tokens = sum(tokens for _, tokens in self._token_timestamps)
-        return minute_requests, daily_requests, minute_tokens, daily_tokens
 
     def _check_local_free_tier_limit(
         self, text: str, model: str | None = None, now: float | None = None
@@ -193,6 +237,10 @@ class GroqTTSEngine:
         now = now if now is not None else asyncio.get_running_loop().time()
         self._request_timestamps.append(now)
         self._token_timestamps.append((now, token_estimate))
+        self._minute_request_timestamps.append(now)
+        self._minute_token_timestamps.append((now, token_estimate))
+        self._daily_token_total += token_estimate
+        self._minute_token_total += token_estimate
         self._prune_local_usage(now)
 
     @staticmethod

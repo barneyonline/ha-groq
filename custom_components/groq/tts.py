@@ -35,7 +35,7 @@ from .const import (
     DEFAULT_TTS_URL,
     FEATURE_TEXT_TO_SPEECH,
 )
-from .tts_engine import GroqTTSEngine
+from .tts_engine import GroqTTSEngine, async_preload_clientsession_helper
 from .repairs import (
     async_create_ffmpeg_missing_issue,
     async_delete_ffmpeg_missing_issue,
@@ -83,8 +83,11 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     api_key = config_entry.data.get(CONF_API_KEY)
+    service_data_list = _tts_service_data(config_entry)
+    if service_data_list:
+        await async_preload_clientsession_helper(hass)
     entities = []
-    for service_data in _tts_service_data(config_entry):
+    for service_data in service_data_list:
         engine = GroqTTSEngine(
             _entry_value(config_entry, CONF_API_KEY, api_key),
             _entry_value(config_entry, CONF_VOICE, service_data=service_data),

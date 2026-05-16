@@ -14,10 +14,7 @@ from .runtime import (
     async_hydrate_runtime_model_registry,
     build_runtime,
 )
-from .services import (
-    async_register_services,
-    async_update_service_descriptions,
-)
+from .api import async_preload_clientsession_helper
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,12 +24,15 @@ CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up Groq integration-level actions."""
     if hasattr(hass, "services"):
+        from .services import async_register_services
+
         await async_register_services(hass)
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool:
     """Set up entities."""
+    await async_preload_clientsession_helper(hass)
     runtime = build_runtime(hass, entry)
     await async_hydrate_runtime_model_registry(entry, runtime, raise_not_ready=True)
     entry.runtime_data = runtime
@@ -41,6 +41,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool
     # take effect immediately without requiring a restart.
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     if hasattr(hass, "services"):
+        from .services import async_update_service_descriptions
+
         await async_update_service_descriptions(hass)
     # Service subentries determine which HA platforms are needed; account-only
     # entries do not create entities until the user adds at least one service.
@@ -57,6 +59,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> boo
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
         if hasattr(hass, "services"):
+            from .services import async_update_service_descriptions
+
             await async_update_service_descriptions(
                 hass,
                 exclude_entry_id=entry.entry_id,

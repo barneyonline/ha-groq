@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import pytest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import aiohttp
@@ -66,6 +67,58 @@ class DummySession:
 
 class DummyHass:
     pass
+
+
+@pytest.mark.asyncio
+async def test_api_clientsession_helper_preloads_with_executor(monkeypatch):
+    from custom_components.groq import api
+
+    calls = []
+
+    def factory(hass):
+        return ("session", hass)
+
+    def load_factory():
+        calls.append("load")
+        return factory
+
+    async def async_add_executor_job(func, *args):
+        calls.append("executor")
+        return func(*args)
+
+    monkeypatch.setattr(api, "_CLIENTSESSION_FACTORY", None)
+    monkeypatch.setattr(api, "_load_clientsession_factory", load_factory)
+
+    hass = SimpleNamespace(async_add_executor_job=async_add_executor_job)
+    await api.async_preload_clientsession_helper(hass)
+
+    assert api.async_get_clientsession("hass") == ("session", "hass")
+    assert calls == ["executor", "load"]
+
+
+@pytest.mark.asyncio
+async def test_tts_clientsession_helper_preloads_with_executor(monkeypatch):
+    calls = []
+
+    def factory(hass):
+        return ("tts-session", hass)
+
+    def load_factory():
+        calls.append("load")
+        return factory
+
+    async def async_add_executor_job(func, *args):
+        calls.append("executor")
+        return func(*args)
+
+    monkeypatch.setattr(tts_engine, "_CLIENTSESSION_FACTORY", None)
+    monkeypatch.setattr(tts_engine, "_load_clientsession_factory", load_factory)
+
+    hass = SimpleNamespace(async_add_executor_job=async_add_executor_job)
+    await tts_engine.async_preload_clientsession_helper(hass)
+
+    assert tts_engine.async_get_clientsession("hass") == ("tts-session", "hass")
+    assert calls == ["executor", "load"]
 
 
 @pytest.mark.asyncio
@@ -294,6 +347,55 @@ def test_local_free_tier_guard_can_be_disabled():
         engine._record_local_usage(200, now=1)
 
     assert engine._check_local_free_tier_limit("hello", now=1) == 5
+
+
+def test_tts_local_usage_counters_prune_minute_and_day_windows():
+    engine = GroqTTSEngine(
+        "api-key",
+        ORPHEUS_ENGLISH_VOICE,
+        ORPHEUS_ENGLISH_MODEL,
+        "https://api.groq.com/openai/v1/audio/speech",
+    )
+
+    engine._record_local_usage(3, now=100.0)
+    engine._record_local_usage(5, now=150.0)
+
+    assert engine._local_usage(150.0) == (2, 2, 8, 8)
+    assert engine._local_usage(161.0) == (1, 2, 5, 8)
+    assert list(engine._minute_request_timestamps) == [150.0]
+    assert list(engine._minute_token_timestamps) == [(150.0, 5)]
+
+    after_daily_window = 150.0 + tts_engine.RATE_LIMIT_DAY_SECONDS + 1
+    assert engine._local_usage(after_daily_window) == (0, 0, 0, 0)
+    assert engine._daily_token_total == 0
+    assert engine._minute_token_total == 0
+
+
+def test_tts_local_usage_counters_drive_token_limit_checks(monkeypatch):
+    engine = GroqTTSEngine(
+        "api-key",
+        ORPHEUS_ENGLISH_VOICE,
+        ORPHEUS_ENGLISH_MODEL,
+        "https://api.groq.com/openai/v1/audio/speech",
+    )
+    monkeypatch.setattr(
+        engine,
+        "_free_tier_limits",
+        lambda model=None: {
+            "requests_per_minute": 100,
+            "requests_per_day": 100,
+            "tokens_per_minute": 10,
+            "tokens_per_day": 100,
+        },
+    )
+
+    engine._record_local_usage(7, now=100.0)
+    engine._record_local_usage(2, now=150.0)
+
+    with pytest.raises(GroqRateLimitError, match="tokens per minute"):
+        engine._check_local_free_tier_limit("hi", now=150.0)
+
+    assert engine._check_local_free_tier_limit("hi", now=161.0) == 2
 
 
 class DummyEngine:
