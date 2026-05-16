@@ -1,0 +1,354 @@
+{
+  "config": {
+    "initiate_flow": {
+      "user": "Pievienojiet Groq kontu"
+    },
+    "step": {
+      "user": {
+        "title": "Pievienojiet Groq",
+        "description": "Papildinformāciju skatiet dokumentācijā.",
+        "data": {
+          "name": "Vārds",
+          "api_key": "Ievadiet taustiņu Groq API"
+        },
+        "data_description": {
+          "name": "Draudzīgs nosaukums šim Groq kontam. Izmantojiet to, lai identificētu API atslēgu vai norēķinu projektu.",
+          "api_key": "Groq API atslēga šim kontam. Pievienojiet citu Groq kontu, ja vēlaties izmantot citu atslēgu atsevišķai pakalpojumu kopai."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Atkārtoti autentificējiet Groq",
+        "description": "Jūsu akreditācijas dati vairs nav derīgi. Lūdzu, ievadiet jaunu API atslēgu.",
+        "data": {
+          "api_key": "Groq API atslēga"
+        }
+      },
+      "reconfigure": {
+        "title": "Pārkonfigurējiet Groq",
+        "description": "Atjauniniet Groq konta nosaukumu vai nomainiet atslēgu API.",
+        "data": {
+          "name": "Vārds",
+          "api_key": "Groq API atslēga"
+        },
+        "data_description": {
+          "name": "Draudzīgs nosaukums šim Groq kontam.",
+          "api_key": "Izvēles maiņas atslēga API. Atstājiet tukšu, lai saglabātu pašreizējo API atslēgu."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Groq konts ir veiksmīgi atjaunināts.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
+    },
+    "error": {
+      "cannot_connect": "Nevarēja izveidot savienojumu ar Groq. Lūdzu, pārbaudiet tīkla savienojumu un mēģiniet vēlreiz.",
+      "duplicate_api_key": "Šī API atslēga jau tiek izmantota citā Groq kontā.",
+      "invalid_auth": "Nederīga Groq API atslēga. Lūdzu, ievadiet derīgu atslēgu.",
+      "wrong_api_key": "Nederīga API atslēga. Lūdzu, ievadiet derīgu API atslēgu.",
+      "invalid_url": "Nederīgs URL. Lūdzu, ievadiet derīgu URL.",
+      "invalid_enabled_features": "Viena vai vairākas atlasītās funkcijas netiek atbalstītas.",
+      "invalid_response_format": "Nederīgs atbildes formāts.",
+      "unsupported_reasoning_model": "Atlasītais modelis neatbalsta argumentācijas opcijas.",
+      "unsupported_prompt_caching_model": "Atlasītais modelis neatbalsta vietējo atbilžu saglabāšanu kešatmiņā.",
+      "unsupported_structured_outputs_model": "Atlasītais modelis neatbalsta strukturētus izvadus.",
+      "reserved_request_body_option": "Papildu pieprasījuma pamatteksta opcijas nevar ignorēt modeli, ziņojumus vai straumi. Tā vietā izmantojiet speciālos laukus.",
+      "max_completion_tokens_exceeded": "Atlasītais modelis neatbalsta tik daudz maksimālās pabeigšanas pilnvaru.",
+      "invalid_voice": "Atlasītā balss atlasītajam modelim nav pieejama.",
+      "select_voice_for_model": "Izvēlieties balsi izvēlētajam modelim.",
+      "required": "Šis lauks ir obligāts.",
+      "unknown": "Negaidīta kļūda, apstiprinot API atslēgu. Lūdzu, mēģiniet vēlreiz.",
+      "unknown_error": "Negaidīta kļūda — lūdzu, mēģiniet vēlreiz.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Konfigurējiet Groq opcijas",
+        "data": {
+          "api_key": "Groq API atslēga"
+        },
+        "data_description": {
+          "api_key": "Izvēles rezerves API atslēga šim Groq kontam."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Teksta ģenerēšanas pakalpojums",
+      "initiate_flow": {
+        "user": "Pievienot teksta ģenerēšanu",
+        "reconfigure": "Pārkonfigurēt teksta ģenerēšanu"
+      },
+      "abort": {
+        "reconfigure_successful": "Teksta ģenerēšanas pakalpojums ir veiksmīgi atjaunināts."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Teksta ģenerēšana",
+          "description": "Atlasītā modeļa iespējas: {model_capabilities}",
+          "data": {
+            "name": "Vārds",
+            "model": "Modelis",
+            "system_prompt": "Sistēmas uzvedne",
+            "temperature": "Temperatūra",
+            "advanced_options": "Konfigurējiet papildu pieprasījuma opcijas",
+            "protect_free_tier": "Brīvā līmeņa aizsardzība",
+            "llm_hass_api": "Home Assistant LLM API"
+          },
+          "data_description": {
+            "name": "Draudzīgs nosaukums šim teksta ģenerēšanas pakalpojumam. Home Assistant to izmanto Assist un AI uzdevumu entītijām.",
+            "model": "Groq tērzēšanas modelis, ko izmanto teksta atbildēm, Assist sarunām un datu ģenerēšanas uzdevumiem.",
+            "system_prompt": "Norādījumi, kas vada modeli. Noklusējums atbilst Home Assistant AI uzdevuma uzvednei.",
+            "temperature": "Kontrolē atbildes variācijas. Zemākas vērtības ir vairāk paredzamas; augstākas vērtības ir radošākas.",
+            "advanced_options": "Atver papildu vadīklas retāk sastopamām Groq tērzēšanas pieprasījuma opcijām.",
+            "protect_free_tier": "Kad Groq ziņo, ka šis pakalpojums ir sasniedzis pieprasījuma vai pilnvaras ierobežojumu, Home Assistant aptur tikai šo pakalpojumu līdz Groq atiestatīšanas laikam, pirms tiek nosūtīti papildu pieprasījumi.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Uzlabota teksta ģenerēšana",
+          "data": {
+            "max_tokens": "Maksimālais pabeigšanas marķieris",
+            "top_p": "Augšējais P",
+            "stop": "Apturēt secības",
+            "seed": "Sēkla",
+            "service_tier": "Pakalpojuma līmenis",
+            "stream": "Straumējiet Assist atbildes",
+            "reasoning_effort": "Spriešanas pūles",
+            "reasoning_format": "Sprieduma formāts",
+            "include_reasoning": "Iekļaujiet pamatojumu",
+            "prompt_caching": "Lokālā atbilžu kešatmiņa",
+            "structured_outputs": "Izmantojiet strukturētas izvades",
+            "schema_name": "Shēmas nosaukums",
+            "schema": "JSON schema",
+            "strict": "Stingras shēmas režīms",
+            "request_body_options": "Papildu pieprasījuma pamatteksta opcijas"
+          },
+          "data_description": {
+            "max_tokens": "Ierobežo tokenu skaitu, ko Groq var ģenerēt atbildē.",
+            "top_p": "Alternatīva paraugu ņemšanas kontrole. Zemākas vērtības ierobežo ģenerēšanu uz visticamākiem marķieriem.",
+            "stop": "Viena pieturas secība katrā rindā. Aģentūra apstājas, kad tiek izveidota kāda secība.",
+            "seed": "Vislabākā deterministiskā izlases sēkla atkārtojamām atbildēm.",
+            "service_tier": "Izvēles Groq apstrādes līmenis pieprasījumam.",
+            "stream": "Straumē Assist atbildes Home Assistant tērzēšanas žurnālā, ja tas tiek atbalstīts.",
+            "reasoning_effort": "Sprieduma budžets tikai atbalstītajiem argumentācijas modeļiem.",
+            "reasoning_format": "Kā atbalstītie argumentācijas modeļi atklāj argumentācijas saturu.",
+            "include_reasoning": "Pieprasa argumentācijas saturu atbalstītajos modeļos, ja nav iestatīts argumentācijas formāts.",
+            "prompt_caching": "Kešatmiņas, kas atbilst Home Assistant pakalpojumu atbildēm lokāli atbalstītajiem modeļiem.",
+            "structured_outputs": "Pieprasa JSON, kas seko konfigurētajai shēmai, kad šis pakalpojums tiek izmantots datu ģenerēšanai.",
+            "schema_name": "Īss identifikators, kas nosūtīts uz Groq ar shēmu.",
+            "schema": "JSON Schema objekts nosūtīts kā response_format.json_schema.shēma.",
+            "strict": "Izmanto Groq ierobežoto dekodēšanu, ja atlasītais modelis atbalsta stingras strukturētas izvades.",
+            "request_body_options": "JSON objekts ir apvienots tērzēšanas pabeigšanas pieprasījuma pamattekstā. Šī ir uzlabotā caurlaide katrai Groq tērzēšanas pamatteksta izveides opcijai, kas nav parādīta kā īpašs lauks, tostarp citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Runas pārveidošanas pakalpojums",
+      "initiate_flow": {
+        "user": "Pievienot runas pārveidošanu tekstā",
+        "reconfigure": "Pārkonfigurēt runas pārveidošanu tekstā"
+      },
+      "abort": {
+        "reconfigure_successful": "Runas pārveidošanas pakalpojums ir veiksmīgi atjaunināts."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Runas pārvēršana tekstā",
+          "data": {
+            "name": "Vārds",
+            "model": "Modelis",
+            "language": "Valoda",
+            "protect_free_tier": "Brīvā līmeņa aizsardzība"
+          },
+          "data_description": {
+            "name": "Vienkāršs nosaukums šai runas pārveides pakalpojuma gadījumam.",
+            "model": "Groq Whisper modelis, ko izmanto audio transkribēšanai.",
+            "language": "Valodas padoms nosūtīts uz Groq transkripcijai. Pēc noklusējuma ir valoda, kas konfigurēta Home Assistant, ja tā ir pieejama.",
+            "protect_free_tier": "Kad Groq ziņo, ka šis pakalpojums ir sasniedzis pieprasījuma vai pilnvaras ierobežojumu, Home Assistant aptur tikai šo pakalpojumu līdz Groq atiestatīšanas laikam, pirms tiek nosūtīti papildu pieprasījumi."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Teksta pārvēršanas runā pakalpojums",
+      "initiate_flow": {
+        "user": "Pievienojiet teksta pārvēršanu runā",
+        "reconfigure": "Pārkonfigurējiet teksta pārveidi runā"
+      },
+      "abort": {
+        "reconfigure_successful": "Teksta pārvēršanas runā pakalpojums ir veiksmīgi atjaunināts."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Teksta pārvēršana runā",
+          "data": {
+            "name": "Vārds",
+            "model": "Modelis",
+            "voice": "Balss",
+            "vocal_directions": "Noklusējuma balss virzieni",
+            "normalize_audio": "Iespējot ģenerētā audio skaļumu (izmanto vairāk CPU)",
+            "protect_free_tier": "Brīvā līmeņa aizsardzība"
+          },
+          "data_description": {
+            "name": "Draudzīgs nosaukums šai teksta pārvēršanas runā pakalpojuma gadījumam.",
+            "model": "Groq runas modelis, ko izmanto audio ģenerēšanai.",
+            "voice": "Balss persona, ko izmanto atlasītais runas modelis. Mainot modeli, tiek notīrītas balsis, kas nav pieejamas jaunajam modelim.",
+            "vocal_directions": "Izvēles piegādes stils, kas pievienots runai, piemēram, jautrs vai čuksts. Varat izvēlēties sākotnējo iestatījumu vai ierakstīt savu.",
+            "normalize_audio": "Pārvērš izvadi par normalizētu MP3 ar ffmpeg, lai nodrošinātu konsekventāku skaļumu mazos skaļruņos.",
+            "protect_free_tier": "Kad Groq ziņo, ka šis pakalpojums ir sasniedzis pieprasījumu, marķieri vai zināmo teksta pārvēršanas runā rakstzīmju ierobežojumu, Home Assistant aptur tikai šo pakalpojumu līdz atiestatīšanas laikam, pirms tiek nosūtīti papildu pieprasījumi."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Attēlu atpazīšanas pakalpojums",
+      "initiate_flow": {
+        "user": "Pievienojiet attēla atpazīšanas funkciju",
+        "reconfigure": "Pārkonfigurējiet attēla atpazīšanu"
+      },
+      "abort": {
+        "reconfigure_successful": "Attēlu atpazīšanas pakalpojums ir veiksmīgi atjaunināts."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Attēla atpazīšana",
+          "data": {
+            "name": "Vārds",
+            "model": "Modelis",
+            "system_prompt": "Sistēmas uzvedne",
+            "protect_free_tier": "Brīvā līmeņa aizsardzība"
+          },
+          "data_description": {
+            "name": "Labs nosaukums šim attēla atpazīšanas pakalpojuma gadījumam.",
+            "model": "Groq redzes modelis, ko izmanto attēlu pārbaudei.",
+            "system_prompt": "Izvēles instrukcijas, kas palīdz atbildēt uz attēla jautājumiem.",
+            "protect_free_tier": "Kad Groq ziņo, ka šis pakalpojums ir sasniedzis pieprasījuma vai pilnvaras ierobežojumu, Home Assistant aptur tikai šo pakalpojumu līdz Groq atiestatīšanas laikam, pirms tiek nosūtīti papildu pieprasījumi."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Datu ģenerēšanas uzdevumi"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Assist"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Runas pārveidošana tekstā"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Teksta pārvēršana runā"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "ffmpeg ir nepieciešams Groq audio normalizēšanai",
+      "description": "Teksta pārvēršanas runā pakalpojums Groq {service_name} ir konfigurēts, lai normalizētu ģenerēto audio, bet Home Assistant nevarēja palaist ffmpeg. Instalējiet ffmpeg Home Assistant resursdatorā vai izslēdziet audio normalizēšanu šim pakalpojumam Groq teksta pārvēršana runā."
+    },
+    "model_access": {
+      "title": "Groq modelis nav pieejams",
+      "description": "Groq ziņoja, ka modelis {model} šim kontam nav pieejams. Pārbaudiet modeļa nosaukumu konsolē Groq, pārbaudiet, vai modelis ir iespējots kontam, vai šajā integrācijā atlasiet citu Groq modeli."
+    },
+    "model_configuration": {
+      "title": "Groq pakalpojuma modeļa konfigurācija nav derīga",
+      "description": "Groq pakalpojums {service_name} ir konfigurēts, lai izmantotu modeli {model}, taču nav zināms, ka šis modelis atbalsta {feature}. Atlasiet modeli, kas atbalsta šo pakalpojuma veidu."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Vairāki Groq pakalpojumi atbilst service_id: {service_id}"
+    },
+    "config_entry_not_found": {
+      "message": "Groq konfigurācijas ieraksts nav atrasts: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Nav atrasts ielādēts Groq konfigurācijas ieraksts"
+    },
+    "multiple_config_entries": {
+      "message": "Tiek ielādēti vairāki Groq konfigurācijas ieraksti; nodrošināt config_entry_id vai service_id"
+    },
+    "service_not_found": {
+      "message": "Groq {service_type} pakalpojums nav atrasts: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Ir konfigurēti vairāki Groq {service_type} pakalpojumi; nodrošināt service_id"
+    },
+    "unsupported_model": {
+      "message": "Groq modelis {model} neatbalsta {feature}"
+    },
+    "completion_token_limit": {
+      "message": "Groq modelis {model} atbalsta ne vairāk kā {limit} pabeigšanas pilnvaras"
+    },
+    "select_one_camera": {
+      "message": "Atlasiet tikai vienu kameras entītiju"
+    },
+    "camera_capture_failed": {
+      "message": "Nevarēja uzņemt attēlu no kameras vienības {entity_id}"
+    },
+    "local_image_path_not_allowed": {
+      "message": "Vietējā attēla ceļš neatrodas Home Assistant allowlist_external_dirs"
+    },
+    "local_image_not_found": {
+      "message": "Vietējais attēla fails nav atrasts: {path}"
+    },
+    "local_file_not_image": {
+      "message": "Lokālais fails nav attēls: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Nevarēja atrisināt attēla failu: {path}"
+    },
+    "selected_media_not_image": {
+      "message": "Atlasītais datu nesējs nav attēls: {path}"
+    },
+    "image_source_required": {
+      "message": "Izvēlieties kameras entītiju, attēla failu, lokālā attēla ceļu vai attēlu URL"
+    },
+    "invalid_image_url": {
+      "message": "Attēlam URL ir jābūt http, https vai attēla datiem URL"
+    },
+    "image_too_large": {
+      "message": "Atlasītais attēls ir pārāk liels; maksimālais izmērs ir {limit_mb} MB"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "Lokālais audio ceļš nav Home Assistant allowlist_external_dirs"
+    },
+    "local_audio_not_found": {
+      "message": "Vietējais audio fails nav atrasts: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "Vietējais fails nav audio: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Nevarēja atrisināt audio failu: {path}"
+    },
+    "audio_media_local_required": {
+      "message": "Atlasītajam audio ir jāatrisina lokāls fails"
+    },
+    "selected_media_not_audio": {
+      "message": "Atlasītais datu nesējs nav audio: {path}"
+    },
+    "audio_source_required": {
+      "message": "Atlasiet audio failu vai lokālo audio ceļu"
+    },
+    "audio_too_large": {
+      "message": "Atlasītais audio ir pārāk liels; maksimālais izmērs ir {limit_mb} MB"
+    },
+    "request_invalid": {
+      "message": "{message}"
+    }
+  }
+}

@@ -1,0 +1,354 @@
+{
+  "config": {
+    "initiate_flow": {
+      "user": "Tilføj Groq-konto"
+    },
+    "step": {
+      "user": {
+        "title": "Tilføj Groq",
+        "description": "Se dokumentationen for yderligere information.",
+        "data": {
+          "name": "Navn",
+          "api_key": "Indtast Groq API nøgle"
+        },
+        "data_description": {
+          "name": "Et venligt navn til denne Groq-konto. Brug dette til at identificere API-nøglen eller faktureringsprojektet.",
+          "api_key": "Groq API nøgle for denne konto. Tilføj en anden Groq-konto, hvis du vil bruge en anden nøgle til et separat sæt tjenester."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Genautentificer Groq",
+        "description": "Dine legitimationsoplysninger er ikke længere gyldige. Indtast venligst en ny API nøgle.",
+        "data": {
+          "api_key": "Groq API nøgle"
+        }
+      },
+      "reconfigure": {
+        "title": "Genkonfigurer Groq",
+        "description": "Opdater Groq-kontonavnet, eller udskift API-nøglen.",
+        "data": {
+          "name": "Navn",
+          "api_key": "Groq API nøgle"
+        },
+        "data_description": {
+          "name": "Et venligt navn til denne Groq-konto.",
+          "api_key": "Valgfri erstatning API nøgle. Lad være tom for at beholde den aktuelle API-nøgle."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Groq-konto blev opdateret.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
+    },
+    "error": {
+      "cannot_connect": "Kunne ikke oprette forbindelse til Groq. Tjek venligst din netværksforbindelse, og prøv igen.",
+      "duplicate_api_key": "En anden Groq-konto bruger allerede denne API-nøgle.",
+      "invalid_auth": "Ugyldig Groq API nøgle. Indtast venligst en gyldig nøgle.",
+      "wrong_api_key": "Ugyldig API nøgle. Indtast venligst en gyldig API nøgle.",
+      "invalid_url": "Ugyldig URL. Indtast venligst en gyldig URL.",
+      "invalid_enabled_features": "En eller flere valgte funktioner understøttes ikke.",
+      "invalid_response_format": "Ugyldigt svarformat.",
+      "unsupported_reasoning_model": "Den valgte model understøtter ikke begrundelsesmuligheder.",
+      "unsupported_prompt_caching_model": "Den valgte model understøtter ikke lokal svarcache.",
+      "unsupported_structured_outputs_model": "Den valgte model understøtter ikke strukturerede output.",
+      "reserved_request_body_option": "Yderligere indstillinger for anmodningstekst kan ikke tilsidesætte model, beskeder eller stream. Brug i stedet de dedikerede felter.",
+      "max_completion_tokens_exceeded": "Den valgte model understøtter ikke så mange maks. færdiggørelsestokens.",
+      "invalid_voice": "Den valgte stemme er ikke tilgængelig for den valgte model.",
+      "select_voice_for_model": "Vælg en stemme til den valgte model.",
+      "required": "Dette felt er påkrævet.",
+      "unknown": "Uventet fejl under validering af API-nøglen. Prøv venligst igen.",
+      "unknown_error": "Uventet fejl — prøv venligst igen.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Konfigurer Groq-indstillinger",
+        "data": {
+          "api_key": "Groq API nøgle"
+        },
+        "data_description": {
+          "api_key": "Valgfri erstatning API nøgle til denne Groq konto."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Tekstgenereringstjeneste",
+      "initiate_flow": {
+        "user": "Tilføj tekstgenerering",
+        "reconfigure": "Genkonfigurer tekstgenerering"
+      },
+      "abort": {
+        "reconfigure_successful": "Tekstgenereringstjenesten blev opdateret."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Tekstgenerering",
+          "description": "Valgte modelfunktioner: {model_capabilities}",
+          "data": {
+            "name": "Navn",
+            "model": "Model",
+            "system_prompt": "Systemprompt",
+            "temperature": "Temperatur",
+            "advanced_options": "Konfigurer avancerede anmodningsindstillinger",
+            "protect_free_tier": "Free-tier beskyttelse",
+            "llm_hass_api": "Home Assistant LLM API"
+          },
+          "data_description": {
+            "name": "Et venligt navn for denne tekstgenereringstjeneste. Home Assistant bruger dette til opgaveenheder Assist og AI.",
+            "model": "Groq-chatmodellen bruges til tekstsvar, Assist-samtaler og datagenereringsopgaver.",
+            "system_prompt": "Instruktioner, der guider modellen. Standarden matcher Home Assistant's AI opgaveprompt.",
+            "temperature": "Styrer svarvariation. Lavere værdier er mere forudsigelige; højere værdier er mere kreative.",
+            "advanced_options": "Åbner avancerede kontroller for mindre almindelige Groq chatanmodningsmuligheder.",
+            "protect_free_tier": "Når Groq rapporterer, at denne tjeneste har nået en anmodning eller token-grænse, sætter Home Assistant kun denne tjeneste på pause, indtil Groq's nulstillingstidspunkt, før den sender flere anmodninger.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Avanceret tekstgenerering",
+          "data": {
+            "max_tokens": "Maks. fuldførelsestokens",
+            "top_p": "Top P",
+            "stop": "Stop sekvenser",
+            "seed": "Frø",
+            "service_tier": "Serviceniveau",
+            "stream": "Stream Assist-svar",
+            "reasoning_effort": "Ræsonnement indsats",
+            "reasoning_format": "Begrundelsesformat",
+            "include_reasoning": "Inkluder ræsonnement",
+            "prompt_caching": "Lokal svarcache",
+            "structured_outputs": "Brug strukturerede output",
+            "schema_name": "Skemanavn",
+            "schema": "JSON schema",
+            "strict": "Streng skematilstand",
+            "request_body_options": "Yderligere muligheder for anmodningstekst"
+          },
+          "data_description": {
+            "max_tokens": "Begrænser antallet af tokens, Groq kan generere i svaret.",
+            "top_p": "Alternativ prøvetagningskontrol. Lavere værdier begrænser generering til mere sandsynlige tokens.",
+            "stop": "En stopsekvens pr. linje. Generering stopper, når en sekvens er produceret.",
+            "seed": "Best-effort deterministisk sampling frø til gentagelige svar.",
+            "service_tier": "Valgfri Groq-behandlingstrin for anmodningen.",
+            "stream": "Streamer Assist-svar til Home Assistant-chatloggen, når det understøttes.",
+            "reasoning_effort": "Begrundelse af budget kun for understøttede ræsonnementmodeller.",
+            "reasoning_format": "Hvordan understøttede ræsonnementmodeller afslører ræsonnementindhold.",
+            "include_reasoning": "Anmoder om begrundelsesindhold på understøttede modeller, når der ikke er indstillet et begrundelsesformat.",
+            "prompt_caching": "Caches, der matcher Home Assistant-servicesvar lokalt for understøttede modeller.",
+            "structured_outputs": "Anmoder om JSON, der følger det konfigurerede skema, når denne service bruges til datagenerering.",
+            "schema_name": "En kort identifikator sendt til Groq med skemaet.",
+            "schema": "JSON Schema objekt sendt som response_format.json_schema.schema.",
+            "strict": "Bruger Groq begrænset afkodning, når den valgte model understøtter strengt strukturerede output.",
+            "request_body_options": "JSON-objekt flettet ind i anmodningen om chat-afslutning. Dette er den avancerede passthrough for hver Groq chat-opret brødtekst-indstilling, der ikke vises som et dedikeret felt, inklusive citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Tale-til-tekst-tjeneste",
+      "initiate_flow": {
+        "user": "Tilføj tale-til-tekst",
+        "reconfigure": "Genkonfigurer tale-til-tekst"
+      },
+      "abort": {
+        "reconfigure_successful": "Tale-til-tekst-tjenesten blev opdateret."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Tale-til-tekst",
+          "data": {
+            "name": "Navn",
+            "model": "Model",
+            "language": "Sprog",
+            "protect_free_tier": "Free-tier beskyttelse"
+          },
+          "data_description": {
+            "name": "Et venligt navn for denne tale-til-tekst-tjenesteinstans.",
+            "model": "Groq Whisper-modellen bruges til at transskribere lyd.",
+            "language": "Sprogtip sendt til Groq til transskription. Standard til det sprog, der er konfigureret i Home Assistant, når det er tilgængeligt.",
+            "protect_free_tier": "Når Groq rapporterer, at denne tjeneste har nået en anmodning eller token-grænse, sætter Home Assistant kun denne tjeneste på pause, indtil Groq's nulstillingstidspunkt, før den sender flere anmodninger."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Tekst-til-tale-tjeneste",
+      "initiate_flow": {
+        "user": "Tilføj tekst-til-tale",
+        "reconfigure": "Genkonfigurer tekst-til-tale"
+      },
+      "abort": {
+        "reconfigure_successful": "Tekst-til-tale-tjenesten blev opdateret."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Tekst-til-tale",
+          "data": {
+            "name": "Navn",
+            "model": "Model",
+            "voice": "Stemme",
+            "vocal_directions": "Standard vokale retninger",
+            "normalize_audio": "Aktiver lydstyrke for genereret lyd (bruger mere CPU)",
+            "protect_free_tier": "Free-tier beskyttelse"
+          },
+          "data_description": {
+            "name": "Et venligt navn for denne tekst-til-tale-tjenesteinstans.",
+            "model": "Groq talemodel, der bruges til at generere lyd.",
+            "voice": "Den stemmepersona, der bruges af den valgte talemodel. Ændring af modellen rydder stemmer, der ikke er tilgængelige for den nye model.",
+            "vocal_directions": "Valgfri leveringsstil sat foran tale, såsom munter eller hvisken. Du kan vælge en forudindstilling eller skrive din egen.",
+            "normalize_audio": "Konverterer output til normaliseret MP3 med ffmpeg for mere ensartet lydstyrke på små højttalere.",
+            "protect_free_tier": "Når Groq rapporterer, at denne tjeneste har nået en anmodning, token eller kendt tekst-til-tale-tegngrænse, sætter Home Assistant kun denne tjeneste på pause indtil nulstillingstiden, før den sender flere anmodninger."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Billedgenkendelsestjeneste",
+      "initiate_flow": {
+        "user": "Tilføj billedgenkendelse",
+        "reconfigure": "Genkonfigurer billedgenkendelse"
+      },
+      "abort": {
+        "reconfigure_successful": "Billedgenkendelsestjenesten blev opdateret."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Billedgenkendelse",
+          "data": {
+            "name": "Navn",
+            "model": "Model",
+            "system_prompt": "Systemprompt",
+            "protect_free_tier": "Free-tier beskyttelse"
+          },
+          "data_description": {
+            "name": "Et venligt navn for denne billedgenkendelsestjenesteinstans.",
+            "model": "Groq vision-modellen bruges til at inspicere billeder.",
+            "system_prompt": "Valgfri instruktioner, der guider, hvordan billedspørgsmål besvares.",
+            "protect_free_tier": "Når Groq rapporterer, at denne tjeneste har nået en anmodning eller token-grænse, sætter Home Assistant kun denne tjeneste på pause, indtil Groq's nulstillingstidspunkt, før den sender flere anmodninger."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Datagenereringsopgaver"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Assist"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Tale-til-tekst"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Tekst-til-tale"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "ffmpeg er påkrævet for Groq lydnormalisering",
+      "description": "Groq tekst-til-tale-tjenesten {service_name} er konfigureret til at normalisere genereret lyd, men Home Assistant kunne ikke starte ffmpeg. Installer ffmpeg på Home Assistant-værten, eller deaktiver lydnormalisering for denne Groq tekst-til-tale-tjeneste."
+    },
+    "model_access": {
+      "title": "Groq-modellen er ikke tilgængelig",
+      "description": "Groq rapporterede, at modellen {model} ikke er tilgængelig for denne konto. Tjek modelnavnet i Groq-konsollen, bekræft, at modellen er aktiveret for kontoen, eller vælg en anden Groq-model i denne integration."
+    },
+    "model_configuration": {
+      "title": "Groq servicemodelkonfiguration er ugyldig",
+      "description": "Groq-tjenesten {service_name} er konfigureret til at bruge model {model}, men denne model er ikke kendt for at understøtte {feature}. Vælg en model, der understøtter denne servicetype."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Flere Groq-tjenester matcher service_id: {service_id}"
+    },
+    "config_entry_not_found": {
+      "message": "Groq konfigurationsindgang ikke fundet: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Ingen indlæst Groq-konfigurationsindgang fundet"
+    },
+    "multiple_config_entries": {
+      "message": "Flere Groq-konfigurationsindgange er indlæst; give config_entry_id eller service_id"
+    },
+    "service_not_found": {
+      "message": "Groq {service_type} tjeneste ikke fundet: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Flere Groq {service_type}-tjenester er konfigureret; give service_id"
+    },
+    "unsupported_model": {
+      "message": "Groq model {model} er ikke kendt for at understøtte {feature}"
+    },
+    "completion_token_limit": {
+      "message": "Groq model {model} understøtter højst {limit} færdiggørelsestokens"
+    },
+    "select_one_camera": {
+      "message": "Vælg kun én kameraenhed"
+    },
+    "camera_capture_failed": {
+      "message": "Kunne ikke tage billede fra kameraenheden {entity_id}"
+    },
+    "local_image_path_not_allowed": {
+      "message": "Lokal billedsti er ikke i Home Assistant's allowlist_external_dirs"
+    },
+    "local_image_not_found": {
+      "message": "Lokal billedfil blev ikke fundet: {path}"
+    },
+    "local_file_not_image": {
+      "message": "Lokal fil er ikke et billede: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Kunne ikke løse billedfil: {path}"
+    },
+    "selected_media_not_image": {
+      "message": "Det valgte medie er ikke et billede: {path}"
+    },
+    "image_source_required": {
+      "message": "Vælg en kameraenhed, billedfil, lokal billedsti eller billede URL"
+    },
+    "invalid_image_url": {
+      "message": "Billede URL skal være en http, https eller billeddata URL"
+    },
+    "image_too_large": {
+      "message": "Det valgte billede er for stort; maksimal størrelse er {limit_mb} MB"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "Lokal lydsti er ikke i Home Assistant's allowlist_external_dirs"
+    },
+    "local_audio_not_found": {
+      "message": "Lokal lydfil blev ikke fundet: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "Lokal fil er ikke lyd: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Kunne ikke løse lydfil: {path}"
+    },
+    "audio_media_local_required": {
+      "message": "Valgt lyd skal løses til en lokal fil"
+    },
+    "selected_media_not_audio": {
+      "message": "Det valgte medie er ikke lyd: {path}"
+    },
+    "audio_source_required": {
+      "message": "Vælg en lydfil eller lokal lydsti"
+    },
+    "audio_too_large": {
+      "message": "Den valgte lyd er for stor; maksimal størrelse er {limit_mb} MB"
+    },
+    "request_invalid": {
+      "message": "{message}"
+    }
+  }
+}

@@ -1,0 +1,354 @@
+{
+  "config": {
+    "initiate_flow": {
+      "user": "Groq fiók hozzáadása"
+    },
+    "step": {
+      "user": {
+        "title": "Groq hozzáadása",
+        "description": "További információért lásd a dokumentációt.",
+        "data": {
+          "name": "Név",
+          "api_key": "Írja be a Groq API kulcsot"
+        },
+        "data_description": {
+          "name": "Barátságos név ennek a Groq fióknak. Ezzel azonosíthatja a API kulcsot vagy számlázási projektet.",
+          "api_key": "Groq API kulcs ehhez a fiókhoz. Adjon hozzá egy másik Groq-fiókot, ha másik kulcsot szeretne használni egy külön szolgáltatáskészlethez."
+        }
+      },
+      "reauth_confirm": {
+        "title": "A Groq újbóli hitelesítése",
+        "description": "Hitelesítési adatai már nem érvényesek. Adjon meg egy új API kulcsot.",
+        "data": {
+          "api_key": "Groq API kulcs"
+        }
+      },
+      "reconfigure": {
+        "title": "Konfigurálja újra a Groq-t",
+        "description": "Frissítse a Groq fiók nevét, vagy cserélje ki a API kulcsot.",
+        "data": {
+          "name": "Név",
+          "api_key": "Groq API kulcs"
+        },
+        "data_description": {
+          "name": "Barátságos név ennek a Groq fióknak.",
+          "api_key": "Opcionális csere API kulcs. Hagyja üresen az aktuális API kulcs megtartásához."
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Groq fiók sikeresen frissítve.",
+      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
+    },
+    "error": {
+      "cannot_connect": "Nem sikerült csatlakozni a Groq-hez. Kérjük, ellenőrizze a hálózati kapcsolatot, és próbálja újra.",
+      "duplicate_api_key": "Egy másik Groq fiók már használja ezt a API kulcsot.",
+      "invalid_auth": "Érvénytelen Groq API kulcs. Adjon meg egy érvényes kulcsot.",
+      "wrong_api_key": "Érvénytelen API kulcs. Adjon meg egy érvényes API kulcsot.",
+      "invalid_url": "Érvénytelen URL. Kérjük, adjon meg egy érvényes URL kódot.",
+      "invalid_enabled_features": "Egy vagy több kiválasztott szolgáltatás nem támogatott.",
+      "invalid_response_format": "Érvénytelen válaszformátum.",
+      "unsupported_reasoning_model": "A kiválasztott modell nem támogatja az érvelési beállításokat.",
+      "unsupported_prompt_caching_model": "A kiválasztott modell nem támogatja a helyi válaszok gyorsítótárazását.",
+      "unsupported_structured_outputs_model": "A kiválasztott modell nem támogatja a strukturált kimeneteket.",
+      "reserved_request_body_option": "A további kéréstörzs-beállítások nem írhatják felül a modellt, az üzeneteket vagy az adatfolyamot. Ehelyett használja a dedikált mezőket.",
+      "max_completion_tokens_exceeded": "A kiválasztott modell nem támogatja ennyi maximális befejezési tokent.",
+      "invalid_voice": "A kiválasztott hang nem érhető el a kiválasztott modellhez.",
+      "select_voice_for_model": "Válasszon hangot a kiválasztott modellhez.",
+      "required": "Ezt a mezőt kötelező kitölteni.",
+      "unknown": "Váratlan hiba a API kulcs érvényesítésekor. Kérjük, próbálja újra.",
+      "unknown_error": "Váratlan hiba – kérjük, próbálja újra.",
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Konfigurálja a Groq opciókat",
+        "data": {
+          "api_key": "Groq API kulcs"
+        },
+        "data_description": {
+          "api_key": "Opcionális csere API kulcs ehhez a Groq fiókhoz."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "text_generation": {
+      "entry_type": "Szöveggeneráló szolgáltatás",
+      "initiate_flow": {
+        "user": "Szöveggenerálás hozzáadása",
+        "reconfigure": "Szöveggenerálás újrakonfigurálása"
+      },
+      "abort": {
+        "reconfigure_successful": "Szöveggeneráló szolgáltatás sikeresen frissítve."
+      },
+      "step": {
+        "text_generation": {
+          "title": "Szöveggenerálás",
+          "description": "A kiválasztott modell képességei: {model_capabilities}",
+          "data": {
+            "name": "Név",
+            "model": "Modell",
+            "system_prompt": "Rendszerkérdés",
+            "temperature": "Hőmérséklet",
+            "advanced_options": "Speciális kérési beállítások konfigurálása",
+            "protect_free_tier": "Free-Tier Protection",
+            "llm_hass_api": "Home Assistant LLM API"
+          },
+          "data_description": {
+            "name": "Barátságos név ennek a szöveggeneráló szolgáltatásnak. A Home Assistant ezt használja a Assist és AI feladat entitásokhoz.",
+            "model": "A Groq csevegési modell szöveges válaszokhoz, Assist beszélgetésekhez és adatgenerálási feladatokhoz.",
+            "system_prompt": "A modellhez vezető utasítások. Az alapértelmezett érték megegyezik a Home Assistant AI feladatsorával.",
+            "temperature": "A válaszváltoztatást szabályozza. Az alacsonyabb értékek kiszámíthatóbbak; a magasabb értékek kreatívabbak.",
+            "advanced_options": "Megnyitja a speciális vezérlőket a kevésbé gyakori Groq csevegési kérési lehetőségekhez.",
+            "protect_free_tier": "Amikor a Groq azt jelenti, hogy ez a szolgáltatás elérte a kérések vagy token korlátot, a Home Assistant csak ezt a szolgáltatást szünetelteti a Groq visszaállítási idejéig, mielőtt további kéréseket küldene.",
+            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
+          }
+        },
+        "text_generation_advanced": {
+          "title": "Speciális szöveggenerálás",
+          "data": {
+            "max_tokens": "Maximális befejezési tokenek",
+            "top_p": "Felső P",
+            "stop": "Állítsa le a sorozatokat",
+            "seed": "Mag",
+            "service_tier": "Szolgáltatási szint",
+            "stream": "Assist válaszok streamelése",
+            "reasoning_effort": "Okoskodás",
+            "reasoning_format": "Indoklás formátuma",
+            "include_reasoning": "Tartalmazza az érvelést",
+            "prompt_caching": "Helyi válaszgyorsítótár",
+            "structured_outputs": "Strukturált kimenetek használata",
+            "schema_name": "Sémanév",
+            "schema": "JSON schema",
+            "strict": "Szigorú sémamód",
+            "request_body_options": "További kéréstörzs opciók"
+          },
+          "data_description": {
+            "max_tokens": "Korlátozza a Groq válaszban generálható tokenek számát.",
+            "top_p": "Alternatív mintavételezés. Az alacsonyabb értékek a valószínűbb tokenekre korlátozzák a generálást.",
+            "stop": "Soronként egy stop sorozat. A generálás leáll, ha bármilyen sorozat létrejön.",
+            "seed": "A legjobb determinisztikus mintavételezési mag az ismételhető válaszokhoz.",
+            "service_tier": "Választható Groq feldolgozási szint a kéréshez.",
+            "stream": "A Assist válaszokat a Home Assistant csevegési naplóba továbbítja, ha támogatott.",
+            "reasoning_effort": "Érvelési költségvetés csak támogatott érvelési modellekhez.",
+            "reasoning_format": "Hogyan mutatják be a támogatott érvelési modellek érvelési tartalmat.",
+            "include_reasoning": "Indoklási tartalmat kér a támogatott modelleken, ha nincs beállítva érvelési formátum.",
+            "prompt_caching": "Gyorsítótárak a Home Assistant szolgáltatás válaszainak helyileg a támogatott modellekhez.",
+            "structured_outputs": "JSON kódot kér, amely követi a konfigurált sémát, amikor ezt a szolgáltatást adatgenerálásra használják.",
+            "schema_name": "A sémával együtt a Groq számára elküldött rövid azonosító.",
+            "schema": "JSON Schema objektum elküldve response_format.json_schema.sémaként.",
+            "strict": "Groq korlátozott dekódolást használ, ha a kiválasztott modell támogatja a szigorú strukturált kimeneteket.",
+            "request_body_options": "A JSON objektum beolvasztva a csevegés befejezését kérő törzsbe. Ez minden olyan Groq csevegés-létrehozási opció speciális átjárása, amely nem jelenik meg dedikált mezőként, ideértve a citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+          }
+        }
+      }
+    },
+    "speech_to_text": {
+      "entry_type": "Beszéd-szöveg szolgáltatás",
+      "initiate_flow": {
+        "user": "Beszéd-szöveg hozzáadása",
+        "reconfigure": "Beszéd-szöveg újrakonfigurálása"
+      },
+      "abort": {
+        "reconfigure_successful": "A beszéd-szöveg szolgáltatás sikeresen frissítve."
+      },
+      "step": {
+        "speech_to_text": {
+          "title": "Beszéd-szöveg",
+          "data": {
+            "name": "Név",
+            "model": "Modell",
+            "language": "Nyelv",
+            "protect_free_tier": "Free-Tier Protection"
+          },
+          "data_description": {
+            "name": "A beszéd-szöveg szolgáltatáspéldány barátságos neve.",
+            "model": "A hang átírására használt Groq Whisper modell.",
+            "language": "Nyelvi tipp elküldve a Groq számára átírás céljából. Alapértelmezés szerint a Home Assistant-ben konfigurált nyelv, ha elérhető.",
+            "protect_free_tier": "Amikor a Groq azt jelenti, hogy ez a szolgáltatás elérte a kérések vagy token korlátot, a Home Assistant csak ezt a szolgáltatást szünetelteti a Groq visszaállítási idejéig, mielőtt további kéréseket küldene."
+          }
+        }
+      }
+    },
+    "text_to_speech": {
+      "entry_type": "Szövegfelolvasó szolgáltatás",
+      "initiate_flow": {
+        "user": "Szövegfelolvasó hozzáadása",
+        "reconfigure": "A Text-to-Speech újrakonfigurálása"
+      },
+      "abort": {
+        "reconfigure_successful": "Szövegfelolvasó szolgáltatás sikeresen frissítve."
+      },
+      "step": {
+        "text_to_speech": {
+          "title": "Text-to-Speech",
+          "data": {
+            "name": "Név",
+            "model": "Modell",
+            "voice": "Hang",
+            "vocal_directions": "Alapértelmezett énekirányok",
+            "normalize_audio": "Hangerő engedélyezése a generált hanghoz (több CPU-t használ)",
+            "protect_free_tier": "Free-Tier Protection"
+          },
+          "data_description": {
+            "name": "A Szövegfelolvasó szolgáltatáspéldány barátságos neve.",
+            "model": "A hang generálására használt Groq beszédmodell.",
+            "voice": "A kiválasztott beszédmodell által használt hangszemély. A modell megváltoztatása törli azokat a hangokat, amelyek nem állnak rendelkezésre az új modellhez.",
+            "vocal_directions": "Választható kézbesítési stílus a beszéd elé, például vidám vagy suttogó. Választhat egy előre beállított értéket, vagy beírhatja a sajátját.",
+            "normalize_audio": "Normalizált MP3-vé alakítja a kimenetet a ffmpeg-vel, hogy egyenletesebb legyen a hangerő kis hangszórókon.",
+            "protect_free_tier": "Amikor a Groq azt jelenti, hogy ez a szolgáltatás elért egy kérést, tokent vagy ismert szövegfelolvasó karakterkorlátot, a Home Assistant csak ezt a szolgáltatást szünetelteti a visszaállítási időpontig, mielőtt további kéréseket küldene."
+          }
+        }
+      }
+    },
+    "image_recognition": {
+      "entry_type": "Képfelismerő szolgáltatás",
+      "initiate_flow": {
+        "user": "Képfelismerés hozzáadása",
+        "reconfigure": "Képfelismerés újrakonfigurálása"
+      },
+      "abort": {
+        "reconfigure_successful": "Képfelismerő szolgáltatás sikeresen frissítve."
+      },
+      "step": {
+        "image_recognition": {
+          "title": "Képfelismerés",
+          "data": {
+            "name": "Név",
+            "model": "Modell",
+            "system_prompt": "Rendszerkérdés",
+            "protect_free_tier": "Free-Tier Protection"
+          },
+          "data_description": {
+            "name": "A képfelismerő szolgáltatáspéldány barátságos neve.",
+            "model": "A képek vizsgálatára használt Groq látásmodell.",
+            "system_prompt": "Opcionális utasítások, amelyek eligazítják a képkérdések megválaszolását.",
+            "protect_free_tier": "Amikor a Groq azt jelenti, hogy ez a szolgáltatás elérte a kérések vagy token korlátot, a Home Assistant csak ezt a szolgáltatást szünetelteti a Groq visszaállítási idejéig, mielőtt további kéréseket küldene."
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "ai_task": {
+      "data_generation_tasks": {
+        "name": "Adatgenerálási feladatok"
+      }
+    },
+    "conversation": {
+      "assist": {
+        "name": "Assist"
+      }
+    },
+    "stt": {
+      "speech_to_text": {
+        "name": "Beszéd-szöveg"
+      }
+    },
+    "tts": {
+      "text_to_speech": {
+        "name": "Text-to-Speech"
+      }
+    }
+  },
+  "issues": {
+    "ffmpeg_missing": {
+      "title": "ffmpeg szükséges a Groq hang normalizálásához",
+      "description": "A Groq Text-to-Speech szolgáltatás, {service_name} úgy van konfigurálva, hogy normalizálja a generált hangot, de a Home Assistant nem tudta elindítani a ffmpeg-t. Telepítse a ffmpeg-t a Home Assistant gazdagépen, vagy kapcsolja ki a hang normalizálását ennél a Groq szövegfelolvasó szolgáltatásnál."
+    },
+    "model_access": {
+      "title": "A Groq modell nem elérhető",
+      "description": "A Groq arról számolt be, hogy a {model} modell nem érhető el ehhez a fiókhoz. Ellenőrizze a modell nevét a Groq konzolon, ellenőrizze, hogy a modell engedélyezve van-e a fiókhoz, vagy válasszon egy másik Groq modellt ebben az integrációban."
+    },
+    "model_configuration": {
+      "title": "A Groq szolgáltatásmodell konfigurációja érvénytelen",
+      "description": "A Groq {service_name} szolgáltatás a {model} modell használatára van konfigurálva, de ez a modell nem támogatja a {feature}-t. Válasszon egy olyan modellt, amely támogatja ezt a szolgáltatástípust."
+    }
+  },
+  "exceptions": {
+    "multiple_services_match": {
+      "message": "Több Groq szolgáltatás megfelel a service_id: {service_id}"
+    },
+    "config_entry_not_found": {
+      "message": "Groq konfigurációs bejegyzés nem található: {entry_id}"
+    },
+    "no_loaded_config_entry": {
+      "message": "Nem található betöltött Groq konfigurációs bejegyzés"
+    },
+    "multiple_config_entries": {
+      "message": "Több Groq konfigurációs bejegyzés van betöltve; adjon meg config_entry_id vagy service_id"
+    },
+    "service_not_found": {
+      "message": "Groq {service_type} szolgáltatás nem található: {service_id}"
+    },
+    "multiple_services_configured": {
+      "message": "Több Groq {service_type} szolgáltatás konfigurálva; biztosítsa a service_id-t"
+    },
+    "unsupported_model": {
+      "message": "A Groq {model} modellről ismert, hogy nem támogatja a {feature}-t"
+    },
+    "completion_token_limit": {
+      "message": "A Groq {model} modell legfeljebb {limit} befejezési tokent támogatja"
+    },
+    "select_one_camera": {
+      "message": "Csak egy kamera entitást válasszon"
+    },
+    "camera_capture_failed": {
+      "message": "Nem sikerült képet rögzíteni a {entity_id} kamera entitásról"
+    },
+    "local_image_path_not_allowed": {
+      "message": "A helyi kép elérési útja nem található a Home Assistant allowlist_external_dirs-jében"
+    },
+    "local_image_not_found": {
+      "message": "A helyi képfájl nem található: {path}"
+    },
+    "local_file_not_image": {
+      "message": "A helyi fájl nem kép: {path}"
+    },
+    "image_media_unresolvable": {
+      "message": "Nem sikerült feloldani a képfájlt: {path}"
+    },
+    "selected_media_not_image": {
+      "message": "A kiválasztott adathordozó nem kép: {path}"
+    },
+    "image_source_required": {
+      "message": "Válasszon ki egy kamera entitást, képfájlt, helyi kép elérési utat vagy képet URL"
+    },
+    "invalid_image_url": {
+      "message": "A URL képnek http, https vagy képadatnak kell lennie, URL"
+    },
+    "image_too_large": {
+      "message": "A kiválasztott kép túl nagy; a maximális méret {limit_mb} MB"
+    },
+    "local_audio_path_not_allowed": {
+      "message": "A helyi hangút nem található a Home Assistant allowlist_external_dirs-jében"
+    },
+    "local_audio_not_found": {
+      "message": "A helyi hangfájl nem található: {path}"
+    },
+    "local_file_not_audio": {
+      "message": "A helyi fájl nem hang: {path}"
+    },
+    "audio_media_unresolvable": {
+      "message": "Nem sikerült feloldani a következő hangfájlt: {path}"
+    },
+    "audio_media_local_required": {
+      "message": "A kiválasztott hangnak helyi fájlként kell feloldódnia"
+    },
+    "selected_media_not_audio": {
+      "message": "A kiválasztott média nem audio: {path}"
+    },
+    "audio_source_required": {
+      "message": "Válasszon ki egy hangfájlt vagy helyi hangútvonalat"
+    },
+    "audio_too_large": {
+      "message": "A kiválasztott hang túl nagy; a maximális méret {limit_mb} MB"
+    },
+    "request_invalid": {
+      "message": "{message}"
+    }
+  }
+}
