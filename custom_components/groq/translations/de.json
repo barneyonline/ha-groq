@@ -1,360 +1,363 @@
 {
-  "config": {
-    "initiate_flow": {
-      "user": "Groq-Konto hinzufügen"
-    },
-    "step": {
-      "user": {
-        "title": "Groq hinzufügen",
-        "description": "Weitere Informationen finden Sie in der Dokumentation.",
-        "data": {
-          "name": "Name",
-          "api_key": "Geben Sie den Schlüssel Groq API ein"
+    "config": {
+        "initiate_flow": {
+            "user": "Groq-Konto hinzufügen"
         },
-        "data_description": {
-          "name": "Ein benutzerfreundlicher Name für dieses Groq-Konto. Verwenden Sie dies, um den API-Schlüssel oder das Abrechnungsprojekt zu identifizieren.",
-          "api_key": "Groq API Schlüssel für dieses Konto. Fügen Sie ein weiteres Groq-Konto hinzu, wenn Sie einen anderen Schlüssel für einen separaten Satz von Diensten verwenden möchten."
-        }
-      },
-      "reauth_confirm": {
-        "title": "Groq erneut authentifizieren",
-        "description": "Ihre Anmeldeinformationen sind nicht mehr gültig. Bitte geben Sie einen neuen API-Schlüssel ein.",
-        "data": {
-          "api_key": "Groq API-Taste"
-        }
-      },
-      "reconfigure": {
-        "title": "Groq neu konfigurieren",
-        "description": "Aktualisieren Sie den Groq-Kontonamen oder ersetzen Sie den API-Schlüssel.",
-        "data": {
-          "name": "Name",
-          "api_key": "Groq API-Taste"
+        "step": {
+            "user": {
+                "title": "Groq hinzufügen",
+                "description": "Weitere Informationen finden Sie in der Dokumentation.",
+                "data": {
+                    "name": "Name",
+                    "api_key": "Geben Sie den Schlüssel Groq API ein"
+                },
+                "data_description": {
+                    "name": "Ein benutzerfreundlicher Name für dieses Groq-Konto. Verwenden Sie dies, um den API-Schlüssel oder das Abrechnungsprojekt zu identifizieren.",
+                    "api_key": "Groq API Schlüssel für dieses Konto. Fügen Sie ein weiteres Groq-Konto hinzu, wenn Sie einen anderen Schlüssel für einen separaten Satz von Diensten verwenden möchten."
+                }
+            },
+            "reauth_confirm": {
+                "title": "Groq erneut authentifizieren",
+                "description": "Ihre Anmeldeinformationen sind nicht mehr gültig. Bitte geben Sie einen neuen API-Schlüssel ein.",
+                "data": {
+                    "api_key": "Groq API-Taste"
+                }
+            },
+            "reconfigure": {
+                "title": "Groq neu konfigurieren",
+                "description": "Aktualisieren Sie den Groq-Kontonamen oder ersetzen Sie den API-Schlüssel.",
+                "data": {
+                    "name": "Name",
+                    "api_key": "Groq API-Taste"
+                },
+                "data_description": {
+                    "name": "Ein benutzerfreundlicher Name für dieses Groq-Konto.",
+                    "api_key": "Optionaler Ersatzschlüssel API. Lassen Sie das Feld leer, um den aktuellen API-Schlüssel beizubehalten."
+                }
+            }
         },
-        "data_description": {
-          "name": "Ein benutzerfreundlicher Name für dieses Groq-Konto.",
-          "api_key": "Optionaler Ersatzschlüssel API. Lassen Sie das Feld leer, um den aktuellen API-Schlüssel beizubehalten."
-        }
-      }
-    },
-    "abort": {
-      "reauth_successful": "Alles erledigt. Groq wurde mit dem neuen API-Schlüssel erneut verbunden.",
-      "reconfigure_successful": "Groq-Konto erfolgreich aktualisiert."
-    },
-    "error": {
-      "cannot_connect": "Es konnte keine Verbindung zu Groq hergestellt werden. Bitte überprüfen Sie Ihre Netzwerkverbindung und versuchen Sie es erneut.",
-      "duplicate_api_key": "Ein anderes Groq-Konto verwendet diesen API-Schlüssel bereits.",
-      "invalid_auth": "Ungültiger Groq API-Schlüssel. Bitte geben Sie einen gültigen Schlüssel ein.",
-      "wrong_api_key": "Ungültiger API-Schlüssel. Bitte geben Sie einen gültigen API-Schlüssel ein.",
-      "invalid_url": "Ungültiges URL. Bitte geben Sie ein gültiges URL ein.",
-      "invalid_enabled_features": "Eine oder mehrere ausgewählte Funktionen werden nicht unterstützt.",
-      "invalid_response_format": "Ungültiges Antwortformat.",
-      "unsupported_reasoning_model": "Das ausgewählte Modell unterstützt keine Begründungsoptionen.",
-      "unsupported_prompt_caching_model": "Das ausgewählte Modell unterstützt kein lokales Antwort-Caching.",
-      "unsupported_structured_outputs_model": "Das ausgewählte Modell unterstützt keine strukturierten Ausgaben.",
-      "unsupported_tool_calling_model": "Das ausgewählte Modell unterstützt bekanntermaßen keine Home Assistant-Toolaufrufe.",
-      "reserved_request_body_option": "Zusätzliche Optionen für den Anforderungstext können Modell, Nachrichten, Stream, tools oder tool_choice nicht überschreiben. Verwenden Sie stattdessen die dafür vorgesehenen Felder.",
-      "max_completion_tokens_exceeded": "Das ausgewählte Modell unterstützt nicht so viele maximale Abschlusstoken.",
-      "invalid_voice": "Die ausgewählte Stimme ist für das ausgewählte Modell nicht verfügbar.",
-      "select_voice_for_model": "Wählen Sie eine Stimme für das ausgewählte Modell aus.",
-      "required": "Dieses Feld ist erforderlich.",
-      "unknown": "Unerwarteter Fehler bei der Validierung des API-Schlüssels. Bitte versuchen Sie es erneut.",
-      "unknown_error": "Unerwarteter Fehler – bitte versuchen Sie es erneut.",
-      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
-      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Konfigurieren Sie die Groq-Optionen",
-        "data": {
-          "api_key": "Groq API-Taste"
+        "abort": {
+            "reauth_successful": "Alles erledigt. Groq wurde mit dem neuen API-Schlüssel erneut verbunden.",
+            "reconfigure_successful": "Groq-Konto erfolgreich aktualisiert."
         },
-        "data_description": {
-          "api_key": "Optionaler Ersatz-API-Schlüssel für dieses Groq-Konto."
+        "error": {
+            "cannot_connect": "Es konnte keine Verbindung zu Groq hergestellt werden. Bitte überprüfen Sie Ihre Netzwerkverbindung und versuchen Sie es erneut.",
+            "duplicate_api_key": "Ein anderes Groq-Konto verwendet diesen API-Schlüssel bereits.",
+            "invalid_auth": "Ungültiger Groq API-Schlüssel. Bitte geben Sie einen gültigen Schlüssel ein.",
+            "wrong_api_key": "Ungültiger API-Schlüssel. Bitte geben Sie einen gültigen API-Schlüssel ein.",
+            "invalid_url": "Ungültiges URL. Bitte geben Sie ein gültiges URL ein.",
+            "invalid_enabled_features": "Eine oder mehrere ausgewählte Funktionen werden nicht unterstützt.",
+            "invalid_response_format": "Invalid response format.",
+            "unsupported_reasoning_model": "Das ausgewählte Modell unterstützt keine Begründungsoptionen.",
+            "unsupported_prompt_caching_model": "Das ausgewählte Modell unterstützt kein lokales Antwort-Caching.",
+            "unsupported_structured_outputs_model": "Das ausgewählte Modell unterstützt keine strukturierten Ausgaben.",
+            "unsupported_tool_calling_model": "Das ausgewählte Modell unterstützt bekanntermaßen keine Home Assistant-Toolaufrufe.",
+            "reserved_request_body_option": "Zusätzliche Optionen für den Anforderungstext können Modell, Nachrichten, Stream, tools oder tool_choice nicht überschreiben. Verwenden Sie stattdessen die dafür vorgesehenen Felder.",
+            "max_completion_tokens_exceeded": "Das ausgewählte Modell unterstützt nicht so viele maximale Abschlusstoken.",
+            "invalid_voice": "Die ausgewählte Stimme ist für das ausgewählte Modell nicht verfügbar.",
+            "select_voice_for_model": "Wählen Sie eine Stimme für das ausgewählte Modell aus.",
+            "required": "Dieses Feld ist erforderlich.",
+            "unknown": "Unerwarteter Fehler bei der Validierung des API-Schlüssels. Bitte versuchen Sie es erneut.",
+            "unknown_error": "Unerwarteter Fehler – bitte versuchen Sie es erneut.",
+            "ffmpeg_required": "Installieren Sie ffmpeg, um diese Option zu aktivieren.",
+            "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+            "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
         }
-      }
-    }
-  },
-  "config_subentries": {
-    "text_generation": {
-      "entry_type": "Textgenerierungsdienst",
-      "initiate_flow": {
-        "user": "Textgenerierung hinzufügen",
-        "reconfigure": "Textgenerierung neu konfigurieren"
-      },
-      "abort": {
-        "reconfigure_successful": "Textgenerierungsdienst erfolgreich aktualisiert."
-      },
-      "step": {
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Konfigurieren Sie die Groq-Optionen",
+                "data": {
+                    "api_key": "Groq API-Taste"
+                },
+                "data_description": {
+                    "api_key": "Optionaler Ersatz-API-Schlüssel für dieses Groq-Konto."
+                }
+            }
+        }
+    },
+    "config_subentries": {
         "text_generation": {
-          "title": "Textgenerierung",
-          "description": "Ausgewählte Modellfunktionen: {model_capabilities}",
-          "data": {
-            "name": "Name",
-            "model": "Modell",
-            "system_prompt": "Systemaufforderung",
-            "llm_hass_api": "Home Assistant LLM API",
-            "temperature": "Temperatur",
-            "advanced_options": "Konfigurieren Sie erweiterte Anfrageoptionen",
-            "protect_free_tier": "Kostenloser Schutz"
-          },
-          "data_description": {
-            "name": "Ein benutzerfreundlicher Name für diesen Textgenerierungsdienst. Home Assistant verwendet dies für die Aufgabenentitäten Assist und AI.",
-            "model": "Das Groq-Chat-Modell, das für Textantworten, Assist-Konversationen und Datengenerierungsaufgaben verwendet wird.",
-            "system_prompt": "Anweisungen, die das Modell leiten. Die Standardeinstellung entspricht der Task-Eingabeaufforderung AI von Home Assistant.",
-            "llm_hass_api": "Home Assistant LLM-APIs, die dieser Assist-Agent für Tool-Aufrufe verwenden darf. Leer lassen, um den Zugriff auf Home Assistant-Tools zu deaktivieren.",
-            "temperature": "Steuert Antwortvariationen. Niedrigere Werte sind vorhersehbarer; Höhere Werte sind kreativer.",
-            "advanced_options": "Öffnet erweiterte Steuerelemente für weniger häufige Groq-Chat-Anfrageoptionen.",
-            "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs- oder Token-Limit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit von Groq, bevor weitere Anforderungen gesendet werden."
-          }
+            "entry_type": "Textgenerierungsdienst",
+            "initiate_flow": {
+                "user": "Textgenerierung hinzufügen",
+                "reconfigure": "Textgenerierung neu konfigurieren"
+            },
+            "abort": {
+                "reconfigure_successful": "Textgenerierungsdienst erfolgreich aktualisiert."
+            },
+            "step": {
+                "text_generation": {
+                    "title": "Textgenerierung",
+                    "description": "Ausgewählte Modellfunktionen: {model_capabilities}",
+                    "data": {
+                        "name": "Name",
+                        "model": "Modell",
+                        "system_prompt": "Systemaufforderung",
+                        "llm_hass_api": "Home Assistant LLM API",
+                        "temperature": "Temperatur",
+                        "advanced_options": "Konfigurieren Sie erweiterte Anfrageoptionen",
+                        "protect_free_tier": "Kostenloser Schutz"
+                    },
+                    "data_description": {
+                        "name": "Ein benutzerfreundlicher Name für diesen Textgenerierungsdienst. Home Assistant verwendet dies für die Aufgabenentitäten Assist und AI.",
+                        "model": "Das Groq-Chat-Modell, das für Textantworten, Assist-Konversationen und Datengenerierungsaufgaben verwendet wird.",
+                        "system_prompt": "Anweisungen, die das Modell leiten. Die Standardeinstellung entspricht der Task-Eingabeaufforderung AI von Home Assistant.",
+                        "llm_hass_api": "Home Assistant LLM-APIs, die dieser Assist-Agent für Tool-Aufrufe verwenden darf. Leer lassen, um den Zugriff auf Home Assistant-Tools zu deaktivieren.",
+                        "temperature": "Steuert Antwortvariationen. Niedrigere Werte sind vorhersehbarer; Höhere Werte sind kreativer.",
+                        "advanced_options": "Öffnet erweiterte Steuerelemente für weniger häufige Groq-Chat-Anfrageoptionen.",
+                        "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs- oder Token-Limit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit von Groq, bevor weitere Anforderungen gesendet werden."
+                    }
+                },
+                "text_generation_advanced": {
+                    "title": "Erweiterte Textgenerierung",
+                    "data": {
+                        "max_tokens": "Max. Abschluss-Tokens",
+                        "top_p": "Top P",
+                        "stop": "Stoppsequenzen",
+                        "seed": "Samen",
+                        "service_tier": "Serviceebene",
+                        "stream": "Streamen Sie Assist-Antworten",
+                        "reasoning_effort": "Argumentationsaufwand",
+                        "reasoning_format": "Argumentationsformat",
+                        "include_reasoning": "Begründung hinzufügen",
+                        "prompt_caching": "Lokaler Antwortcache",
+                        "compound_builtin_tools": "Compound built-in tools",
+                        "structured_outputs": "Verwenden Sie strukturierte Ausgaben",
+                        "schema_name": "Schemaname",
+                        "schema": "JSON schema",
+                        "strict": "Strikter Schemamodus",
+                        "request_body_options": "Zusätzliche Optionen für den Anforderungstext"
+                    },
+                    "data_description": {
+                        "max_tokens": "Begrenzt die Anzahl der Token, die Groq in der Antwort generieren kann.",
+                        "top_p": "Alternative Probenahmekontrolle. Niedrigere Werte beschränken die Generierung auf wahrscheinlichere Token.",
+                        "stop": "Eine Stoppsequenz pro Zeile. Die Generierung stoppt, wenn eine Sequenz erstellt wird.",
+                        "seed": "Deterministischer Best-Effort-Sampling-Seed für wiederholbare Antworten.",
+                        "service_tier": "Optionale Groq-Verarbeitungsebene für die Anfrage.",
+                        "stream": "Streamt Assist-Antworten in das Home Assistant-Chatprotokoll, sofern unterstützt.",
+                        "reasoning_effort": "Reasoning-Budget nur für unterstützte Reasoning-Modelle.",
+                        "reasoning_format": "Wie unterstützte Argumentationsmodelle Argumentationsinhalte offenlegen.",
+                        "include_reasoning": "Fordert Begründungsinhalte zu unterstützten Modellen an, wenn kein Begründungsformat festgelegt ist.",
+                        "prompt_caching": "Speichert passende Home Assistant-Dienstantworten lokal für unterstützte Modelle.",
+                        "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
+                        "structured_outputs": "Fordert JSON an, das dem konfigurierten Schema folgt, wenn dieser Dienst für die Datengenerierung verwendet wird.",
+                        "schema_name": "Eine kurze Kennung, die mit dem Schema an Groq gesendet wird.",
+                        "schema": "JSON Schema-Objekt gesendet als response_format.json_schema.schema.",
+                        "strict": "Verwendet die eingeschränkte Groq-Dekodierung, wenn das ausgewählte Modell streng strukturierte Ausgaben unterstützt.",
+                        "request_body_options": "JSON-Objekt in den Text der Chat-Abschlussanforderung eingefügt. Dies ist die erweiterte Passthrough-Funktion für jede Groq-Chat-Create-Body-Option, die nicht als eigenes Feld angezeigt wird, einschließlich citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+                    }
+                }
+            }
         },
-        "text_generation_advanced": {
-          "title": "Erweiterte Textgenerierung",
-          "data": {
-            "max_tokens": "Max. Abschluss-Tokens",
-            "top_p": "Top P",
-            "stop": "Stoppsequenzen",
-            "seed": "Samen",
-            "service_tier": "Serviceebene",
-            "stream": "Streamen Sie Assist-Antworten",
-            "reasoning_effort": "Argumentationsaufwand",
-            "reasoning_format": "Argumentationsformat",
-            "include_reasoning": "Begründung hinzufügen",
-            "prompt_caching": "Lokaler Antwortcache",
-            "compound_builtin_tools": "Compound built-in tools",
-            "structured_outputs": "Verwenden Sie strukturierte Ausgaben",
-            "schema_name": "Schemaname",
-            "schema": "JSON schema",
-            "strict": "Strikter Schemamodus",
-            "request_body_options": "Zusätzliche Optionen für den Anforderungstext"
-          },
-          "data_description": {
-            "max_tokens": "Begrenzt die Anzahl der Token, die Groq in der Antwort generieren kann.",
-            "top_p": "Alternative Probenahmekontrolle. Niedrigere Werte beschränken die Generierung auf wahrscheinlichere Token.",
-            "stop": "Eine Stoppsequenz pro Zeile. Die Generierung stoppt, wenn eine Sequenz erstellt wird.",
-            "seed": "Deterministischer Best-Effort-Sampling-Seed für wiederholbare Antworten.",
-            "service_tier": "Optionale Groq-Verarbeitungsebene für die Anfrage.",
-            "stream": "Streamt Assist-Antworten in das Home Assistant-Chatprotokoll, sofern unterstützt.",
-            "reasoning_effort": "Reasoning-Budget nur für unterstützte Reasoning-Modelle.",
-            "reasoning_format": "Wie unterstützte Argumentationsmodelle Argumentationsinhalte offenlegen.",
-            "include_reasoning": "Fordert Begründungsinhalte zu unterstützten Modellen an, wenn kein Begründungsformat festgelegt ist.",
-            "prompt_caching": "Speichert passende Home Assistant-Dienstantworten lokal für unterstützte Modelle.",
-            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
-            "structured_outputs": "Fordert JSON an, das dem konfigurierten Schema folgt, wenn dieser Dienst für die Datengenerierung verwendet wird.",
-            "schema_name": "Eine kurze Kennung, die mit dem Schema an Groq gesendet wird.",
-            "schema": "JSON Schema-Objekt gesendet als response_format.json_schema.schema.",
-            "strict": "Verwendet die eingeschränkte Groq-Dekodierung, wenn das ausgewählte Modell streng strukturierte Ausgaben unterstützt.",
-            "request_body_options": "JSON-Objekt in den Text der Chat-Abschlussanforderung eingefügt. Dies ist die erweiterte Passthrough-Funktion für jede Groq-Chat-Create-Body-Option, die nicht als eigenes Feld angezeigt wird, einschließlich citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
-          }
-        }
-      }
-    },
-    "speech_to_text": {
-      "entry_type": "Speech-to-Text-Dienst",
-      "initiate_flow": {
-        "user": "Speech-to-Text hinzufügen",
-        "reconfigure": "Speech-to-Text neu konfigurieren"
-      },
-      "abort": {
-        "reconfigure_successful": "Speech-to-Text-Dienst erfolgreich aktualisiert."
-      },
-      "step": {
         "speech_to_text": {
-          "title": "Speech-to-Text",
-          "data": {
-            "name": "Name",
-            "model": "Modell",
-            "language": "Sprache",
-            "protect_free_tier": "Free-Tier-Schutz"
-          },
-          "data_description": {
-            "name": "Ein benutzerfreundlicher Name für diese Speech-to-Text-Dienstinstanz.",
-            "model": "Das Groq Whisper-Modell, das zum Transkribieren von Audio verwendet wird.",
-            "language": "Sprachhinweis zur Transkription an Groq gesendet. Standardmäßig wird die in Home Assistant konfigurierte Sprache verwendet, sofern verfügbar.",
-            "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs- oder Token-Limit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit von Groq, bevor weitere Anforderungen gesendet werden."
-          }
-        }
-      }
-    },
-    "text_to_speech": {
-      "entry_type": "Text-to-Speech-Dienst",
-      "initiate_flow": {
-        "user": "Text-to-Speech hinzufügen",
-        "reconfigure": "Text-to-Speech neu konfigurieren"
-      },
-      "abort": {
-        "reconfigure_successful": "Text-to-Speech-Dienst erfolgreich aktualisiert."
-      },
-      "step": {
+            "entry_type": "Speech-to-Text-Dienst",
+            "initiate_flow": {
+                "user": "Speech-to-Text hinzufügen",
+                "reconfigure": "Speech-to-Text neu konfigurieren"
+            },
+            "abort": {
+                "reconfigure_successful": "Speech-to-Text-Dienst erfolgreich aktualisiert."
+            },
+            "step": {
+                "speech_to_text": {
+                    "title": "Speech-to-Text",
+                    "data": {
+                        "name": "Name",
+                        "model": "Modell",
+                        "language": "Sprache",
+                        "protect_free_tier": "Free-Tier-Schutz"
+                    },
+                    "data_description": {
+                        "name": "Ein benutzerfreundlicher Name für diese Speech-to-Text-Dienstinstanz.",
+                        "model": "Das Groq Whisper-Modell, das zum Transkribieren von Audio verwendet wird.",
+                        "language": "Sprachhinweis zur Transkription an Groq gesendet. Standardmäßig wird die in Home Assistant konfigurierte Sprache verwendet, sofern verfügbar.",
+                        "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs- oder Token-Limit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit von Groq, bevor weitere Anforderungen gesendet werden."
+                    }
+                }
+            }
+        },
         "text_to_speech": {
-          "title": "Text-to-Speech",
-          "data": {
-            "name": "Name",
-            "model": "Modell",
-            "voice": "Stimme",
-            "vocal_directions": "Standard-Gesangsrichtungen",
-            "normalize_audio": "Aktivieren Sie die Lautstärke für generiertes Audio (verbraucht mehr CPU)",
-            "response_format": "Playback format",
-            "protect_free_tier": "Free-Tier-Schutz"
-          },
-          "data_description": {
-            "name": "Ein benutzerfreundlicher Name für diese Text-to-Speech-Dienstinstanz.",
-            "model": "Das Groq-Sprachmodell, das zur Audioerzeugung verwendet wird.",
-            "voice": "Die vom ausgewählten Sprachmodell verwendete Sprachpersönlichkeit. Beim Ändern des Modells werden Stimmen gelöscht, die für das neue Modell nicht verfügbar sind.",
-            "vocal_directions": "Optionaler Übermittlungsstil, der der Rede vorangestellt wird, z. B. fröhlich oder flüstern. Sie können eine Voreinstellung auswählen oder Ihre eigene eingeben.",
-            "normalize_audio": "Normalizes generated audio with ffmpeg for more consistent loudness on small speakers. ffmpeg is also required when playback format is MP3 or FLAC.",
-            "response_format": "Audio format served by Home Assistant after Groq generates WAV audio. WAV is the default; MP3 is the safest choice for most speakers, and FLAC is available for lossless playback on supported speakers.",
-            "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs-, Token- oder bekanntes Text-to-Speech-Zeichenlimit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit, bevor weitere Anforderungen gesendet werden."
-          }
-        }
-      }
-    },
-    "image_recognition": {
-      "entry_type": "Bilderkennungsdienst",
-      "initiate_flow": {
-        "user": "Bilderkennung hinzufügen",
-        "reconfigure": "Bilderkennung neu konfigurieren"
-      },
-      "abort": {
-        "reconfigure_successful": "Bilderkennungsdienst erfolgreich aktualisiert."
-      },
-      "step": {
+            "entry_type": "Text-to-Speech-Dienst",
+            "initiate_flow": {
+                "user": "Text-to-Speech hinzufügen",
+                "reconfigure": "Text-to-Speech neu konfigurieren"
+            },
+            "abort": {
+                "reconfigure_successful": "Text-to-Speech-Dienst erfolgreich aktualisiert."
+            },
+            "step": {
+                "text_to_speech": {
+                    "title": "Text-to-Speech",
+                    "data": {
+                        "name": "Name",
+                        "model": "Modell",
+                        "voice": "Stimme",
+                        "vocal_directions": "Standard-Gesangsrichtungen",
+                        "normalize_audio": "Aktivieren Sie die Lautstärke für generiertes Audio (verbraucht mehr CPU)",
+                        "enable_long_tts": "Lange TTS-Ankündigungen aktivieren (verbraucht mehr CPU)",
+                        "protect_free_tier": "Free-Tier-Schutz",
+                        "response_format": "Playback format"
+                    },
+                    "data_description": {
+                        "name": "Ein benutzerfreundlicher Name für diese Text-to-Speech-Dienstinstanz.",
+                        "model": "Das Groq-Sprachmodell, das zur Audioerzeugung verwendet wird.",
+                        "voice": "Die vom ausgewählten Sprachmodell verwendete Sprachpersönlichkeit. Beim Ändern des Modells werden Stimmen gelöscht, die für das neue Modell nicht verfügbar sind.",
+                        "vocal_directions": "Optionaler Übermittlungsstil, der der Rede vorangestellt wird, z. B. fröhlich oder flüstern. Sie können eine Voreinstellung auswählen oder Ihre eigene eingeben.",
+                        "normalize_audio": "Normalizes generated audio with ffmpeg for more consistent loudness on small speakers. ffmpeg is also required when playback format is MP3 or FLAC.",
+                        "enable_long_tts": "Teilt längere Ankündigungen in mehrere Groq-Anfragen auf und fügt sie mit ffmpeg zusammen. Dies kann mehr CPU und mehr Groq-Anfragekontingent verbrauchen. Erfordert ffmpeg; deaktiviert, wenn ffmpeg nicht installiert ist.",
+                        "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs-, Token- oder bekanntes Text-to-Speech-Zeichenlimit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit, bevor weitere Anforderungen gesendet werden.",
+                        "response_format": "Audio format served by Home Assistant after Groq generates WAV audio. WAV is the default; MP3 is the safest choice for most speakers, and FLAC is available for lossless playback on supported speakers."
+                    }
+                }
+            }
+        },
         "image_recognition": {
-          "title": "Bilderkennung",
-          "data": {
-            "name": "Name",
-            "model": "Modell",
-            "system_prompt": "Systemaufforderung",
-            "protect_free_tier": "Free-Tier-Schutz"
-          },
-          "data_description": {
-            "name": "Ein benutzerfreundlicher Name für diese Bilderkennungsdienstinstanz.",
-            "model": "Das Vision-Modell Groq, das zur Inspektion von Bildern verwendet wird.",
-            "system_prompt": "Optionale Anweisungen zur Beantwortung von Bildfragen.",
-            "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs- oder Token-Limit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit von Groq, bevor weitere Anforderungen gesendet werden."
-          }
+            "entry_type": "Bilderkennungsdienst",
+            "initiate_flow": {
+                "user": "Bilderkennung hinzufügen",
+                "reconfigure": "Bilderkennung neu konfigurieren"
+            },
+            "abort": {
+                "reconfigure_successful": "Bilderkennungsdienst erfolgreich aktualisiert."
+            },
+            "step": {
+                "image_recognition": {
+                    "title": "Bilderkennung",
+                    "data": {
+                        "name": "Name",
+                        "model": "Modell",
+                        "system_prompt": "Systemaufforderung",
+                        "protect_free_tier": "Free-Tier-Schutz"
+                    },
+                    "data_description": {
+                        "name": "Ein benutzerfreundlicher Name für diese Bilderkennungsdienstinstanz.",
+                        "model": "Das Vision-Modell Groq, das zur Inspektion von Bildern verwendet wird.",
+                        "system_prompt": "Optionale Anweisungen zur Beantwortung von Bildfragen.",
+                        "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs- oder Token-Limit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit von Groq, bevor weitere Anforderungen gesendet werden."
+                    }
+                }
+            }
         }
-      }
+    },
+    "entity": {
+        "ai_task": {
+            "data_generation_tasks": {
+                "name": "Datengenerierungsaufgaben"
+            }
+        },
+        "conversation": {
+            "assist": {
+                "name": "Assist"
+            }
+        },
+        "stt": {
+            "speech_to_text": {
+                "name": "Speech-to-Text"
+            }
+        },
+        "tts": {
+            "text_to_speech": {
+                "name": "Text-to-Speech"
+            }
+        }
+    },
+    "issues": {
+        "ffmpeg_missing": {
+            "title": "ffmpeg is required for Groq audio processing",
+            "description": "The Groq Text-to-Speech service {service_name} is configured to process generated audio with ffmpeg, but Home Assistant could not run ffmpeg for the requested audio processing. Install ffmpeg on the Home Assistant host, choose WAV playback when conversion is enabled, or turn off audio normalization and Long TTS for this Groq Text-to-Speech service."
+        },
+        "model_access": {
+            "title": "Modell Groq ist nicht verfügbar",
+            "description": "Groq hat gemeldet, dass das Modell {model} für dieses Konto nicht verfügbar ist. Überprüfen Sie den Modellnamen in der Groq-Konsole, bestätigen Sie, dass das Modell für das Konto aktiviert ist, oder wählen Sie in dieser Integration ein anderes Groq-Modell aus."
+        },
+        "model_configuration": {
+            "title": "Groq-Dienstmodellkonfiguration ist ungültig",
+            "description": "Der Groq-Dienst {service_name} ist für die Verwendung des Modells {model} konfiguriert, es ist jedoch nicht bekannt, dass dieses Modell {feature} unterstützt. Wählen Sie ein Modell aus, das diesen Servicetyp unterstützt."
+        }
+    },
+    "exceptions": {
+        "multiple_services_match": {
+            "message": "Mehrere Groq-Dienste stimmen mit service_id: {service_id} überein"
+        },
+        "config_entry_not_found": {
+            "message": "Groq-Konfigurationseintrag nicht gefunden: {entry_id}"
+        },
+        "no_loaded_config_entry": {
+            "message": "Kein geladener Groq-Konfigurationseintrag gefunden"
+        },
+        "multiple_config_entries": {
+            "message": "Mehrere Groq-Konfigurationseinträge werden geladen; Stellen Sie config_entry_id oder service_id bereit"
+        },
+        "service_not_found": {
+            "message": "Groq {service_type}-Dienst nicht gefunden: {service_id}"
+        },
+        "multiple_services_configured": {
+            "message": "Mehrere Groq {service_type}-Dienste sind konfiguriert; bieten service_id"
+        },
+        "unsupported_model": {
+            "message": "Groq-Modell {model} unterstützt bekanntermaßen {feature}"
+        },
+        "completion_token_limit": {
+            "message": "Groq-Modell {model} unterstützt höchstens {limit}-Abschlusstoken"
+        },
+        "select_one_camera": {
+            "message": "Wählen Sie nur eine Kameraeinheit aus"
+        },
+        "camera_capture_failed": {
+            "message": "Das Bild von der Kameraeinheit {entity_id} konnte nicht erfasst werden"
+        },
+        "local_image_path_not_allowed": {
+            "message": "Der lokale Bildpfad befindet sich nicht in Home Assistants allowlist_external_dirs"
+        },
+        "local_image_not_found": {
+            "message": "Lokale Bilddatei nicht gefunden: {path}"
+        },
+        "local_file_not_image": {
+            "message": "Lokale Datei ist kein Bild: {path}"
+        },
+        "image_media_unresolvable": {
+            "message": "Bilddatei konnte nicht aufgelöst werden: {path}"
+        },
+        "selected_media_not_image": {
+            "message": "Ausgewähltes Medium ist kein Bild: {path}"
+        },
+        "image_source_required": {
+            "message": "Wählen Sie eine Kameraeinheit, eine Bilddatei, einen lokalen Bildpfad oder ein Bild URL"
+        },
+        "invalid_image_url": {
+            "message": "Bild URL muss ein http-, https- oder Bilddaten-URL sein"
+        },
+        "image_too_large": {
+            "message": "Ausgewähltes Bild ist zu groß; Die maximale Größe beträgt {limit_mb} MB"
+        },
+        "local_audio_path_not_allowed": {
+            "message": "Der lokale Audiopfad befindet sich nicht im allowlist_external_dirs von Home Assistant"
+        },
+        "local_audio_not_found": {
+            "message": "Lokale Audiodatei nicht gefunden: {path}"
+        },
+        "local_file_not_audio": {
+            "message": "Lokale Datei ist kein Audio: {path}"
+        },
+        "audio_media_unresolvable": {
+            "message": "Audiodatei konnte nicht aufgelöst werden: {path}"
+        },
+        "audio_media_local_required": {
+            "message": "Ausgewähltes Audio muss in eine lokale Datei aufgelöst werden"
+        },
+        "selected_media_not_audio": {
+            "message": "Ausgewähltes Medium ist kein Audio: {path}"
+        },
+        "audio_source_required": {
+            "message": "Wählen Sie eine Audiodatei oder einen lokalen Audiopfad aus"
+        },
+        "audio_too_large": {
+            "message": "Ausgewähltes Audio ist zu groß; Die maximale Größe beträgt {limit_mb} MB"
+        },
+        "request_invalid": {
+            "message": "{message}"
+        }
     }
-  },
-  "entity": {
-    "ai_task": {
-      "data_generation_tasks": {
-        "name": "Datengenerierungsaufgaben"
-      }
-    },
-    "conversation": {
-      "assist": {
-        "name": "Assist"
-      }
-    },
-    "stt": {
-      "speech_to_text": {
-        "name": "Speech-to-Text"
-      }
-    },
-    "tts": {
-      "text_to_speech": {
-        "name": "Text-to-Speech"
-      }
-    }
-  },
-  "issues": {
-    "ffmpeg_missing": {
-      "title": "ffmpeg is required for Groq audio processing",
-      "description": "The Groq Text-to-Speech service {service_name} is configured to process generated audio, but Home Assistant could not run ffmpeg for the requested audio processing. Install ffmpeg on the Home Assistant host, choose WAV playback when conversion is enabled, or turn off audio normalization for this Groq Text-to-Speech service."
-    },
-    "model_access": {
-      "title": "Modell Groq ist nicht verfügbar",
-      "description": "Groq hat gemeldet, dass das Modell {model} für dieses Konto nicht verfügbar ist. Überprüfen Sie den Modellnamen in der Groq-Konsole, bestätigen Sie, dass das Modell für das Konto aktiviert ist, oder wählen Sie in dieser Integration ein anderes Groq-Modell aus."
-    },
-    "model_configuration": {
-      "title": "Groq-Dienstmodellkonfiguration ist ungültig",
-      "description": "Der Groq-Dienst {service_name} ist für die Verwendung des Modells {model} konfiguriert, es ist jedoch nicht bekannt, dass dieses Modell {feature} unterstützt. Wählen Sie ein Modell aus, das diesen Servicetyp unterstützt."
-    }
-  },
-  "exceptions": {
-    "multiple_services_match": {
-      "message": "Mehrere Groq-Dienste stimmen mit service_id: {service_id} überein"
-    },
-    "config_entry_not_found": {
-      "message": "Groq-Konfigurationseintrag nicht gefunden: {entry_id}"
-    },
-    "no_loaded_config_entry": {
-      "message": "Kein geladener Groq-Konfigurationseintrag gefunden"
-    },
-    "multiple_config_entries": {
-      "message": "Mehrere Groq-Konfigurationseinträge werden geladen; Stellen Sie config_entry_id oder service_id bereit"
-    },
-    "service_not_found": {
-      "message": "Groq {service_type}-Dienst nicht gefunden: {service_id}"
-    },
-    "multiple_services_configured": {
-      "message": "Mehrere Groq {service_type}-Dienste sind konfiguriert; bieten service_id"
-    },
-    "unsupported_model": {
-      "message": "Groq-Modell {model} unterstützt bekanntermaßen {feature}"
-    },
-    "completion_token_limit": {
-      "message": "Groq-Modell {model} unterstützt höchstens {limit}-Abschlusstoken"
-    },
-    "select_one_camera": {
-      "message": "Wählen Sie nur eine Kameraeinheit aus"
-    },
-    "camera_capture_failed": {
-      "message": "Das Bild von der Kameraeinheit {entity_id} konnte nicht erfasst werden"
-    },
-    "local_image_path_not_allowed": {
-      "message": "Der lokale Bildpfad befindet sich nicht in Home Assistants allowlist_external_dirs"
-    },
-    "local_image_not_found": {
-      "message": "Lokale Bilddatei nicht gefunden: {path}"
-    },
-    "local_file_not_image": {
-      "message": "Lokale Datei ist kein Bild: {path}"
-    },
-    "image_media_unresolvable": {
-      "message": "Bilddatei konnte nicht aufgelöst werden: {path}"
-    },
-    "selected_media_not_image": {
-      "message": "Ausgewähltes Medium ist kein Bild: {path}"
-    },
-    "image_source_required": {
-      "message": "Wählen Sie eine Kameraeinheit, eine Bilddatei, einen lokalen Bildpfad oder ein Bild URL"
-    },
-    "invalid_image_url": {
-      "message": "Bild URL muss ein http-, https- oder Bilddaten-URL sein"
-    },
-    "image_too_large": {
-      "message": "Ausgewähltes Bild ist zu groß; Die maximale Größe beträgt {limit_mb} MB"
-    },
-    "local_audio_path_not_allowed": {
-      "message": "Der lokale Audiopfad befindet sich nicht im allowlist_external_dirs von Home Assistant"
-    },
-    "local_audio_not_found": {
-      "message": "Lokale Audiodatei nicht gefunden: {path}"
-    },
-    "local_file_not_audio": {
-      "message": "Lokale Datei ist kein Audio: {path}"
-    },
-    "audio_media_unresolvable": {
-      "message": "Audiodatei konnte nicht aufgelöst werden: {path}"
-    },
-    "audio_media_local_required": {
-      "message": "Ausgewähltes Audio muss in eine lokale Datei aufgelöst werden"
-    },
-    "selected_media_not_audio": {
-      "message": "Ausgewähltes Medium ist kein Audio: {path}"
-    },
-    "audio_source_required": {
-      "message": "Wählen Sie eine Audiodatei oder einen lokalen Audiopfad aus"
-    },
-    "audio_too_large": {
-      "message": "Ausgewähltes Audio ist zu groß; Die maximale Größe beträgt {limit_mb} MB"
-    },
-    "request_invalid": {
-      "message": "{message}"
-    }
-  }
 }

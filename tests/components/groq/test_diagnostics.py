@@ -24,6 +24,7 @@ class DummyEntry:
         "enabled_features": ["text_to_speech", "image_recognition"],
         "voice": "troy",
         "normalize_audio": True,
+        "enable_long_tts": True,
         "cache_size": 64,
         "protect_free_tier": False,
     }
@@ -55,6 +56,7 @@ async def test_config_entry_diagnostics_redacts_api_keys() -> None:
                 "response_format": "wav",
                 "vocal_directions_configured": True,
                 "normalize_audio": True,
+                "enable_long_tts": True,
                 "cache_size": 64,
             }
         },

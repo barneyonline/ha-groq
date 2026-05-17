@@ -7,6 +7,7 @@ from typing import Any
 import aiohttp
 import voluptuous as vol
 import logging
+import shutil
 import uuid
 
 from homeassistant import data_entry_flow
@@ -25,9 +26,11 @@ from .api import GroqApiClient
 from .const import (
     CONF_ADVANCED_OPTIONS,
     CONF_API_KEY,
+    CONF_ENABLE_LONG_TTS,
     CONF_ENABLED_FEATURES,
     CONF_MODEL,
     CONF_NAME,
+    CONF_NORMALIZE_AUDIO,
     CONF_RESPONSE_FORMAT,
     CONF_SERVICE_TYPE,
     CONF_VOICE,
@@ -74,6 +77,13 @@ from .errors import GroqApiError, GroqResponseError
 
 _LOGGER = logging.getLogger(__name__)
 API_KEY_VALIDATION_TIMEOUT = aiohttp.ClientTimeout(total=10)
+
+
+async def async_ffmpeg_available(hass) -> bool:
+    """Return whether ffmpeg can be found without blocking the event loop."""
+    if hasattr(hass, "async_add_executor_job"):
+        return bool(await hass.async_add_executor_job(shutil.which, "ffmpeg"))
+    return bool(shutil.which("ffmpeg"))
 
 
 def generate_entry_id() -> str:
@@ -776,6 +786,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
 
     async def async_step_text_to_speech(self, user_input: dict[str, Any] | None = None):
         """Configure a text-to-speech service."""
+        ffmpeg_available = await async_ffmpeg_available(self.hass)
         model_options, _model_registry = await self._model_options(
             GroqFeature.TEXT_TO_SPEECH,
             MODELS,
@@ -792,6 +803,30 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
             user_input = clean_service_input(user_input)
             selected_model = user_input.get(CONF_MODEL) or baseline_model
             voice_options = voice_options_for_model(selected_model)
+            ffmpeg_errors: dict[str, str] = {}
+            if not ffmpeg_available and user_input.get(CONF_NORMALIZE_AUDIO):
+                ffmpeg_errors[CONF_NORMALIZE_AUDIO] = "ffmpeg_required"
+            if not ffmpeg_available and user_input.get(CONF_ENABLE_LONG_TTS):
+                ffmpeg_errors[CONF_ENABLE_LONG_TTS] = "ffmpeg_required"
+            if not ffmpeg_available and user_input.get(CONF_RESPONSE_FORMAT) not in (
+                None,
+                "wav",
+            ):
+                ffmpeg_errors[CONF_RESPONSE_FORMAT] = "ffmpeg_required"
+            if ffmpeg_errors:
+                user_input[CONF_NORMALIZE_AUDIO] = False
+                user_input[CONF_ENABLE_LONG_TTS] = False
+                user_input[CONF_RESPONSE_FORMAT] = "wav"
+                return self.async_show_form(
+                    step_id=FEATURE_TEXT_TO_SPEECH,
+                    data_schema=text_to_speech_schema(
+                        user_input,
+                        model_options,
+                        voice_options,
+                        ffmpeg_available=False,
+                    ),
+                    errors=ffmpeg_errors,
+                )
             if selected_model != baseline_model and user_input.get(CONF_VOICE):
                 self._tts_model_context = selected_model
                 user_input.pop(CONF_VOICE, None)
@@ -802,6 +837,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                         model_options,
                         voice_options,
                         clear_voice=True,
+                        ffmpeg_available=ffmpeg_available,
                     ),
                     errors={CONF_VOICE: "select_voice_for_model"},
                 )
@@ -815,6 +851,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                         model_options,
                         voice_options,
                         clear_voice=True,
+                        ffmpeg_available=ffmpeg_available,
                     ),
                     errors={CONF_VOICE: "invalid_voice"},
                 )
@@ -826,6 +863,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                         user_input,
                         model_options,
                         voice_options,
+                        ffmpeg_available=ffmpeg_available,
                     ),
                     errors={CONF_RESPONSE_FORMAT: "invalid_response_format"},
                 )
@@ -838,6 +876,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                 existing_data,
                 model_options,
                 voice_options,
+                ffmpeg_available=ffmpeg_available,
             ),
         )
 

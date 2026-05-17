@@ -14,6 +14,7 @@ from .const import (
     CONF_API_KEY,
     COMPOUND_BUILTIN_TOOL_OPTIONS,
     CONF_COMPOUND_BUILTIN_TOOLS,
+    CONF_ENABLE_LONG_TTS,
     CONF_ENABLED_FEATURES,
     CONF_INCLUDE_REASONING,
     CONF_LANGUAGE,
@@ -386,6 +387,7 @@ def text_to_speech_schema(
     voice_options: list[str] | None = None,
     *,
     clear_voice: bool = False,
+    ffmpeg_available: bool = True,
 ) -> vol.Schema:
     """Return the text-to-speech service schema."""
     values = user_input or {}
@@ -393,6 +395,10 @@ def text_to_speech_schema(
     protect_field, protect_selector = _protect_free_tier_field(values)
     selected_model = _model_default(values, CONF_MODEL, DEFAULT_MODEL, models)
     voices = voice_options or voice_options_for_model(selected_model)
+    ffmpeg_option_selector = selector({"boolean": {"read_only": not ffmpeg_available}})
+    response_formats = (
+        RESPONSE_FORMATS if ffmpeg_available else [DEFAULT_RESPONSE_FORMAT]
+    )
     voice_field = (
         vol.Required(CONF_VOICE)
         if clear_voice
@@ -414,8 +420,12 @@ def text_to_speech_schema(
             voice_field: selector({"select": {"options": voices}}),
             vol.Optional(
                 CONF_RESPONSE_FORMAT,
-                default=_response_format_default(values),
-            ): selector({"select": {"options": RESPONSE_FORMATS}}),
+                default=(
+                    _response_format_default(values)
+                    if ffmpeg_available
+                    else DEFAULT_RESPONSE_FORMAT
+                ),
+            ): selector({"select": {"options": response_formats}}),
             vol.Optional(
                 CONF_VOCAL_DIRECTIONS,
                 default=values.get(CONF_VOCAL_DIRECTIONS, ""),
@@ -430,8 +440,20 @@ def text_to_speech_schema(
             ),
             vol.Optional(
                 CONF_NORMALIZE_AUDIO,
-                default=values.get(CONF_NORMALIZE_AUDIO, False),
-            ): selector({"boolean": {}}),
+                default=(
+                    values.get(CONF_NORMALIZE_AUDIO, False)
+                    if ffmpeg_available
+                    else False
+                ),
+            ): ffmpeg_option_selector,
+            vol.Optional(
+                CONF_ENABLE_LONG_TTS,
+                default=(
+                    values.get(CONF_ENABLE_LONG_TTS, False)
+                    if ffmpeg_available
+                    else False
+                ),
+            ): ffmpeg_option_selector,
             protect_field: protect_selector,
         }
     )

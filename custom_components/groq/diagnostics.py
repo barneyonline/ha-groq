@@ -15,6 +15,7 @@ from homeassistant.helpers.device_registry import DeviceEntry
 from .const import (
     CONF_API_KEY,
     CONF_CACHE_SIZE,
+    CONF_ENABLE_LONG_TTS,
     CONF_INCLUDE_REASONING,
     CONF_LANGUAGE,
     CONF_MAX_TOKENS,
@@ -56,6 +57,7 @@ SERVICE_SUMMARY_KEYS = (
     CONF_VOICE,
     CONF_RESPONSE_FORMAT,
     CONF_NORMALIZE_AUDIO,
+    CONF_ENABLE_LONG_TTS,
     CONF_CACHE_SIZE,
     CONF_PROTECT_FREE_TIER,
     CONF_TEMPERATURE,
@@ -91,6 +93,7 @@ def _default_summary(entry: ConfigEntry) -> dict[str, Any]:
                 _entry_value(entry, CONF_VOCAL_DIRECTIONS, "")
             ),
             "normalize_audio": _entry_value(entry, CONF_NORMALIZE_AUDIO, False),
+            "enable_long_tts": _entry_value(entry, CONF_ENABLE_LONG_TTS, False),
             "cache_size": _entry_value(entry, CONF_CACHE_SIZE, DEFAULT_CACHE_SIZE),
         }
     }

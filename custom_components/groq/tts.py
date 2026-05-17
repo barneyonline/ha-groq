@@ -6,6 +6,10 @@ from __future__ import annotations
 from contextlib import suppress
 from typing import Any
 import logging
+from pathlib import Path
+import re
+import shutil
+import tempfile
 import time
 import asyncio
 from asyncio import CancelledError
@@ -29,6 +33,7 @@ from .const import (
     UNIQUE_ID,
     CONF_NORMALIZE_AUDIO,
     CONF_CACHE_SIZE,
+    CONF_ENABLE_LONG_TTS,
     CONF_PROTECT_FREE_TIER,
     DEFAULT_CACHE_SIZE,
     DEFAULT_PROTECT_FREE_TIER,
@@ -45,6 +50,7 @@ from .runtime import async_get_runtime
 _LOGGER = logging.getLogger(__name__)
 
 MAX_TTS_INPUT_CHARS = 200
+MAX_LONG_TTS_CHUNKS = 10
 PARALLEL_UPDATES = 1
 ORPHEUS_RESPONSE_FORMAT = "wav"
 FFMPEG_OUTPUT_ARGS = {
@@ -53,6 +59,93 @@ FFMPEG_OUTPUT_ARGS = {
     "flac": ["-ac", "1", "-ar", "24000", "-compression_level", "5", "-f", "flac"],
 }
 FFMPEG_LOUDNORM_FILTER = "loudnorm=I=-16:TP=-1:LRA=5"
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+
+
+def _split_overlong_tts_segment(segment: str, max_chars: int) -> list[str]:
+    """Split a segment that cannot fit in one Groq Orpheus TTS request."""
+    chunks: list[str] = []
+    current = ""
+    for word in segment.split():
+        if len(word) > max_chars:
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.extend(
+                word[start : start + max_chars]
+                for start in range(0, len(word), max_chars)
+            )
+            continue
+        if current and len(f"{current} {word}") > max_chars:
+            chunks.append(current)
+            current = word
+        else:
+            current = f"{current} {word}" if current else word
+    if current:
+        chunks.append(current)
+    if chunks:
+        return chunks
+    return [
+        segment[start : start + max_chars]
+        for start in range(0, len(segment), max_chars)
+    ]
+
+
+def _split_tts_text(text: str, max_chars: int) -> list[str]:
+    """Split TTS text on sentence boundaries, then words if needed."""
+    stripped_text = text.strip()
+    if not stripped_text:
+        return [""]
+    chunks: list[str] = []
+    current = ""
+    for segment in _SENTENCE_BOUNDARY.split(stripped_text):
+        segment = segment.strip()
+        if not segment:
+            continue
+        segment_chunks = (
+            [segment]
+            if len(segment) <= max_chars
+            else _split_overlong_tts_segment(segment, max_chars)
+        )
+        for segment_chunk in segment_chunks:
+            if current and len(f"{current} {segment_chunk}") <= max_chars:
+                current = f"{current} {segment_chunk}"
+                continue
+            if current:
+                chunks.append(current)
+            current = segment_chunk
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _tts_input_chunks(
+    text: str,
+    vocal_directions: str,
+    max_chars: int = MAX_TTS_INPUT_CHARS,
+) -> list[str]:
+    """Return Groq TTS request inputs, each within the Orpheus limit."""
+    prefix = vocal_directions.strip()
+    if prefix:
+        available_chars = max_chars - len(prefix) - 1
+        if available_chars <= 0:
+            raise ValueError(
+                "Vocal directions leave no room for TTS input within Groq Orpheus "
+                f"maximum length of {max_chars} characters"
+            )
+        return [f"{prefix} {chunk}" for chunk in _split_tts_text(text, available_chars)]
+    return _split_tts_text(text, max_chars)
+
+
+def _write_audio_chunks(temp_dir: str, input_chunks: list[bytes]) -> list[str]:
+    """Write audio chunks to temporary files and return their paths."""
+    temp_path = Path(temp_dir)
+    chunk_paths = []
+    for index, chunk in enumerate(input_chunks):
+        chunk_path = temp_path / f"chunk-{index}.wav"
+        chunk_path.write_bytes(chunk)
+        chunk_paths.append(str(chunk_path))
+    return chunk_paths
 
 
 def _entry_value(
@@ -276,7 +369,23 @@ class GroqTTSEntity(TextToSpeechEntity):
             )
         except ValueError:
             return True
-        return normalize_audio or output_format != ORPHEUS_RESPONSE_FORMAT
+        try:
+            enable_long_tts = _normalize_bool_option(
+                _entry_value(
+                    self._config,
+                    CONF_ENABLE_LONG_TTS,
+                    False,
+                    service_data=self._service_data,
+                ),
+                CONF_ENABLE_LONG_TTS,
+            )
+        except ValueError:
+            return True
+        return (
+            normalize_audio
+            or enable_long_tts
+            or output_format != ORPHEUS_RESPONSE_FORMAT
+        )
 
     @property
     def default_language(self) -> str:
@@ -363,7 +472,9 @@ class GroqTTSEntity(TextToSpeechEntity):
         options = options or {}
 
         try:
-            effective_input = options.get(CONF_INPUT, message)
+            effective_input = str(options.get(CONF_INPUT, message))
+            if not effective_input.strip():
+                raise ValueError("TTS input cannot be empty")
             vocal_directions = options.get(
                 CONF_VOCAL_DIRECTIONS,
                 _entry_value(
@@ -382,12 +493,8 @@ class GroqTTSEntity(TextToSpeechEntity):
                         direction_text.startswith("[") and direction_text.endswith("]")
                     ):
                         direction_text = f"[{direction_text}]"
-                    effective_input = f"{direction_text} {effective_input}"
-
-            if len(effective_input) > MAX_TTS_INPUT_CHARS:
-                raise ValueError(
-                    f"Message exceeds Groq Orpheus TTS maximum length of {MAX_TTS_INPUT_CHARS} characters"
-                )
+            else:
+                direction_text = ""
 
             effective_model = options.get(
                 CONF_MODEL,
@@ -397,17 +504,17 @@ class GroqTTSEntity(TextToSpeechEntity):
                 CONF_VOICE,
                 _entry_value(self._config, CONF_VOICE, service_data=self._service_data),
             )
-            output_format = options.get(
-                CONF_RESPONSE_FORMAT,
-                _entry_value(
-                    self._config,
+            output_format = _normalize_response_format(
+                options.get(
                     CONF_RESPONSE_FORMAT,
-                    DEFAULT_RESPONSE_FORMAT,
-                    service_data=self._service_data,
-                ),
+                    _entry_value(
+                        self._config,
+                        CONF_RESPONSE_FORMAT,
+                        DEFAULT_RESPONSE_FORMAT,
+                        service_data=self._service_data,
+                    ),
+                )
             )
-            output_format = _normalize_response_format(output_format)
-
             normalize_audio = _normalize_bool_option(
                 options.get(
                     CONF_NORMALIZE_AUDIO,
@@ -420,11 +527,17 @@ class GroqTTSEntity(TextToSpeechEntity):
                 ),
                 CONF_NORMALIZE_AUDIO,
             )
+            enable_long_tts = _normalize_bool_option(
+                _entry_value(
+                    self._config,
+                    CONF_ENABLE_LONG_TTS,
+                    False,
+                    service_data=self._service_data,
+                ),
+                CONF_ENABLE_LONG_TTS,
+            )
             _LOGGER.debug("Normalization option: %s", normalize_audio)
-            needs_ffmpeg = normalize_audio or output_format != ORPHEUS_RESPONSE_FORMAT
-            if needs_ffmpeg:
-                await self._async_check_ffmpeg(output_format, normalize_audio)
-
+            input_chunks = _tts_input_chunks(effective_input, direction_text)
             try:
                 protect_free_tier = _normalize_bool_option(
                     _entry_value(
@@ -437,33 +550,69 @@ class GroqTTSEntity(TextToSpeechEntity):
                 )
             except ValueError:
                 protect_free_tier = DEFAULT_PROTECT_FREE_TIER
-
-            _LOGGER.debug("Creating TTS API request")
-            api_start = time.monotonic()
-            audio_content = await self._client.async_synthesize_speech(
+            cache_max = int(
+                _entry_value(
+                    self._config,
+                    CONF_CACHE_SIZE,
+                    DEFAULT_CACHE_SIZE,
+                    service_data=self._service_data,
+                )
+            )
+            speech_requests = [
                 SpeechRequest(
-                    text=effective_input,
+                    text=input_chunk,
                     model=effective_model,
                     voice=effective_voice,
                     response_format=ORPHEUS_RESPONSE_FORMAT,
                     service_id=self._service_data.get(UNIQUE_ID),
                     protect_free_tier=protect_free_tier,
-                    cache_max=int(
-                        _entry_value(
-                            self._config,
-                            CONF_CACHE_SIZE,
-                            DEFAULT_CACHE_SIZE,
-                            service_data=self._service_data,
-                        )
-                    ),
+                    cache_max=cache_max,
                 )
+                for input_chunk in input_chunks
+            ]
+            if len(input_chunks) > 1 and not enable_long_tts:
+                raise ValueError(
+                    "Message exceeds Groq Orpheus TTS maximum length of "
+                    f"{MAX_TTS_INPUT_CHARS} characters. Enable Long TTS "
+                    "to synthesize and stitch longer announcements."
+                )
+            if len(input_chunks) > MAX_LONG_TTS_CHUNKS:
+                raise ValueError(
+                    "Message requires too many Groq Orpheus TTS chunks "
+                    f"({len(input_chunks)}). Shorten the announcement to "
+                    f"{MAX_LONG_TTS_CHUNKS} chunks or fewer."
+                )
+            needs_ffmpeg = (
+                normalize_audio
+                or output_format != ORPHEUS_RESPONSE_FORMAT
+                or len(input_chunks) > 1
             )
-            api_duration = (time.monotonic() - api_start) * 1000
-            _LOGGER.debug("TTS API call completed in %.2f ms", api_duration)
-
             if needs_ffmpeg:
-                # Orpheus returns WAV; ffmpeg handles optional loudness and
-                # conversion into common Home Assistant speaker formats.
+                await self._async_check_ffmpeg(output_format, normalize_audio)
+            if len(input_chunks) > 1 and callable(
+                batch_guard := getattr(
+                    self._client, "_check_local_tts_free_tier_batch", None
+                )
+            ):
+                batch_guard(speech_requests)
+
+            audio_chunks = []
+            api_start = time.monotonic()
+            for speech_request in speech_requests:
+                _LOGGER.debug("Creating TTS API request")
+                audio_chunks.append(
+                    await self._client.async_synthesize_speech(speech_request)
+                )
+            api_duration = (time.monotonic() - api_start) * 1000
+            _LOGGER.debug(
+                "TTS API call%s completed in %.2f ms",
+                "s" if len(audio_chunks) != 1 else "",
+                api_duration,
+            )
+            audio_content = audio_chunks[0]
+
+            async def convert_audio_chunk(input_bytes: bytes) -> bytes:
+                """Convert one Orpheus WAV chunk to the requested playback profile."""
                 cmd = [
                     "ffmpeg",
                     "-hide_banner",
@@ -477,11 +626,68 @@ class GroqTTSEntity(TextToSpeechEntity):
                     cmd.extend(["-af", FFMPEG_LOUDNORM_FILTER])
                 cmd.extend(FFMPEG_OUTPUT_ARGS[output_format])
                 cmd.append("pipe:1")
+                return await self._async_run_ffmpeg(
+                    cmd,
+                    input_bytes,
+                    create_repair=False,
+                )
+
+            async def stitch_audio_chunks(
+                input_chunks: list[bytes],
+            ) -> bytes:
+                """Stitch multiple Orpheus WAV chunks into the playback format."""
+                if hasattr(self.hass, "async_add_executor_job"):
+                    temp_dir = await self.hass.async_add_executor_job(tempfile.mkdtemp)
+                else:
+                    temp_dir = tempfile.mkdtemp()
                 try:
-                    audio_content = await self._async_run_ffmpeg(
+                    if hasattr(self.hass, "async_add_executor_job"):
+                        chunk_paths = await self.hass.async_add_executor_job(
+                            _write_audio_chunks, temp_dir, input_chunks
+                        )
+                    else:
+                        chunk_paths = _write_audio_chunks(temp_dir, input_chunks)
+                    input_args = [
+                        arg for chunk_path in chunk_paths for arg in ("-i", chunk_path)
+                    ]
+                    filter_inputs = "".join(
+                        f"[{index}:a]" for index in range(len(chunk_paths))
+                    )
+                    filter_complex = (
+                        f"{filter_inputs}concat=n={len(chunk_paths)}:v=0:a=1"
+                    )
+                    if normalize_audio:
+                        filter_complex = f"{filter_complex},{FFMPEG_LOUDNORM_FILTER}"
+                    cmd = [
+                        "ffmpeg",
+                        "-hide_banner",
+                        "-loglevel",
+                        "error",
+                        "-y",
+                        *input_args,
+                        "-filter_complex",
+                        filter_complex,
+                        *FFMPEG_OUTPUT_ARGS[output_format],
+                        "pipe:1",
+                    ]
+                    return await self._async_run_ffmpeg(
                         cmd,
-                        audio_content,
                         create_repair=False,
+                    )
+                finally:
+                    if hasattr(self.hass, "async_add_executor_job"):
+                        await self.hass.async_add_executor_job(
+                            shutil.rmtree, temp_dir, True
+                        )
+                    else:
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+
+            if needs_ffmpeg:
+                try:
+                    audio_content = (
+                        await convert_audio_chunk(audio_content)
+                        if len(audio_chunks) == 1
+                        else await stitch_audio_chunks(audio_chunks)
                     )
                 except HomeAssistantError:
                     self._ffmpeg_capabilities.discard((output_format, normalize_audio))
@@ -509,7 +715,7 @@ class GroqTTSEntity(TextToSpeechEntity):
             _LOGGER.error("Invalid TTS request: %s", err)
             return None, None
         except HomeAssistantError as err:
-            _LOGGER.error("TTS audio generation failed: %s", err)
+            _LOGGER.error("TTS request failed: %s", err)
             return None, None
         except Exception:
             _LOGGER.exception("Unknown error in async_get_tts_audio")

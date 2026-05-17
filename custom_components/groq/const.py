@@ -239,6 +239,7 @@ VOCAL_DIRECTION_OPTIONS = [
 ]
 
 CONF_NORMALIZE_AUDIO = "normalize_audio"
+CONF_ENABLE_LONG_TTS = "enable_long_tts"
 CONF_CACHE_SIZE = "cache_size"
 CONF_PROTECT_FREE_TIER = "protect_free_tier"
 DEFAULT_CACHE_SIZE = 256

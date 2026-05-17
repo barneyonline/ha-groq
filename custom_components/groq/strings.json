@@ -58,7 +58,8 @@
             "select_voice_for_model": "Select a voice for the selected model.",
             "required": "This field is required.",
             "unknown": "Unexpected error validating the API key. Please try again.",
-            "unknown_error": "Unexpected error \u2014 please try again.",
+            "unknown_error": "Unexpected error — please try again.",
+            "ffmpeg_required": "Install ffmpeg to enable this option.",
             "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
             "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
         }
@@ -195,8 +196,9 @@
                         "voice": "Voice",
                         "vocal_directions": "Default vocal directions",
                         "normalize_audio": "Enable loudness for generated audio (uses more CPU)",
-                        "response_format": "Playback format",
-                        "protect_free_tier": "Free-Tier Protection"
+                        "enable_long_tts": "Enable Long TTS announcements (uses more CPU)",
+                        "protect_free_tier": "Free-Tier Protection",
+                        "response_format": "Playback format"
                     },
                     "data_description": {
                         "name": "A friendly name for this Text-to-Speech service instance.",
@@ -204,8 +206,9 @@
                         "voice": "The voice persona used by the selected speech model. Changing the model clears voices that are not available for the new model.",
                         "vocal_directions": "Optional delivery style prepended to speech, such as cheerful or whisper. You can choose a preset or type your own.",
                         "normalize_audio": "Normalizes generated audio with ffmpeg for more consistent loudness on small speakers. ffmpeg is also required when playback format is MP3 or FLAC.",
-                        "response_format": "Audio format served by Home Assistant after Groq generates WAV audio. WAV is the default; MP3 is the safest choice for most speakers, and FLAC is available for lossless playback on supported speakers.",
-                        "protect_free_tier": "When Groq reports that this service has reached a request, token, or known Text-to-Speech character limit, Home Assistant pauses only this service until the reset time before sending more requests."
+                        "enable_long_tts": "Splits longer announcements into multiple Groq requests and stitches them with ffmpeg. This can use more CPU and more Groq request quota. Requires ffmpeg; disabled if ffmpeg is not installed.",
+                        "protect_free_tier": "When Groq reports that this service has reached a request, token, or known Text-to-Speech character limit, Home Assistant pauses only this service until the reset time before sending more requests.",
+                        "response_format": "Audio format served by Home Assistant after Groq generates WAV audio. WAV is the default; MP3 is the safest choice for most speakers, and FLAC is available for lossless playback on supported speakers."
                     }
                 }
             }
@@ -263,7 +266,7 @@
     "issues": {
         "ffmpeg_missing": {
             "title": "ffmpeg is required for Groq audio processing",
-            "description": "The Groq Text-to-Speech service {service_name} is configured to process generated audio, but Home Assistant could not run ffmpeg for the requested audio processing. Install ffmpeg on the Home Assistant host, choose WAV playback when conversion is enabled, or turn off audio normalization for this Groq Text-to-Speech service."
+            "description": "The Groq Text-to-Speech service {service_name} is configured to process generated audio with ffmpeg, but Home Assistant could not run ffmpeg for the requested audio processing. Install ffmpeg on the Home Assistant host, choose WAV playback when conversion is enabled, or turn off audio normalization and Long TTS for this Groq Text-to-Speech service."
         },
         "model_access": {
             "title": "Groq model is not available",
