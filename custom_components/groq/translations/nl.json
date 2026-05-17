@@ -58,6 +58,7 @@
       "required": "Dit veld is verplicht.",
       "unknown": "Onverwachte fout bij het valideren van de API-sleutel. Probeer het opnieuw.",
       "unknown_error": "Onverwachte fout — probeer het opnieuw.",
+            "ffmpeg_required": "Installeer ffmpeg om deze optie in te schakelen.",
       "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
       "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
       "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
@@ -195,6 +196,7 @@
             "voice": "Stem",
             "vocal_directions": "Standaard stemrichtingen",
             "normalize_audio": "Luidheid inschakelen voor gegenereerde audio (gebruikt meer CPU)",
+            "enable_long_tts": "Lange TTS-aankondigingen inschakelen (gebruikt meer CPU)",
             "protect_free_tier": "Gratis Tier-bescherming"
           },
           "data_description": {
@@ -202,7 +204,8 @@
             "model": "Het Groq-spraakmodel dat wordt gebruikt om audio te genereren.",
             "voice": "De stempersoon die door het geselecteerde spraakmodel wordt gebruikt. Als u het model wijzigt, worden stemmen gewist die niet beschikbaar zijn voor het nieuwe model.",
             "vocal_directions": "Optionele weergavestijl voorafgegaan aan spraak, zoals vrolijk of fluisterend. U kunt een voorinstelling kiezen of uw eigen voorinstelling typen.",
-            "normalize_audio": "Converteert uitvoer naar genormaliseerde MP3 met ffmpeg voor consistentere luidheid op kleine luidsprekers.",
+            "normalize_audio": "Converteert uitvoer naar genormaliseerde MP3 met ffmpeg voor consistentere luidheid op kleine luidsprekers. Vereist ffmpeg; uitgeschakeld als ffmpeg niet is geïnstalleerd.",
+            "enable_long_tts": "Splitst langere aankondigingen in meerdere Groq-verzoeken en voegt ze samen met ffmpeg. Dit kan meer CPU en meer Groq-verzoekquota gebruiken. Vereist ffmpeg; uitgeschakeld als ffmpeg niet is geïnstalleerd.",
             "protect_free_tier": "Wanneer Groq meldt dat deze service een aanvraag-, token- of bekende tekenlimiet voor tekst-naar-spraak heeft bereikt, pauzeert Home Assistant alleen deze service tot de resettijd voordat er meer verzoeken worden verzonden."
           }
         }
@@ -260,8 +263,8 @@
   },
   "issues": {
     "ffmpeg_missing": {
-      "title": "ffmpeg is vereist voor Groq audionormalisatie",
-      "description": "De Groq tekst-naar-spraakservice {service_name} is geconfigureerd om gegenereerde audio te normaliseren, maar Home Assistant kan ffmpeg niet starten. Installeer ffmpeg op de Home Assistant-host of schakel audionormalisatie uit voor deze Groq tekst-naar-spraak-service."
+      "title": "ffmpeg is vereist voor Groq-audioverwerking",
+      "description": "De Groq Text-to-Speech-service {service_name} is geconfigureerd om gegenereerde audio met ffmpeg te verwerken, maar Home Assistant kon ffmpeg niet starten. Installeer ffmpeg op de Home Assistant-host of schakel audionormalisatie en Long TTS uit voor deze Groq Text-to-Speech-service."
     },
     "model_access": {
       "title": "Groq-model is niet beschikbaar",

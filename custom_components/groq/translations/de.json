@@ -59,6 +59,7 @@
       "required": "Dieses Feld ist erforderlich.",
       "unknown": "Unerwarteter Fehler bei der Validierung des API-Schlüssels. Bitte versuchen Sie es erneut.",
       "unknown_error": "Unerwarteter Fehler – bitte versuchen Sie es erneut.",
+            "ffmpeg_required": "Installieren Sie ffmpeg, um diese Option zu aktivieren.",
       "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
       "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
@@ -195,6 +196,7 @@
             "voice": "Stimme",
             "vocal_directions": "Standard-Gesangsrichtungen",
             "normalize_audio": "Aktivieren Sie die Lautstärke für generiertes Audio (verbraucht mehr CPU)",
+            "enable_long_tts": "Lange TTS-Ankündigungen aktivieren (verbraucht mehr CPU)",
             "protect_free_tier": "Free-Tier-Schutz"
           },
           "data_description": {
@@ -202,7 +204,8 @@
             "model": "Das Groq-Sprachmodell, das zur Audioerzeugung verwendet wird.",
             "voice": "Die vom ausgewählten Sprachmodell verwendete Sprachpersönlichkeit. Beim Ändern des Modells werden Stimmen gelöscht, die für das neue Modell nicht verfügbar sind.",
             "vocal_directions": "Optionaler Übermittlungsstil, der der Rede vorangestellt wird, z. B. fröhlich oder flüstern. Sie können eine Voreinstellung auswählen oder Ihre eigene eingeben.",
-            "normalize_audio": "Konvertiert die Ausgabe in normalisiertes MP3 mit ffmpeg für eine gleichmäßigere Lautstärke bei kleinen Lautsprechern.",
+            "normalize_audio": "Konvertiert die Ausgabe in normalisiertes MP3 mit ffmpeg für eine gleichmäßigere Lautstärke bei kleinen Lautsprechern. Erfordert ffmpeg; deaktiviert, wenn ffmpeg nicht installiert ist.",
+            "enable_long_tts": "Teilt längere Ankündigungen in mehrere Groq-Anfragen auf und fügt sie mit ffmpeg zusammen. Dies kann mehr CPU und mehr Groq-Anfragekontingent verbrauchen. Erfordert ffmpeg; deaktiviert, wenn ffmpeg nicht installiert ist.",
             "protect_free_tier": "Wenn Groq meldet, dass dieser Dienst ein Anforderungs-, Token- oder bekanntes Text-to-Speech-Zeichenlimit erreicht hat, pausiert Home Assistant nur diesen Dienst bis zur Rücksetzzeit, bevor weitere Anforderungen gesendet werden."
           }
         }
@@ -260,8 +263,8 @@
   },
   "issues": {
     "ffmpeg_missing": {
-      "title": "ffmpeg ist für die Groq-Audionormalisierung erforderlich",
-      "description": "Der Groq Text-to-Speech-Dienst {service_name} ist so konfiguriert, dass generiertes Audio normalisiert wird, aber Home Assistant konnte ffmpeg nicht starten. Installieren Sie ffmpeg auf dem Home Assistant-Host oder deaktivieren Sie die Audionormalisierung für diesen Groq Text-to-Speech-Dienst."
+      "title": "ffmpeg ist für die Groq-Audioverarbeitung erforderlich",
+      "description": "Der Groq Text-to-Speech-Dienst {service_name} ist so konfiguriert, dass generiertes Audio mit ffmpeg verarbeitet wird, aber Home Assistant konnte ffmpeg nicht starten. Installieren Sie ffmpeg auf dem Home Assistant-Host oder deaktivieren Sie Audionormalisierung und Long TTS für diesen Groq Text-to-Speech-Dienst."
     },
     "model_access": {
       "title": "Modell Groq ist nicht verfügbar",
