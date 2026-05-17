@@ -7,6 +7,31 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Bug fixes
 - None
 
+## v1.2.0 - 2026-05-17
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- Added opt-in Compound built-in tool controls with validation for dedicated options and raw `compound_custom.tools.enabled_tools` payloads. (#10)
+- Added optional Long TTS announcements that split long Orpheus text into Groq-sized chunks, synthesize them sequentially, and stitch the result with ffmpeg. (#11)
+- Added selectable TTS playback output formats, keeping Groq Orpheus requests in WAV while allowing local ffmpeg conversion to MP3 or FLAC for speaker compatibility. (#12)
+
+### 🐛 Bug fixes
+- Handled Groq TTS request timeouts as expected network failures with clearer unavailable-state and Home Assistant error reporting. (#8)
+- Preflighted ffmpeg before spending Groq quota for converted TTS output and kept missing-ffmpeg repair issues aligned with the configured audio processing state. (#12)
+
+### 🔧 Improvements
+- Migrated TTS synthesis into the shared `GroqApiClient`, removing the standalone TTS engine and reusing the common HTTP session, rate-limit, and network-error paths. (#9)
+- Tightened dynamic TTS model capability inference so unsupported TTS-looking models are not offered in voice/model pickers. (#9)
+- Sent explicit empty Compound tool allow-lists by default and `Groq-Model-Version: latest` only when latest-only Compound tools are enabled. (#10)
+- Disabled Long TTS and audio normalization options when ffmpeg is unavailable, and validated Long TTS batches before sending partial requests. (#11)
+
+### 🔄 Other changes
+- Updated README, architecture notes, quality-scale metadata, translation strings, and TTS benchmark helpers for the new TTS and Compound tool behavior. (#9, #10, #11, #12)
+- Expanded tests for TTS timeout handling, shared API-client synthesis, Compound tools, Long TTS chunking/stitching, TTS output conversion, diagnostics, translations, and coverage paths. (#8, #9, #10, #11, #12)
+- Bumped the integration manifest version to `1.2.0`.
+
 ## v1.1.0 - 2026-05-16
 
 ### 🚧 Breaking changes
