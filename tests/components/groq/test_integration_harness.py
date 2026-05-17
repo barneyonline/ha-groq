@@ -9,19 +9,18 @@ import aiohttp
 import pytest
 from homeassistant import data_entry_flow
 from homeassistant.const import CONF_LLM_HASS_API, Platform
-from homeassistant.exceptions import HomeAssistantError
 
 import custom_components.groq as integration
-from custom_components.groq import config_flow, tts_engine, tts
+from custom_components.groq import config_flow, tts
+from custom_components.groq.api import GroqApiClient, SpeechRequest
 from custom_components.groq.const import (
-    DEFAULT_TTS_URL,
     FEATURE_IMAGE_RECOGNITION,
     FEATURE_SPEECH_TO_TEXT,
     FEATURE_TEXT_GENERATION,
     FEATURE_TEXT_TO_SPEECH,
 )
+from custom_components.groq.errors import GroqApiError
 from custom_components.groq.model_registry import model_from_api
-from custom_components.groq.tts_engine import GroqTTSEngine
 from custom_components.groq.tts import GroqTTSEntity
 
 ORPHEUS_ENGLISH_MODEL = "canopylabs/orpheus-v1-english"
@@ -54,7 +53,7 @@ class DummyCaptureSession:
     def __init__(self):
         self.calls = []
 
-    def post(self, *args, **kwargs):
+    def request(self, *args, **kwargs):
         self.calls.append({"args": args, "kwargs": kwargs})
         return DummyResponse(200, {"content-type": "audio/wav"}, b"RIFF....WAVEfmt ")
 
@@ -80,29 +79,22 @@ class DummyConfigEntry:
         self.unsub = unsub
 
 
-class DummyEngine:
-    class Response:
-        content = b"audio-bytes"
-
+class DummyClient:
     def __init__(self):
         self.calls = []
 
-    async def async_get_tts(
-        self, hass, text, voice=None, model=None, response_format=None
-    ):
+    async def async_synthesize_speech(self, request):
         self.calls.append(
             {
-                "text": text,
-                "voice": voice,
-                "model": model,
-                "response_format": response_format,
+                "text": request.text,
+                "voice": request.voice,
+                "model": request.model,
+                "response_format": request.response_format,
+                "cache_max": request.cache_max,
+                "protect_free_tier": request.protect_free_tier,
             }
         )
-        return self.Response()
-
-    @staticmethod
-    def get_supported_langs():
-        return ["ar", "en"]
+        return b"audio-bytes"
 
 
 def test_new_account_unique_id_uses_groq_prefix():
@@ -251,6 +243,7 @@ async def test_get_dynamic_options_filters_discovered_models(monkeypatch):
     async def fake_fetch_available_models(hass, api_key):
         return [
             model_from_api({"id": "llama-3.3-70b-versatile"}),
+            model_from_api({"id": "playai-tts"}),
             model_from_api({"id": "canopylabs/orpheus-custom"}),
         ]
 
@@ -263,6 +256,7 @@ async def test_get_dynamic_options_filters_discovered_models(monkeypatch):
     models, voices = await config_flow.get_dynamic_options(DummyHass(), "api-key")
 
     assert "canopylabs/orpheus-custom" in models
+    assert "playai-tts" not in models
     assert "llama-3.3-70b-versatile" not in models
     assert ORPHEUS_ENGLISH_VOICE in voices
 
@@ -270,30 +264,41 @@ async def test_get_dynamic_options_filters_discovered_models(monkeypatch):
 @pytest.mark.asyncio
 async def test_async_get_tts_uses_cache_and_evicts_lru():
     session = DummyCaptureSession()
-    engine = GroqTTSEngine(
-        "api-key",
-        ORPHEUS_ENGLISH_VOICE,
-        ORPHEUS_ENGLISH_MODEL,
-        "https://api.groq.com/openai/v1/audio/speech",
-        cache_max=1,
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+
+    first = await client.async_synthesize_speech(
+        SpeechRequest(
+            text="hello",
+            model=ORPHEUS_ENGLISH_MODEL,
+            voice=ORPHEUS_ENGLISH_VOICE,
+            cache_max=1,
+        )
+    )
+    cached = await client.async_synthesize_speech(
+        SpeechRequest(
+            text="hello",
+            model=ORPHEUS_ENGLISH_MODEL,
+            voice=ORPHEUS_ENGLISH_VOICE,
+            cache_max=1,
+        )
+    )
+    second = await client.async_synthesize_speech(
+        SpeechRequest(
+            text="new",
+            model=ORPHEUS_ENGLISH_MODEL,
+            voice=ORPHEUS_ENGLISH_VOICE,
+            cache_max=1,
+        )
     )
 
-    with patch.object(tts_engine, "async_get_clientsession", return_value=session):
-        first = await engine.async_get_tts(DummyHass(), "hello")
-        cached = await engine.async_get_tts(DummyHass(), "hello")
-        second = await engine.async_get_tts(DummyHass(), "new")
-
-    assert first.content == cached.content == second.content
+    assert first == cached == second
     assert len(session.calls) == 2
-    assert list(engine._cache) == [
-        (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", "new")
-    ]
-    assert engine.close() is None
-    assert engine.get_supported_langs() == ["ar", "en"]
+    cache = client._speech_caches[f"{ORPHEUS_ENGLISH_MODEL}:{ORPHEUS_ENGLISH_VOICE}"]
+    assert list(cache) == [(ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", "new")]
 
 
 class Dummy500JsonSession:
-    def post(self, *args, **kwargs):
+    def request(self, *args, **kwargs):
         return DummyResponse(
             500,
             {"content-type": "application/json"},
@@ -303,12 +308,11 @@ class Dummy500JsonSession:
 
 @pytest.mark.asyncio
 async def test_async_get_tts_raises_json_http_error():
-    engine = GroqTTSEngine(None, "voice", "model", "http://example.com")
-    with patch.object(
-        tts_engine, "async_get_clientsession", return_value=Dummy500JsonSession()
-    ):
-        with pytest.raises(HomeAssistantError, match="HTTP 500"):
-            await engine.async_get_tts(DummyHass(), "hello")
+    client = GroqApiClient(DummyHass(), api_key=None, session=Dummy500JsonSession())
+    with pytest.raises(GroqApiError, match="HTTP 500"):
+        await client.async_synthesize_speech(
+            SpeechRequest(text="hello", model="model", voice="voice")
+        )
 
 
 def test_tts_entity_properties_use_options_over_data():
@@ -319,7 +323,7 @@ def test_tts_entity_properties_use_options_over_data():
     }
     options = {"model": ORPHEUS_ENGLISH_MODEL, "voice": ORPHEUS_ENGLISH_VOICE}
     entity = GroqTTSEntity(
-        DummyHass(), DummyConfigEntry(data, options, unique_id=None), DummyEngine()
+        DummyHass(), DummyConfigEntry(data, options, unique_id=None), DummyClient()
     )
 
     assert entity.unique_id == "http://example.com_data-model"
@@ -359,7 +363,7 @@ async def test_tts_normalize_runs_ffmpeg_and_returns_mp3(monkeypatch):
         "voice": ORPHEUS_ENGLISH_VOICE,
         "unique_id": "uid",
     }
-    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyEngine())
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
     commands = []
 
     async def fake_exec(*args, **kwargs):  # noqa: ANN001
@@ -385,8 +389,8 @@ async def test_tts_service_options_override_groq_speech_payload():
         "voice": "data-voice",
         "unique_id": "uid",
     }
-    engine = DummyEngine()
-    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), engine)
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
 
     ext, payload = await entity.async_get_tts_audio(
         "service message",
@@ -401,18 +405,20 @@ async def test_tts_service_options_override_groq_speech_payload():
 
     assert ext == "wav"
     assert payload == b"audio-bytes"
-    assert engine.calls == [
+    assert client.calls == [
         {
             "text": "[cheerful] override input",
             "voice": ORPHEUS_ENGLISH_VOICE,
             "model": ORPHEUS_ENGLISH_MODEL,
             "response_format": "wav",
+            "cache_max": 256,
+            "protect_free_tier": True,
         }
     ]
 
 
 @pytest.mark.asyncio
-async def test_tts_async_setup_entry_builds_engine_with_options():
+async def test_tts_async_setup_entry_uses_runtime_client_with_options():
     data = {
         "api_key": "data-key",
         "url": "data-url",
@@ -436,12 +442,9 @@ async def test_tts_async_setup_entry_builds_engine_with_options():
     )
 
     assert len(added) == 1
-    engine = added[0]._engine
-    assert engine._api_key == "option-key"
-    assert engine._url == "option-url"
-    assert engine._cache_max == 12
-    assert engine._protect_free_tier is True
-    assert engine._response_format == "wav"
+    client = added[0]._client
+    assert client._api_key == "option-key"
+    assert client.base_url == "option-url"
 
 
 @pytest.mark.asyncio
@@ -492,10 +495,7 @@ async def test_tts_async_setup_entry_builds_entities_from_subentries():
     assert added[0].has_entity_name is True
     assert added[0].translation_key == "text_to_speech"
     assert added[0].device_info["name"] == "Kitchen TTS"
-    assert added[0]._engine._url == DEFAULT_TTS_URL
-    assert added[0]._engine._protect_free_tier is False
-    assert added[0]._engine._model == ORPHEUS_ENGLISH_MODEL
-    assert added[0]._engine._voice == ORPHEUS_ENGLISH_VOICE
+    assert added[0]._client.base_url == "https://api.groq.com/openai/v1"
 
 
 class DummyConfigEntries:

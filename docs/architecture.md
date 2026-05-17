@@ -71,16 +71,12 @@ custom_components/groq/
   services.py
   services.yaml
   tts.py
-  tts_engine.py
   stt.py
   conversation.py
   vision.py
   structured.py
   translations/
 ```
-
-`tts_engine.py` can either be retained as the TTS adapter during migration or
-folded into `api.py` plus `tts.py` after compatibility tests are in place.
 
 ## Runtime Model
 
@@ -402,7 +398,7 @@ Repairs should be created for:
 All feature code should raise integration-specific exceptions from `errors.py`:
 
 - `GroqAuthError`
-- `GroqRateLimitError`
+- `GroqRateLimitExceeded`
 - `GroqModelAccessError`
 - `GroqFeatureNotEnabled`
 - `GroqUnsupportedCapability`
@@ -417,7 +413,7 @@ secrets or full user payloads.
 
 1. Add shared runtime scaffolding, feature registry, and config constants while
    keeping TTS behavior unchanged.
-2. Migrate `GroqTTSEngine` HTTP logic into `GroqApiClient.async_speech`.
+2. Migrate TTS HTTP logic into `GroqApiClient.async_synthesize_speech`.
 3. Change config entry semantics from TTS-specific to account/project-specific,
    preserving existing entries with a migration that enables only TTS.
 4. Add response service registration and service tests.

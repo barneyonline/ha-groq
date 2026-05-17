@@ -26,16 +26,16 @@ def test_discover_modules_returns_integration_package_modules(tmp_path: Path) ->
     package_root = tmp_path / "custom_components" / "groq"
     package_root.mkdir(parents=True)
     (package_root / "__init__.py").write_text("", encoding="utf-8")
+    (package_root / "api.py").write_text("", encoding="utf-8")
     (package_root / "tts.py").write_text("", encoding="utf-8")
-    (package_root / "tts_engine.py").write_text("", encoding="utf-8")
     (package_root / "README.md").write_text("ignored", encoding="utf-8")
 
     modules = importtime_profile.discover_modules(tmp_path)
 
     assert modules == (
         "custom_components.groq",
+        "custom_components.groq.api",
         "custom_components.groq.tts",
-        "custom_components.groq.tts_engine",
     )
 
 

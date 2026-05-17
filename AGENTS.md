@@ -4,7 +4,7 @@
 - `custom_components/groq/`: Home Assistant integration source.
   - `config_flow.py`: UI setup/options logic.
   - `tts.py`: TTS entity and audio post‑processing (ffmpeg).
-  - `tts_engine.py`: Async client for Groq API.
+  - `api.py`: Shared async Groq API client for text, STT, vision, and TTS.
   - `const.py`: Constants and built‑ins (models, voices).
 - `tests/`: Pytest unit tests run against the Home Assistant Docker test image.
   - `tests/components/groq/`: integration tests and Home Assistant component checks.
@@ -31,7 +31,7 @@
 ## Testing Guidelines
 - Framework: `pytest` with `@pytest.mark.asyncio` for async tests.
 - Add integration tests under `tests/components/groq/` and script tests under `tests/scripts/`; files are named `test_*.py` and functions start with `test_`.
-- Cover: config validation (`config_flow.validate_user_input`), TTS audio processing options, and network/error paths in `GroqTTSEngine`.
+- Cover: config validation (`config_flow.validate_user_input`), TTS audio processing options, and network/error paths in `GroqApiClient.async_synthesize_speech`.
 - Run: `scripts/test`; keep tests isolated with mocks for network/process boundaries.
 
 ## Commit & Pull Request Guidelines

@@ -15,7 +15,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.exceptions import HomeAssistantError
 from .const import (
-    CONF_API_KEY,
     CONF_SERVICE_TYPE,
     CONF_SUBENTRY_ID,
     CONF_INPUT,
@@ -32,14 +31,14 @@ from .const import (
     DEFAULT_CACHE_SIZE,
     DEFAULT_PROTECT_FREE_TIER,
     DEFAULT_RESPONSE_FORMAT,
-    DEFAULT_TTS_URL,
     FEATURE_TEXT_TO_SPEECH,
 )
-from .tts_engine import GroqTTSEngine, async_preload_clientsession_helper
+from .api import GroqApiClient, SpeechRequest, async_preload_clientsession_helper
 from .repairs import (
     async_create_ffmpeg_missing_issue,
     async_delete_ffmpeg_missing_issue,
 )
+from .runtime import async_get_runtime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,35 +81,13 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    api_key = config_entry.data.get(CONF_API_KEY)
+    runtime = await async_get_runtime(hass, config_entry)
     service_data_list = _tts_service_data(config_entry)
     if service_data_list:
         await async_preload_clientsession_helper(hass)
     entities = []
     for service_data in service_data_list:
-        engine = GroqTTSEngine(
-            _entry_value(config_entry, CONF_API_KEY, api_key),
-            _entry_value(config_entry, CONF_VOICE, service_data=service_data),
-            _entry_value(config_entry, CONF_MODEL, service_data=service_data),
-            _entry_value(
-                config_entry,
-                CONF_URL,
-                DEFAULT_TTS_URL,
-                service_data=service_data,
-            ),
-            cache_max=_entry_value(
-                config_entry,
-                CONF_CACHE_SIZE,
-                DEFAULT_CACHE_SIZE,
-                service_data=service_data,
-            ),
-            protect_free_tier=(service_data or {}).get(
-                CONF_PROTECT_FREE_TIER,
-                DEFAULT_PROTECT_FREE_TIER,
-            ),
-            response_format=DEFAULT_RESPONSE_FORMAT,
-        )
-        entity = GroqTTSEntity(hass, config_entry, engine, service_data)
+        entity = GroqTTSEntity(hass, config_entry, runtime.client, service_data)
         if service_data:
             async_add_entities(
                 [entity],
@@ -134,11 +111,11 @@ class GroqTTSEntity(TextToSpeechEntity):
         self,
         hass: HomeAssistant,
         config: ConfigEntry,
-        engine: GroqTTSEngine,
+        client: GroqApiClient,
         service_data: dict[str, Any] | None = None,
     ) -> None:
         self.hass = hass
-        self._engine = engine
+        self._client = client
         self._config = config
         self._service_data = service_data or {}
         # Prefer the config entry unique_id; fall back to stored value for backward compatibility
@@ -195,7 +172,7 @@ class GroqTTSEntity(TextToSpeechEntity):
 
     @property
     def supported_languages(self) -> list:
-        return self._engine.get_supported_langs()
+        return ["ar", "en"]
 
     @property
     def device_info(self) -> dict:
@@ -258,16 +235,31 @@ class GroqTTSEntity(TextToSpeechEntity):
 
             _LOGGER.debug("Creating TTS API request")
             api_start = time.monotonic()
-            speech = await self._engine.async_get_tts(
-                self.hass,
-                effective_input,
-                voice=effective_voice,
-                model=effective_model,
-                response_format=effective_response_format,
+            audio_content = await self._client.async_synthesize_speech(
+                SpeechRequest(
+                    text=effective_input,
+                    model=effective_model,
+                    voice=effective_voice,
+                    response_format=effective_response_format,
+                    service_id=self._service_data.get(UNIQUE_ID),
+                    protect_free_tier=bool(
+                        self._service_data.get(
+                            CONF_PROTECT_FREE_TIER,
+                            DEFAULT_PROTECT_FREE_TIER,
+                        )
+                    ),
+                    cache_max=int(
+                        _entry_value(
+                            self._config,
+                            CONF_CACHE_SIZE,
+                            DEFAULT_CACHE_SIZE,
+                            service_data=self._service_data,
+                        )
+                    ),
+                )
             )
             api_duration = (time.monotonic() - api_start) * 1000
             _LOGGER.debug("TTS API call completed in %.2f ms", api_duration)
-            audio_content = speech.content
 
             normalize_audio = options.get(
                 CONF_NORMALIZE_AUDIO,

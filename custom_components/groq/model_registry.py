@@ -232,8 +232,10 @@ def infer_capabilities(model_id: str) -> frozenset[GroqCapability]:
     # metadata, so discovered models get conservative capability guesses by id.
     if "whisper" in model:
         capabilities.add(GroqCapability.SPEECH_TO_TEXT)
-    elif "orpheus" in model or model.endswith("-tts") or "tts" in model:
+    elif "orpheus" in model:
         capabilities.add(GroqCapability.TEXT_TO_SPEECH)
+    elif model.endswith("-tts") or "tts" in model:
+        return frozenset()
     else:
         capabilities.add(GroqCapability.TEXT_GENERATION)
 

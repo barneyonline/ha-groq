@@ -11,7 +11,7 @@ from typing import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from custom_components.groq.tts_engine import GroqTTSEngine  # noqa: E402
+from custom_components.groq.api import GroqApiClient, SpeechRequest  # noqa: E402
 
 DEFAULT_HISTORY = 50_000
 DEFAULT_ITERATIONS = 10_000
@@ -27,29 +27,32 @@ def _large_limits() -> dict[str, int]:
     }
 
 
-def build_engine(history_size: int) -> GroqTTSEngine:
-    """Return a TTS engine with populated local usage history."""
-    engine = GroqTTSEngine(
-        "benchmark-key",
-        "tara",
-        "canopylabs/orpheus-v1-english",
-        "https://api.groq.com/openai/v1/audio/speech",
+def build_client(history_size: int) -> tuple[GroqApiClient, SpeechRequest]:
+    """Return a client and TTS request with populated local usage history."""
+    client = GroqApiClient(
+        object(),  # type: ignore[arg-type]
+        api_key="benchmark-key",
     )
-    engine._free_tier_limits = lambda model=None: _large_limits()  # type: ignore[method-assign]
+    request = SpeechRequest(
+        text="benchmark text",
+        model="canopylabs/orpheus-v1-english",
+        voice="tara",
+    )
+    client._free_tier_limits = lambda model: _large_limits()  # type: ignore[method-assign]
     now = 100_000.0
     start = now - max(0, history_size - 1)
     for offset in range(history_size):
-        engine._record_local_usage(1, now=start + offset)
-    return engine
+        client._record_local_tts_usage(request, 1, now=start + offset)
+    return client, request
 
 
 def run_benchmark(history_size: int, iterations: int) -> float:
     """Return average guard-check duration in microseconds."""
-    engine = build_engine(history_size)
+    client, request = build_client(history_size)
     now = 100_000.0
     start = time.perf_counter()
     for _ in range(iterations):
-        engine._check_local_free_tier_limit("benchmark text", now=now)
+        client._check_local_tts_free_tier_limit(request, now=now)
     elapsed = time.perf_counter() - start
     return elapsed * 1_000_000 / iterations
 
