@@ -65,7 +65,7 @@ Each configured Groq service creates its own Home Assistant device and the relev
 - A recent Home Assistant version with config subentry support. Local development is tested with Home Assistant `2026.4.1`.
 - A Groq API key from [Groq Console](https://console.groq.com/).
 - Network access from Home Assistant to `https://api.groq.com`.
-- Optional: `ffmpeg` on the Home Assistant host if you enable TTS audio normalization.
+- Optional: `ffmpeg` on the Home Assistant host if you enable TTS audio normalization or choose MP3/FLAC playback output.
 
 This integration does not use Home Assistant application credentials or OAuth. Groq API keys act as account or project credentials. Use separate Groq keys when you want separate projects, billing pools, environments, or rate-limit isolation.
 
@@ -80,7 +80,7 @@ After adding an account, open the Groq integration page and add one or more serv
 
 - Text Generation: name, model, system prompt, temperature, free-tier protection, and optional advanced request options.
 - Speech-to-Text: name, model, language hint, and free-tier protection.
-- Text-to-Speech: name, model, voice, optional vocal directions, optional audio normalization, and free-tier protection.
+- Text-to-Speech: name, model, voice, output format, optional vocal directions, optional audio normalization, and free-tier protection.
 - Image Recognition: name, model, system prompt, and free-tier protection.
 
 Advanced Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, Compound built-in tool allow-lists, structured output schema, strict schema mode, and additional Groq request body options.
@@ -95,7 +95,8 @@ You can add more than one Groq account. The integration prevents adding the same
 - Groq can change model availability, limits, and request option support outside this integration.
 - Some advanced options work only on models that support them. The setup flow validates known model capabilities where possible.
 - TTS input is limited by Groq Orpheus model limits; this integration locally blocks overly long TTS requests.
-- Audio normalization needs `ffmpeg` and uses extra CPU.
+- Groq Orpheus currently generates WAV audio. The integration can use `ffmpeg` to convert playback output to MP3 for broad speaker compatibility or FLAC for lossless playback on supported speakers.
+- Audio normalization and playback conversion need `ffmpeg` and use extra CPU.
 - This integration does not discover devices. It supports Groq cloud accounts and user-created Groq service entries.
 
 ## Troubleshooting
@@ -105,7 +106,7 @@ You can add more than one Groq account. The integration prevents adding the same
 - Model missing: use `groq.list_models` to see models visible to the selected account, or choose a known compatible model.
 - Multiple accounts or services: provide `config_entry_id` or `service_id` in the action data so Home Assistant can select the intended Groq account or service.
 - Rate-limit errors: wait for Groq's reset window, lower automation frequency, choose a smaller model, or use separate Groq projects/keys where appropriate.
-- TTS normalization fails: install `ffmpeg` on the Home Assistant host or disable audio normalization.
+- TTS audio processing fails: install `ffmpeg` on the Home Assistant host, choose WAV playback output when conversion is enabled, or disable audio normalization.
 - Local image or audio file fails: make sure the path is allowed by Home Assistant `allowlist_external_dirs`, or use a media-source file.
 - Diagnostics: download diagnostics from the integration page. API keys and prompt fields are redacted.
 

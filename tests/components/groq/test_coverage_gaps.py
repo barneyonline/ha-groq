@@ -1409,12 +1409,33 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
         )["language"]
         == "fr-FR"
     )
-    assert text_to_speech_schema()(
+    tts_data = text_to_speech_schema()(
         {
             "name": "TTS",
             "model": "canopylabs/orpheus-v1-english",
             "voice": "troy",
         }
+    )
+    assert tts_data["response_format"] == "wav"
+    assert (
+        text_to_speech_schema({"response_format": " MP3 "})(
+            {
+                "name": "TTS",
+                "model": "canopylabs/orpheus-v1-english",
+                "voice": "troy",
+            }
+        )["response_format"]
+        == "mp3"
+    )
+    assert (
+        text_to_speech_schema({"response_format": "ogg"})(
+            {
+                "name": "TTS",
+                "model": "canopylabs/orpheus-v1-english",
+                "voice": "troy",
+            }
+        )["response_format"]
+        == "wav"
     )
     assert image_recognition_schema()(
         {
@@ -1706,11 +1727,13 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
             "api_key": "",
             "advanced_options": False,
             "reasoning_effort": "",
+            "response_format": " MP3 ",
             "request_body_options": {},
             "schema": {},
             "include_reasoning": False,
         }
-    ) == {"advanced_options": False}
+    ) == {"advanced_options": False, "response_format": "mp3"}
+    assert clean_service_input({"response_format": " "}) == {}
     with pytest.raises(ValueError, match="invalid"):
         asyncio.run(validate_user_input({"api_key": "key", "enabled_features": 1}))
     asyncio.run(

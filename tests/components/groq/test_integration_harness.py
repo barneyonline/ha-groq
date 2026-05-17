@@ -18,10 +18,11 @@ from custom_components.groq.const import (
     FEATURE_SPEECH_TO_TEXT,
     FEATURE_TEXT_GENERATION,
     FEATURE_TEXT_TO_SPEECH,
+    RESPONSE_FORMATS,
 )
 from custom_components.groq.errors import GroqApiError
 from custom_components.groq.model_registry import model_from_api
-from custom_components.groq.tts import GroqTTSEntity
+from custom_components.groq.tts import FFMPEG_OUTPUT_ARGS, GroqTTSEntity
 
 ORPHEUS_ENGLISH_MODEL = "canopylabs/orpheus-v1-english"
 ORPHEUS_ENGLISH_VOICE = "troy"
@@ -320,6 +321,8 @@ def test_tts_entity_properties_use_options_over_data():
         "url": "http://example.com",
         "model": "data-model",
         "voice": "data-voice",
+        "normalize_audio": "yes",
+        "response_format": " MP3 ",
     }
     options = {"model": ORPHEUS_ENGLISH_MODEL, "voice": ORPHEUS_ENGLISH_VOICE}
     entity = GroqTTSEntity(
@@ -332,17 +335,38 @@ def test_tts_entity_properties_use_options_over_data():
         "input",
         "model",
         "normalize_audio",
+        "response_format",
         "voice",
         "vocal_directions",
     ]
     assert entity.default_options["voice"] == ORPHEUS_ENGLISH_VOICE
     assert entity.default_options["model"] == ORPHEUS_ENGLISH_MODEL
+    assert entity.default_options["normalize_audio"] is True
+    assert entity.default_options["response_format"] == "mp3"
     assert entity.default_options["vocal_directions"] == ""
     assert entity.supported_languages == ["ar", "en"]
     assert entity.device_info["model"] == ORPHEUS_ENGLISH_MODEL
     assert entity.device_info["name"] == ORPHEUS_ENGLISH_MODEL
     assert entity.has_entity_name is True
     assert entity.translation_key == "text_to_speech"
+
+
+def test_tts_entity_default_options_fall_back_from_invalid_stored_values():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "normalize_audio": ["true"],
+        "response_format": ["mp3"],
+    }
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
+
+    assert entity.default_options["normalize_audio"] is False
+    assert entity.default_options["response_format"] == "wav"
+
+
+def test_tts_supported_formats_match_conversion_formats():
+    assert set(RESPONSE_FORMATS) == set(FFMPEG_OUTPUT_ARGS)
 
 
 class DummyProc:
@@ -355,8 +379,26 @@ class DummyProc:
         return b"", b"ffmpeg error"
 
 
+class CancelledProc:
+    returncode = None
+
+    def __init__(self):
+        self.killed = False
+        self.waited = False
+
+    async def communicate(self, input=None):  # noqa: A002
+        raise asyncio.CancelledError
+
+    def kill(self):
+        self.killed = True
+
+    async def wait(self):
+        self.waited = True
+        self.returncode = -9
+
+
 @pytest.mark.asyncio
-async def test_tts_normalize_runs_ffmpeg_and_returns_mp3(monkeypatch):
+async def test_tts_normalize_runs_ffmpeg_and_keeps_selected_format(monkeypatch):
     data = {
         "url": "http://example.com",
         "model": ORPHEUS_ENGLISH_MODEL,
@@ -376,9 +418,545 @@ async def test_tts_normalize_runs_ffmpeg_and_returns_mp3(monkeypatch):
         "Hello", "en", options={"normalize_audio": True}
     )
 
-    assert ext == "mp3"
+    assert ext == "wav"
     assert payload == b"processed-audio"
-    assert "-af" in commands[0]
+    assert commands[0] == ("ffmpeg", "-version")
+    assert "-f" in commands[1]
+    assert commands[1][commands[1].index("-f") + 1] == "lavfi"
+    assert "-af" in commands[2]
+    assert commands[2][commands[2].index("-f") + 1] == "wav"
+
+
+@pytest.mark.asyncio
+async def test_tts_cancelled_ffmpeg_process_is_stopped(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
+    process = CancelledProc()
+
+    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"normalize_audio": True}
+    ) == (None, None)
+    assert process.killed is True
+    assert process.waited is True
+
+
+@pytest.mark.asyncio
+async def test_tts_converts_to_selected_playback_format(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    commands = []
+
+    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+        commands.append(args)
+        return DummyProc(returncode=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    ext, payload = await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": "flac"}
+    )
+
+    assert ext == "flac"
+    assert payload == b"processed-audio"
+    assert client.calls[0]["response_format"] == "wav"
+    assert commands[0] == ("ffmpeg", "-version")
+    assert "-f" in commands[1]
+    assert commands[1][commands[1].index("-f") + 1] == "lavfi"
+    assert "-af" not in commands[2]
+    assert commands[2][commands[2].index("-f") + 1] == "flac"
+
+
+@pytest.mark.asyncio
+async def test_tts_normalizes_service_response_format_text(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+        return DummyProc(returncode=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": " MP3 "}
+    ) == ("mp3", b"processed-audio")
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_invalid_service_response_format_without_groq_call():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": ["mp3"]}
+    ) == (None, None)
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_falsey_non_string_response_format_without_groq_call():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": 0}
+    ) == (None, None)
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_unsupported_service_response_format_without_groq_call():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": "ogg"}
+    ) == (None, None)
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_normalizes_false_string_normalize_option_without_ffmpeg(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    ffmpeg_calls = []
+
+    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+        ffmpeg_calls.append(args)
+        return DummyProc(returncode=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"normalize_audio": "false"}
+    ) == ("wav", b"audio-bytes")
+    assert ffmpeg_calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_empty_normalize_option_skips_ffmpeg(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    ffmpeg_calls = []
+
+    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+        ffmpeg_calls.append(args)
+        return DummyProc(returncode=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"normalize_audio": ""}
+    ) == ("wav", b"audio-bytes")
+    assert ffmpeg_calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_normalizes_true_string_normalize_option(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+        return DummyProc(returncode=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"normalize_audio": "yes"}
+    ) == ("wav", b"processed-audio")
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_invalid_normalize_option_without_groq_call():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"normalize_audio": ["true"]}
+    ) == (None, None)
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_unknown_error_returns_none():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+
+    class BrokenClient:
+        async def async_synthesize_speech(self, request):  # noqa: ANN001
+            raise RuntimeError("boom")
+
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), BrokenClient())
+
+    assert await entity.async_get_tts_audio("Hello", "en") == (None, None)
+
+
+@pytest.mark.asyncio
+async def test_tts_raw_wav_override_does_not_clear_configured_ffmpeg_issue(
+    monkeypatch,
+):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+        "response_format": "mp3",
+    }
+    deleted_issues = []
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
+    monkeypatch.setattr(
+        tts,
+        "async_delete_ffmpeg_missing_issue",
+        lambda hass, entry, service_data: deleted_issues.append(entry.entry_id),
+    )
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": "wav"}
+    ) == ("wav", b"audio-bytes")
+    assert deleted_issues == []
+
+
+@pytest.mark.asyncio
+async def test_tts_raw_wav_override_keeps_issue_for_invalid_configured_format(
+    monkeypatch,
+):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+        "response_format": ["mp3"],
+    }
+    deleted_issues = []
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
+    monkeypatch.setattr(
+        tts,
+        "async_delete_ffmpeg_missing_issue",
+        lambda hass, entry, service_data: deleted_issues.append(entry.entry_id),
+    )
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": "wav"}
+    ) == ("wav", b"audio-bytes")
+    assert deleted_issues == []
+
+
+@pytest.mark.asyncio
+async def test_tts_raw_wav_override_keeps_issue_for_invalid_configured_normalize(
+    monkeypatch,
+):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+        "normalize_audio": ["true"],
+    }
+    deleted_issues = []
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
+    monkeypatch.setattr(
+        tts,
+        "async_delete_ffmpeg_missing_issue",
+        lambda hass, entry, service_data: deleted_issues.append(entry.entry_id),
+    )
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": "wav", "normalize_audio": False}
+    ) == ("wav", b"audio-bytes")
+    assert deleted_issues == []
+
+
+@pytest.mark.asyncio
+async def test_tts_raw_wav_default_clears_ffmpeg_issue(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    deleted_issues = []
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
+    monkeypatch.setattr(
+        tts,
+        "async_delete_ffmpeg_missing_issue",
+        lambda hass, entry, service_data: deleted_issues.append(entry.entry_id),
+    )
+
+    assert await entity.async_get_tts_audio("Hello", "en") == ("wav", b"audio-bytes")
+    assert deleted_issues == ["entry-id"]
+
+
+@pytest.mark.asyncio
+async def test_tts_ffmpeg_preflight_is_cached_for_conversion(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    commands = []
+
+    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+        commands.append(args)
+        return DummyProc(returncode=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    assert await entity.async_get_tts_audio(
+        "First", "en", options={"response_format": "mp3"}
+    ) == ("mp3", b"processed-audio")
+    assert await entity.async_get_tts_audio(
+        "Second", "en", options={"response_format": "mp3"}
+    ) == ("mp3", b"processed-audio")
+
+    assert commands.count(("ffmpeg", "-version")) == 1
+    assert len(client.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_tts_normalized_preflight_is_separate_from_conversion_cache(
+    monkeypatch,
+):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    commands = []
+
+    async def fail_loudnorm_preflight(*args, **kwargs):  # noqa: ANN001
+        commands.append(args)
+        is_loudnorm_preflight = "lavfi" in args and "-af" in args
+        return DummyProc(returncode=1 if is_loudnorm_preflight else 0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fail_loudnorm_preflight)
+
+    assert await entity.async_get_tts_audio(
+        "Plain", "en", options={"response_format": "mp3"}
+    ) == ("mp3", b"processed-audio")
+    assert await entity.async_get_tts_audio(
+        "Normalized",
+        "en",
+        options={"response_format": "mp3", "normalize_audio": True},
+    ) == (None, None)
+
+    assert commands.count(("ffmpeg", "-version")) == 2
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_tts_conversion_unsupported_output_skips_groq_call(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    ffmpeg_issues = []
+    commands = []
+
+    async def unsupported_output(*args, **kwargs):  # noqa: ANN001
+        commands.append(args)
+        return DummyProc(returncode=0 if args == ("ffmpeg", "-version") else 1)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", unsupported_output)
+    monkeypatch.setattr(
+        tts,
+        "async_create_ffmpeg_missing_issue",
+        lambda hass, entry, service_data: ffmpeg_issues.append(
+            (entry.entry_id, service_data.get("unique_id"))
+        ),
+    )
+
+    ext, payload = await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": "mp3"}
+    )
+
+    assert ext is None
+    assert payload is None
+    assert client.calls == []
+    assert commands[0] == ("ffmpeg", "-version")
+    assert "-f" in commands[1]
+    assert commands[1][commands[1].index("-f") + 1] == "lavfi"
+    assert ffmpeg_issues == [("entry-id", None)]
+
+
+@pytest.mark.asyncio
+async def test_tts_conversion_missing_ffmpeg_skips_groq_call(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    ffmpeg_issues = []
+
+    async def missing_ffmpeg(*args, **kwargs):  # noqa: ANN001
+        raise FileNotFoundError
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", missing_ffmpeg)
+    monkeypatch.setattr(
+        tts,
+        "async_create_ffmpeg_missing_issue",
+        lambda hass, entry, service_data: ffmpeg_issues.append(
+            (entry.entry_id, service_data.get("unique_id"))
+        ),
+    )
+
+    ext, payload = await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": "mp3"}
+    )
+
+    assert ext is None
+    assert payload is None
+    assert client.calls == []
+    assert ffmpeg_issues == [("entry-id", None)]
+
+
+@pytest.mark.asyncio
+async def test_tts_conversion_ffmpeg_start_error_skips_groq_call(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    ffmpeg_issues = []
+
+    async def ffmpeg_start_error(*args, **kwargs):  # noqa: ANN001
+        raise PermissionError("not executable")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", ffmpeg_start_error)
+    monkeypatch.setattr(
+        tts,
+        "async_create_ffmpeg_missing_issue",
+        lambda hass, entry, service_data: ffmpeg_issues.append(
+            (entry.entry_id, service_data.get("unique_id"))
+        ),
+    )
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": "mp3"}
+    ) == (None, None)
+    assert client.calls == []
+    assert ffmpeg_issues == [("entry-id", None)]
+
+
+@pytest.mark.asyncio
+async def test_tts_conversion_failure_invalidates_ffmpeg_cache(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    ffmpeg_issues = []
+    commands = []
+
+    async def fail_after_preflight(*args, **kwargs):  # noqa: ANN001
+        commands.append(args)
+        is_preflight = (
+            args == ("ffmpeg", "-version") or "-f" in args and "lavfi" in args
+        )
+        return DummyProc(returncode=0 if is_preflight else 1)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fail_after_preflight)
+    monkeypatch.setattr(
+        tts,
+        "async_create_ffmpeg_missing_issue",
+        lambda hass, entry, service_data: ffmpeg_issues.append(
+            (entry.entry_id, service_data.get("unique_id"))
+        ),
+    )
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"response_format": "mp3"}
+    ) == (None, None)
+
+    assert len(client.calls) == 1
+    assert ("mp3", False) not in entity._ffmpeg_capabilities
+    assert commands.count(("ffmpeg", "-version")) == 1
+    assert ffmpeg_issues == [("entry-id", None)]
 
 
 @pytest.mark.asyncio
@@ -415,6 +993,72 @@ async def test_tts_service_options_override_groq_speech_payload():
             "protect_free_tier": True,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_tts_uses_account_level_protect_free_tier_option():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(
+        DummyHass(),
+        DummyConfigEntry(data, {"protect_free_tier": False}),
+        client,
+    )
+
+    assert await entity.async_get_tts_audio("Hello", "en") == (
+        "wav",
+        b"audio-bytes",
+    )
+    assert client.calls[0]["protect_free_tier"] is False
+
+
+@pytest.mark.asyncio
+async def test_tts_normalizes_protect_free_tier_option_strings():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(
+        DummyHass(),
+        DummyConfigEntry(data, {"protect_free_tier": "false"}),
+        client,
+    )
+
+    assert await entity.async_get_tts_audio("Hello", "en") == (
+        "wav",
+        b"audio-bytes",
+    )
+    assert client.calls[0]["protect_free_tier"] is False
+
+
+@pytest.mark.asyncio
+async def test_tts_invalid_protect_free_tier_defaults_to_enabled():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(
+        DummyHass(),
+        DummyConfigEntry(data, {"protect_free_tier": ["false"]}),
+        client,
+    )
+
+    assert await entity.async_get_tts_audio("Hello", "en") == (
+        "wav",
+        b"audio-bytes",
+    )
+    assert client.calls[0]["protect_free_tier"] is True
 
 
 @pytest.mark.asyncio
@@ -774,6 +1418,7 @@ async def test_text_to_speech_subentry_flow_creates_service(monkeypatch):
             "name": "Kitchen TTS",
             "model": ORPHEUS_ENGLISH_MODEL,
             "voice": ORPHEUS_ENGLISH_VOICE,
+            "response_format": "mp3",
             "vocal_directions": "warm",
             "normalize_audio": False,
         }
@@ -786,6 +1431,7 @@ async def test_text_to_speech_subentry_flow_creates_service(monkeypatch):
             "name": "Kitchen TTS",
             "model": ORPHEUS_ENGLISH_MODEL,
             "voice": ORPHEUS_ENGLISH_VOICE,
+            "response_format": "mp3",
             "vocal_directions": "warm",
             "normalize_audio": False,
             "service_type": FEATURE_TEXT_TO_SPEECH,
@@ -833,6 +1479,38 @@ async def test_text_to_speech_subentry_flow_clears_voice_when_model_changes(
 
 
 @pytest.mark.asyncio
+async def test_text_to_speech_subentry_flow_rejects_invalid_response_format(
+    monkeypatch,
+):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
+    _patch_flow_common(monkeypatch, flow)
+
+    result = await flow.async_step_user(
+        {
+            "name": "Kitchen TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "response_format": "ogg",
+        }
+    )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == FEATURE_TEXT_TO_SPEECH
+    assert result["errors"] == {"response_format": "invalid_response_format"}
+    assert (
+        result["data_schema"](
+            {
+                "name": "Kitchen TTS",
+                "model": ORPHEUS_ENGLISH_MODEL,
+                "voice": ORPHEUS_ENGLISH_VOICE,
+            }
+        )["response_format"]
+        == "wav"
+    )
+
+
+@pytest.mark.asyncio
 async def test_text_to_speech_subentry_reconfigure_replaces_service_data(monkeypatch):
     flow = config_flow.GroqServiceSubentryFlow()
     flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
@@ -843,6 +1521,7 @@ async def test_text_to_speech_subentry_reconfigure_replaces_service_data(monkeyp
             "name": "Old TTS",
             "model": ORPHEUS_ENGLISH_MODEL,
             "voice": ORPHEUS_ENGLISH_VOICE,
+            "response_format": "flac",
             "vocal_directions": "warm",
             "normalize_audio": True,
             "service_type": FEATURE_TEXT_TO_SPEECH,
@@ -861,6 +1540,7 @@ async def test_text_to_speech_subentry_reconfigure_replaces_service_data(monkeyp
             "name": "Updated TTS",
             "model": ORPHEUS_ENGLISH_MODEL,
             "voice": ORPHEUS_ENGLISH_VOICE,
+            "response_format": "mp3",
             "vocal_directions": "",
             "normalize_audio": False,
         }
@@ -870,6 +1550,7 @@ async def test_text_to_speech_subentry_reconfigure_replaces_service_data(monkeyp
     assert result["reason"] == "reconfigure_successful"
     assert result["title"] == "Updated TTS"
     assert result["data"]["name"] == "Updated TTS"
+    assert result["data"]["response_format"] == "mp3"
     assert result["data"]["vocal_directions"] == ""
     assert result["data"]["normalize_audio"] is False
     assert result["data"]["service_type"] == FEATURE_TEXT_TO_SPEECH

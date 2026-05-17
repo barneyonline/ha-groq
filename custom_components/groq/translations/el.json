@@ -195,6 +195,7 @@
             "voice": "Φωνή",
             "vocal_directions": "Προεπιλεγμένες φωνητικές κατευθύνσεις",
             "normalize_audio": "Ενεργοποίηση έντασης ήχου για τον παραγόμενο ήχο (χρησιμοποιεί περισσότερη CPU)",
+            "response_format": "Playback format",
             "protect_free_tier": "Προστασία Ελεύθερου Επιπέδου"
           },
           "data_description": {
@@ -202,7 +203,8 @@
             "model": "Το μοντέλο ομιλίας Groq που χρησιμοποιείται για τη δημιουργία ήχου.",
             "voice": "Η φωνητική περσόνα που χρησιμοποιείται από το επιλεγμένο μοντέλο ομιλίας. Η αλλαγή του μοντέλου διαγράφει φωνές που δεν είναι διαθέσιμες για το νέο μοντέλο.",
             "vocal_directions": "Προαιρετικό στυλ παράδοσης που επισυνάπτεται στην ομιλία, όπως εύθυμο ή ψίθυρο. Μπορείτε να επιλέξετε μια προεπιλογή ή να πληκτρολογήσετε τη δική σας.",
-            "normalize_audio": "Μετατρέπει την έξοδο σε κανονικοποιημένο MP3 με ffmpeg για πιο σταθερή ένταση σε μικρά ηχεία.",
+            "normalize_audio": "Normalizes generated audio with ffmpeg for more consistent loudness on small speakers. ffmpeg is also required when playback format is MP3 or FLAC.",
+            "response_format": "Audio format served by Home Assistant after Groq generates WAV audio. WAV is the default; MP3 is the safest choice for most speakers, and FLAC is available for lossless playback on supported speakers.",
             "protect_free_tier": "Όταν το Groq αναφέρει ότι αυτή η υπηρεσία έχει φτάσει σε ένα αίτημα, διακριτικό ή γνωστό όριο χαρακτήρων κειμένου σε ομιλία, το Home Assistant διακόπτει μόνο αυτήν την υπηρεσία μέχρι τον χρόνο επαναφοράς πριν στείλει περισσότερα αιτήματα."
           }
         }
@@ -260,8 +262,8 @@
   },
   "issues": {
     "ffmpeg_missing": {
-      "title": "Το ffmpeg απαιτείται για την κανονικοποίηση ήχου Groq",
-      "description": "Η υπηρεσία Groq Text-to-Speech {service_name} έχει ρυθμιστεί για την κανονικοποίηση του παραγόμενου ήχου, αλλά το Home Assistant δεν μπόρεσε να ξεκινήσει το ffmpeg. Εγκαταστήστε το ffmpeg στον κεντρικό υπολογιστή Home Assistant ή απενεργοποιήστε την κανονικοποίηση ήχου για αυτήν την υπηρεσία Groq Text-to-Speech."
+      "title": "ffmpeg is required for Groq audio processing",
+      "description": "The Groq Text-to-Speech service {service_name} is configured to process generated audio, but Home Assistant could not run ffmpeg for the requested audio processing. Install ffmpeg on the Home Assistant host, choose WAV playback when conversion is enabled, or turn off audio normalization for this Groq Text-to-Speech service."
     },
     "model_access": {
       "title": "Το μοντέλο Groq δεν είναι διαθέσιμο",

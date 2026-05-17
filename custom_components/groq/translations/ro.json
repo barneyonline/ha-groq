@@ -195,6 +195,7 @@
             "voice": "Voce",
             "vocal_directions": "Direcții vocale implicite",
             "normalize_audio": "Activați volumul pentru sunetul generat (folosește mai mult CPU)",
+            "response_format": "Playback format",
             "protect_free_tier": "Protecție gratuită"
           },
           "data_description": {
@@ -202,7 +203,8 @@
             "model": "Modelul de vorbire Groq folosit pentru a genera sunet.",
             "voice": "Persoana vocală utilizată de modelul de vorbire selectat. Schimbarea modelului șterge vocile care nu sunt disponibile pentru noul model.",
             "vocal_directions": "Stilul opțional de difuzare antepus vorbirii, cum ar fi vesel sau șoaptă. Puteți alege o presetare sau o puteți introduce pe propria dvs.",
-            "normalize_audio": "Convertește ieșirea în MP3 normalizat cu ffmpeg pentru un volum mai consistent pe difuzoarele mici.",
+            "normalize_audio": "Normalizes generated audio with ffmpeg for more consistent loudness on small speakers. ffmpeg is also required when playback format is MP3 or FLAC.",
+            "response_format": "Audio format served by Home Assistant after Groq generates WAV audio. WAV is the default; MP3 is the safest choice for most speakers, and FLAC is available for lossless playback on supported speakers.",
             "protect_free_tier": "Când Groq raportează că acest serviciu a atins o cerere, un simbol sau o limită cunoscută de caractere Text-to-Speech, Home Assistant întrerupe numai acest serviciu până la ora de resetare înainte de a trimite mai multe solicitări."
           }
         }
@@ -260,8 +262,8 @@
   },
   "issues": {
     "ffmpeg_missing": {
-      "title": "ffmpeg este necesar pentru normalizarea audio Groq",
-      "description": "Serviciul Groq Text-to-Speech {service_name} este configurat pentru a normaliza sunetul generat, dar Home Assistant nu a putut porni ffmpeg. Instalați ffmpeg pe gazda Home Assistant sau dezactivați normalizarea audio pentru acest serviciu Groq Text-to-Speech."
+      "title": "ffmpeg is required for Groq audio processing",
+      "description": "The Groq Text-to-Speech service {service_name} is configured to process generated audio, but Home Assistant could not run ffmpeg for the requested audio processing. Install ffmpeg on the Home Assistant host, choose WAV playback when conversion is enabled, or turn off audio normalization for this Groq Text-to-Speech service."
     },
     "model_access": {
       "title": "Modelul Groq nu este disponibil",

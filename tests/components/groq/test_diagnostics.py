@@ -77,6 +77,10 @@ async def test_config_entry_diagnostics_defaults_legacy_entry_to_tts() -> None:
 
     assert diagnostics["summary"]["enabled_features"] == ["text_to_speech"]
     assert diagnostics["summary"]["text_to_speech_enabled"] is True
+    assert (
+        diagnostics["summary"]["legacy_defaults"]["text_to_speech"]["response_format"]
+        == "wav"
+    )
 
 
 @pytest.mark.asyncio

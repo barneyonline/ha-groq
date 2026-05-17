@@ -28,6 +28,7 @@ from .const import (
     CONF_ENABLED_FEATURES,
     CONF_MODEL,
     CONF_NAME,
+    CONF_RESPONSE_FORMAT,
     CONF_SERVICE_TYPE,
     CONF_VOICE,
     DEFAULT_MODEL,
@@ -38,6 +39,7 @@ from .const import (
     FEATURE_TEXT_GENERATION,
     FEATURE_TEXT_TO_SPEECH,
     MODELS,
+    RESPONSE_FORMATS,
     SETUP_FEATURES,
     STT_MODELS,
     TEXT_MODELS,
@@ -815,6 +817,17 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                         clear_voice=True,
                     ),
                     errors={CONF_VOICE: "invalid_voice"},
+                )
+            if user_input.get(CONF_RESPONSE_FORMAT) not in (None, *RESPONSE_FORMATS):
+                user_input.pop(CONF_RESPONSE_FORMAT, None)
+                return self.async_show_form(
+                    step_id=FEATURE_TEXT_TO_SPEECH,
+                    data_schema=text_to_speech_schema(
+                        user_input,
+                        model_options,
+                        voice_options,
+                    ),
+                    errors={CONF_RESPONSE_FORMAT: "invalid_response_format"},
                 )
             self._tts_model_context = None
             return self._create_service_entry(FEATURE_TEXT_TO_SPEECH, user_input)

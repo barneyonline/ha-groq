@@ -3,6 +3,7 @@ Setting up TTS entity.
 """
 
 from __future__ import annotations
+from contextlib import suppress
 from typing import Any
 import logging
 import time
@@ -20,6 +21,7 @@ from .const import (
     CONF_INPUT,
     CONF_MODEL,
     CONF_NAME,
+    CONF_RESPONSE_FORMAT,
     CONF_VOICE,
     CONF_VOCAL_DIRECTIONS,
     CONF_URL,
@@ -44,6 +46,13 @@ _LOGGER = logging.getLogger(__name__)
 
 MAX_TTS_INPUT_CHARS = 200
 PARALLEL_UPDATES = 1
+ORPHEUS_RESPONSE_FORMAT = "wav"
+FFMPEG_OUTPUT_ARGS = {
+    "wav": ["-ac", "1", "-ar", "24000", "-f", "wav"],
+    "mp3": ["-ac", "1", "-ar", "24000", "-b:a", "128k", "-f", "mp3"],
+    "flac": ["-ac", "1", "-ar", "24000", "-compression_level", "5", "-f", "flac"],
+}
+FFMPEG_LOUDNORM_FILTER = "loudnorm=I=-16:TP=-1:LRA=5"
 
 
 def _entry_value(
@@ -56,6 +65,32 @@ def _entry_value(
     if service_data and key in service_data:
         return service_data[key]
     return config_entry.options.get(key, config_entry.data.get(key, default))
+
+
+def _normalize_bool_option(value: Any, option: str) -> bool:
+    """Return a boolean option value, accepting common service-call strings."""
+    if isinstance(value, bool):
+        return value
+    if value in (None, ""):
+        return False
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    raise ValueError(f"TTS {option} option must be a boolean")
+
+
+def _normalize_response_format(value: Any) -> str:
+    """Return a normalized TTS output format."""
+    output_format = DEFAULT_RESPONSE_FORMAT if value in (None, "") else value
+    if not isinstance(output_format, str):
+        raise ValueError("TTS output format must be a string")
+    output_format = output_format.strip().lower()
+    if output_format not in FFMPEG_OUTPUT_ARGS:
+        raise ValueError(f"Unsupported TTS output format: {output_format}")
+    return output_format
 
 
 def _tts_service_data(config_entry: ConfigEntry) -> list[dict[str, Any] | None]:
@@ -135,6 +170,113 @@ class GroqTTSEntity(TextToSpeechEntity):
             _entry_value(config, CONF_MODEL, "", service_data=self._service_data),
             service_data=self._service_data,
         )
+        self._ffmpeg_capabilities: set[tuple[str, bool]] = set()
+
+    async def _async_run_ffmpeg(
+        self,
+        cmd: list[str],
+        input_bytes: bytes | None = None,
+        *,
+        create_repair: bool = True,
+    ) -> bytes:
+        """Run ffmpeg without blocking Home Assistant's event loop."""
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError:
+            _LOGGER.error(
+                "ffmpeg executable not found. Please install ffmpeg or adjust PATH."
+            )
+            if create_repair:
+                async_create_ffmpeg_missing_issue(
+                    self.hass, self._config, self._service_data
+                )
+            raise HomeAssistantError("ffmpeg not found")
+        except OSError as err:
+            _LOGGER.error("Unable to start ffmpeg: %s", err)
+            if create_repair:
+                async_create_ffmpeg_missing_issue(
+                    self.hass, self._config, self._service_data
+                )
+            raise HomeAssistantError("ffmpeg could not start") from err
+        try:
+            stdout, stderr = await process.communicate(input=input_bytes)
+        except CancelledError:
+            if process.returncode is None:
+                with suppress(ProcessLookupError):
+                    process.kill()
+                with suppress(Exception, CancelledError):
+                    await process.wait()
+            raise
+        if process.returncode != 0:
+            stderr_text = stderr.decode(errors="replace").strip()
+            _LOGGER.error("ffmpeg error: %s", stderr_text or process.returncode)
+            if create_repair:
+                async_create_ffmpeg_missing_issue(
+                    self.hass, self._config, self._service_data
+                )
+            raise HomeAssistantError("ffmpeg failed")
+        return stdout
+
+    async def _async_check_ffmpeg(
+        self,
+        output_format: str,
+        normalize_audio: bool,
+    ) -> None:
+        """Ensure ffmpeg can write the requested format before spending Groq quota."""
+        capability = (output_format, normalize_audio)
+        if capability in self._ffmpeg_capabilities:
+            return
+        await self._async_run_ffmpeg(["ffmpeg", "-version"])
+        cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=24000:cl=mono",
+            "-t",
+            "0.01",
+        ]
+        if normalize_audio:
+            cmd.extend(["-af", FFMPEG_LOUDNORM_FILTER])
+        cmd.extend(FFMPEG_OUTPUT_ARGS[output_format])
+        cmd.append("pipe:1")
+        await self._async_run_ffmpeg(cmd)
+        self._ffmpeg_capabilities.add(capability)
+
+    def _configured_audio_needs_ffmpeg(self) -> bool:
+        """Return whether the stored TTS defaults require ffmpeg."""
+        try:
+            output_format = _normalize_response_format(
+                _entry_value(
+                    self._config,
+                    CONF_RESPONSE_FORMAT,
+                    DEFAULT_RESPONSE_FORMAT,
+                    service_data=self._service_data,
+                )
+            )
+        except ValueError:
+            return True
+        try:
+            normalize_audio = _normalize_bool_option(
+                _entry_value(
+                    self._config,
+                    CONF_NORMALIZE_AUDIO,
+                    False,
+                    service_data=self._service_data,
+                ),
+                CONF_NORMALIZE_AUDIO,
+            )
+        except ValueError:
+            return True
+        return normalize_audio or output_format != ORPHEUS_RESPONSE_FORMAT
 
     @property
     def default_language(self) -> str:
@@ -147,6 +289,7 @@ class GroqTTSEntity(TextToSpeechEntity):
             CONF_INPUT,
             CONF_MODEL,
             CONF_NORMALIZE_AUDIO,
+            CONF_RESPONSE_FORMAT,
             CONF_VOICE,
             CONF_VOCAL_DIRECTIONS,
         ]
@@ -154,14 +297,37 @@ class GroqTTSEntity(TextToSpeechEntity):
     @property
     def default_options(self) -> dict:
         """Advertise default options for the TTS service."""
+        normalize_audio = _entry_value(
+            self._config,
+            CONF_NORMALIZE_AUDIO,
+            False,
+            service_data=self._service_data,
+        )
+        response_format = _entry_value(
+            self._config,
+            CONF_RESPONSE_FORMAT,
+            DEFAULT_RESPONSE_FORMAT,
+            service_data=self._service_data,
+        )
+        try:
+            normalize_audio = _normalize_bool_option(
+                normalize_audio, CONF_NORMALIZE_AUDIO
+            )
+        except ValueError:
+            normalize_audio = False
+        try:
+            response_format = _normalize_response_format(response_format)
+        except ValueError:
+            response_format = DEFAULT_RESPONSE_FORMAT
         return {
-            CONF_NORMALIZE_AUDIO: False,
+            CONF_NORMALIZE_AUDIO: normalize_audio,
             CONF_MODEL: _entry_value(
                 self._config, CONF_MODEL, service_data=self._service_data
             ),
             CONF_VOICE: _entry_value(
                 self._config, CONF_VOICE, service_data=self._service_data
             ),
+            CONF_RESPONSE_FORMAT: response_format,
             CONF_VOCAL_DIRECTIONS: _entry_value(
                 self._config,
                 CONF_VOCAL_DIRECTIONS,
@@ -231,7 +397,46 @@ class GroqTTSEntity(TextToSpeechEntity):
                 CONF_VOICE,
                 _entry_value(self._config, CONF_VOICE, service_data=self._service_data),
             )
-            effective_response_format = DEFAULT_RESPONSE_FORMAT
+            output_format = options.get(
+                CONF_RESPONSE_FORMAT,
+                _entry_value(
+                    self._config,
+                    CONF_RESPONSE_FORMAT,
+                    DEFAULT_RESPONSE_FORMAT,
+                    service_data=self._service_data,
+                ),
+            )
+            output_format = _normalize_response_format(output_format)
+
+            normalize_audio = _normalize_bool_option(
+                options.get(
+                    CONF_NORMALIZE_AUDIO,
+                    _entry_value(
+                        self._config,
+                        CONF_NORMALIZE_AUDIO,
+                        False,
+                        service_data=self._service_data,
+                    ),
+                ),
+                CONF_NORMALIZE_AUDIO,
+            )
+            _LOGGER.debug("Normalization option: %s", normalize_audio)
+            needs_ffmpeg = normalize_audio or output_format != ORPHEUS_RESPONSE_FORMAT
+            if needs_ffmpeg:
+                await self._async_check_ffmpeg(output_format, normalize_audio)
+
+            try:
+                protect_free_tier = _normalize_bool_option(
+                    _entry_value(
+                        self._config,
+                        CONF_PROTECT_FREE_TIER,
+                        DEFAULT_PROTECT_FREE_TIER,
+                        service_data=self._service_data,
+                    ),
+                    CONF_PROTECT_FREE_TIER,
+                )
+            except ValueError:
+                protect_free_tier = DEFAULT_PROTECT_FREE_TIER
 
             _LOGGER.debug("Creating TTS API request")
             api_start = time.monotonic()
@@ -240,14 +445,9 @@ class GroqTTSEntity(TextToSpeechEntity):
                     text=effective_input,
                     model=effective_model,
                     voice=effective_voice,
-                    response_format=effective_response_format,
+                    response_format=ORPHEUS_RESPONSE_FORMAT,
                     service_id=self._service_data.get(UNIQUE_ID),
-                    protect_free_tier=bool(
-                        self._service_data.get(
-                            CONF_PROTECT_FREE_TIER,
-                            DEFAULT_PROTECT_FREE_TIER,
-                        )
-                    ),
+                    protect_free_tier=protect_free_tier,
                     cache_max=int(
                         _entry_value(
                             self._config,
@@ -261,44 +461,9 @@ class GroqTTSEntity(TextToSpeechEntity):
             api_duration = (time.monotonic() - api_start) * 1000
             _LOGGER.debug("TTS API call completed in %.2f ms", api_duration)
 
-            normalize_audio = options.get(
-                CONF_NORMALIZE_AUDIO,
-                _entry_value(
-                    self._config,
-                    CONF_NORMALIZE_AUDIO,
-                    False,
-                    service_data=self._service_data,
-                ),
-            )
-            _LOGGER.debug("Normalization option: %s", normalize_audio)
-
-            async def run_ffmpeg(cmd, input_bytes):
-                """Run ffmpeg without blocking Home Assistant's event loop."""
-                try:
-                    process = await asyncio.create_subprocess_exec(
-                        *cmd,
-                        stdin=asyncio.subprocess.PIPE,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                    )
-                except FileNotFoundError:
-                    _LOGGER.error(
-                        "ffmpeg executable not found. Please install ffmpeg or adjust PATH."
-                    )
-                    async_create_ffmpeg_missing_issue(
-                        self.hass, self._config, self._service_data
-                    )
-                    raise HomeAssistantError("ffmpeg not found")
-                stdout, stderr = await process.communicate(input=input_bytes)
-                if process.returncode != 0:
-                    _LOGGER.error("ffmpeg error: %s", stderr.decode())
-                    raise HomeAssistantError("ffmpeg failed")
-                return stdout
-
-            if normalize_audio:
-                # Normalization converts Groq's returned audio into a single
-                # predictable MP3 profile for media players that handle raw WAV
-                # volume or channel layout inconsistently.
+            if needs_ffmpeg:
+                # Orpheus returns WAV; ffmpeg handles optional loudness and
+                # conversion into common Home Assistant speaker formats.
                 cmd = [
                     "ffmpeg",
                     "-hide_banner",
@@ -307,34 +472,44 @@ class GroqTTSEntity(TextToSpeechEntity):
                     "-y",
                     "-i",
                     "pipe:0",
-                    "-ac",
-                    "1",
-                    "-ar",
-                    "24000",
-                    "-b:a",
-                    "128k",
-                    "-af",
-                    "loudnorm=I=-16:TP=-1:LRA=5",
-                    "-f",
-                    "mp3",
-                    "pipe:1",
                 ]
-                audio_content = await run_ffmpeg(cmd, audio_content)
+                if normalize_audio:
+                    cmd.extend(["-af", FFMPEG_LOUDNORM_FILTER])
+                cmd.extend(FFMPEG_OUTPUT_ARGS[output_format])
+                cmd.append("pipe:1")
+                try:
+                    audio_content = await self._async_run_ffmpeg(
+                        cmd,
+                        audio_content,
+                        create_repair=False,
+                    )
+                except HomeAssistantError:
+                    self._ffmpeg_capabilities.discard((output_format, normalize_audio))
+                    async_create_ffmpeg_missing_issue(
+                        self.hass, self._config, self._service_data
+                    )
+                    raise
                 async_delete_ffmpeg_missing_issue(
                     self.hass, self._config, self._service_data
                 )
+            else:
+                if not self._configured_audio_needs_ffmpeg():
+                    async_delete_ffmpeg_missing_issue(
+                        self.hass, self._config, self._service_data
+                    )
 
             overall_duration = (time.monotonic() - overall_start) * 1000
             _LOGGER.debug("Overall TTS processing time: %.2f ms", overall_duration)
-            return (
-                "mp3" if normalize_audio else effective_response_format
-            ), audio_content
+            return output_format, audio_content
 
         except CancelledError:
             _LOGGER.debug("TTS task cancelled")
             return None, None
         except ValueError as err:
             _LOGGER.error("Invalid TTS request: %s", err)
+            return None, None
+        except HomeAssistantError as err:
+            _LOGGER.error("TTS audio generation failed: %s", err)
             return None, None
         except Exception:
             _LOGGER.exception("Unknown error in async_get_tts_audio")
