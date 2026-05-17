@@ -58,6 +58,7 @@
       "required": "Acest câmp este obligatoriu.",
       "unknown": "Eroare neașteptată la validarea cheii API. Vă rugăm să încercați din nou.",
       "unknown_error": "Eroare neașteptată — vă rugăm să încercați din nou.",
+            "ffmpeg_required": "Instalați ffmpeg pentru a activa această opțiune.",
       "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
       "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
       "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
@@ -195,6 +196,7 @@
             "voice": "Voce",
             "vocal_directions": "Direcții vocale implicite",
             "normalize_audio": "Activați volumul pentru sunetul generat (folosește mai mult CPU)",
+            "enable_long_tts": "Activați anunțurile TTS lungi (folosește mai mult CPU)",
             "protect_free_tier": "Protecție gratuită"
           },
           "data_description": {
@@ -202,7 +204,8 @@
             "model": "Modelul de vorbire Groq folosit pentru a genera sunet.",
             "voice": "Persoana vocală utilizată de modelul de vorbire selectat. Schimbarea modelului șterge vocile care nu sunt disponibile pentru noul model.",
             "vocal_directions": "Stilul opțional de difuzare antepus vorbirii, cum ar fi vesel sau șoaptă. Puteți alege o presetare sau o puteți introduce pe propria dvs.",
-            "normalize_audio": "Convertește ieșirea în MP3 normalizat cu ffmpeg pentru un volum mai consistent pe difuzoarele mici.",
+            "normalize_audio": "Convertește ieșirea în MP3 normalizat cu ffmpeg pentru un volum mai consistent pe difuzoarele mici. Necesită ffmpeg; dezactivat dacă ffmpeg nu este instalat.",
+            "enable_long_tts": "Împarte anunțurile mai lungi în mai multe solicitări Groq și le unește cu ffmpeg. Acest lucru poate folosi mai mult CPU și mai multă cotă de solicitări Groq. Necesită ffmpeg; dezactivat dacă ffmpeg nu este instalat.",
             "protect_free_tier": "Când Groq raportează că acest serviciu a atins o cerere, un simbol sau o limită cunoscută de caractere Text-to-Speech, Home Assistant întrerupe numai acest serviciu până la ora de resetare înainte de a trimite mai multe solicitări."
           }
         }
@@ -260,8 +263,8 @@
   },
   "issues": {
     "ffmpeg_missing": {
-      "title": "ffmpeg este necesar pentru normalizarea audio Groq",
-      "description": "Serviciul Groq Text-to-Speech {service_name} este configurat pentru a normaliza sunetul generat, dar Home Assistant nu a putut porni ffmpeg. Instalați ffmpeg pe gazda Home Assistant sau dezactivați normalizarea audio pentru acest serviciu Groq Text-to-Speech."
+      "title": "ffmpeg este necesar pentru procesarea audio Groq",
+      "description": "Serviciul Groq Text-to-Speech {service_name} este configurat să proceseze sunetul generat cu ffmpeg, dar Home Assistant nu a putut porni ffmpeg. Instalați ffmpeg pe gazda Home Assistant sau dezactivați normalizarea audio și Long TTS pentru acest serviciu Groq Text-to-Speech."
     },
     "model_access": {
       "title": "Modelul Groq nu este disponibil",

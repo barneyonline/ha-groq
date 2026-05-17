@@ -58,6 +58,7 @@
       "required": "Dette felt er påkrævet.",
       "unknown": "Uventet fejl under validering af API-nøglen. Prøv venligst igen.",
       "unknown_error": "Uventet fejl — prøv venligst igen.",
+            "ffmpeg_required": "Installer ffmpeg for at aktivere denne indstilling.",
       "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
       "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
       "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
@@ -195,6 +196,7 @@
             "voice": "Stemme",
             "vocal_directions": "Standard vokale retninger",
             "normalize_audio": "Aktiver lydstyrke for genereret lyd (bruger mere CPU)",
+            "enable_long_tts": "Aktiver lange TTS-meddelelser (bruger mere CPU)",
             "protect_free_tier": "Free-tier beskyttelse"
           },
           "data_description": {
@@ -202,7 +204,8 @@
             "model": "Groq talemodel, der bruges til at generere lyd.",
             "voice": "Den stemmepersona, der bruges af den valgte talemodel. Ændring af modellen rydder stemmer, der ikke er tilgængelige for den nye model.",
             "vocal_directions": "Valgfri leveringsstil sat foran tale, såsom munter eller hvisken. Du kan vælge en forudindstilling eller skrive din egen.",
-            "normalize_audio": "Konverterer output til normaliseret MP3 med ffmpeg for mere ensartet lydstyrke på små højttalere.",
+            "normalize_audio": "Konverterer output til normaliseret MP3 med ffmpeg for mere ensartet lydstyrke på små højttalere. Kræver ffmpeg; deaktiveret hvis ffmpeg ikke er installeret.",
+            "enable_long_tts": "Opdeler længere meddelelser i flere Groq-anmodninger og samler dem med ffmpeg. Dette kan bruge mere CPU og mere Groq-anmodningskvote. Kræver ffmpeg; deaktiveret hvis ffmpeg ikke er installeret.",
             "protect_free_tier": "Når Groq rapporterer, at denne tjeneste har nået en anmodning, token eller kendt tekst-til-tale-tegngrænse, sætter Home Assistant kun denne tjeneste på pause indtil nulstillingstiden, før den sender flere anmodninger."
           }
         }
@@ -260,8 +263,8 @@
   },
   "issues": {
     "ffmpeg_missing": {
-      "title": "ffmpeg er påkrævet for Groq lydnormalisering",
-      "description": "Groq tekst-til-tale-tjenesten {service_name} er konfigureret til at normalisere genereret lyd, men Home Assistant kunne ikke starte ffmpeg. Installer ffmpeg på Home Assistant-værten, eller deaktiver lydnormalisering for denne Groq tekst-til-tale-tjeneste."
+      "title": "ffmpeg kræves til Groq lydbehandling",
+      "description": "Groq tekst-til-tale-tjenesten {service_name} er konfigureret til at behandle genereret lyd med ffmpeg, men Home Assistant kunne ikke starte ffmpeg. Installer ffmpeg på Home Assistant-værten, eller slå lydnormalisering og Long TTS fra for denne Groq tekst-til-tale-tjeneste."
     },
     "model_access": {
       "title": "Groq-modellen er ikke tilgængelig",

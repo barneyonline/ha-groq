@@ -1,4 +1,5 @@
 import asyncio
+from collections import OrderedDict
 import logging
 import pytest
 from types import SimpleNamespace
@@ -6,11 +7,16 @@ from types import SimpleNamespace
 import aiohttp
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
-from custom_components.groq import api, config_flow
+from custom_components.groq import api, config_flow, tts
 from custom_components.groq.api import GroqApiClient, SpeechRequest
 from custom_components.groq.const import normalize_enabled_features
 from custom_components.groq.errors import GroqApiError, GroqRateLimitExceeded
-from custom_components.groq.tts import GroqTTSEntity
+from custom_components.groq.tts import (
+    GroqTTSEntity,
+    _split_overlong_tts_segment,
+    _split_tts_text,
+    _tts_input_chunks,
+)
 
 validate_user_input = config_flow.validate_user_input
 get_model_options = config_flow.get_model_options
@@ -527,9 +533,330 @@ def test_tts_local_usage_counters_drive_token_limit_checks(monkeypatch):
     assert client._check_local_tts_free_tier_limit(request, now=161.0) == 2
 
 
+def test_tts_batch_free_tier_guard_blocks_partial_long_tts_batches(monkeypatch):
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    request = SpeechRequest(
+        text="existing",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
+    )
+    monkeypatch.setattr(
+        client,
+        "_free_tier_limits",
+        lambda model: {
+            "requests_per_minute": 3,
+            "requests_per_day": 100,
+            "tokens_per_minute": 1000,
+            "tokens_per_day": 1000,
+        },
+    )
+
+    client._record_local_tts_usage(request, 1, now=100.0)
+    client._record_local_tts_usage(request, 1, now=100.0)
+
+    with pytest.raises(GroqApiError, match="batch usage"):
+        client._check_local_tts_free_tier_batch(
+            [
+                SpeechRequest(
+                    text="hello",
+                    model=ORPHEUS_ENGLISH_MODEL,
+                    voice=ORPHEUS_ENGLISH_VOICE,
+                ),
+                SpeechRequest(
+                    text="again",
+                    model=ORPHEUS_ENGLISH_MODEL,
+                    voice=ORPHEUS_ENGLISH_VOICE,
+                ),
+            ],
+            now=100.0,
+        )
+
+    assert client._check_local_tts_free_tier_batch(
+        [
+            SpeechRequest(
+                text="hello",
+                model=ORPHEUS_ENGLISH_MODEL,
+                voice=ORPHEUS_ENGLISH_VOICE,
+            )
+        ],
+        now=100.0,
+    ) == [5]
+
+
+def test_tts_batch_free_tier_guard_ignores_cached_chunks(monkeypatch):
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    monkeypatch.setattr(
+        client,
+        "_free_tier_limits",
+        lambda model: {
+            "requests_per_minute": 1,
+            "requests_per_day": 100,
+            "tokens_per_minute": 1000,
+            "tokens_per_day": 1000,
+        },
+    )
+    cached_texts = ["cached one", "cached two"]
+    namespace = f"{ORPHEUS_ENGLISH_MODEL}:{ORPHEUS_ENGLISH_VOICE}"
+    cache = client._speech_caches.setdefault(namespace, OrderedDict())
+    for text in cached_texts:
+        cache[(ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", text)] = b"cached"
+    request = SpeechRequest(
+        text="existing",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
+    )
+    client._record_local_tts_usage(request, 1, now=100.0)
+
+    assert client._check_local_tts_free_tier_batch(
+        [
+            SpeechRequest(
+                text=text,
+                model=ORPHEUS_ENGLISH_MODEL,
+                voice=ORPHEUS_ENGLISH_VOICE,
+            )
+            for text in cached_texts
+        ],
+        now=100.0,
+    ) == [10, 10]
+
+    with pytest.raises(GroqApiError, match="batch usage"):
+        client._check_local_tts_free_tier_batch(
+            [
+                *[
+                    SpeechRequest(
+                        text=text,
+                        model=ORPHEUS_ENGLISH_MODEL,
+                        voice=ORPHEUS_ENGLISH_VOICE,
+                    )
+                    for text in cached_texts
+                ],
+                SpeechRequest(
+                    text="uncached",
+                    model=ORPHEUS_ENGLISH_MODEL,
+                    voice=ORPHEUS_ENGLISH_VOICE,
+                ),
+            ],
+            now=100.0,
+        )
+
+
+def test_tts_batch_free_tier_guard_simulates_cache_evictions(monkeypatch):
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    monkeypatch.setattr(
+        client,
+        "_free_tier_limits",
+        lambda model: {
+            "requests_per_minute": 2,
+            "requests_per_day": 100,
+            "tokens_per_minute": 1000,
+            "tokens_per_day": 1000,
+        },
+    )
+    first_text = "cached first"
+    second_text = "uncached second"
+    third_text = "cached third"
+    namespace = f"{ORPHEUS_ENGLISH_MODEL}:{ORPHEUS_ENGLISH_VOICE}"
+    cache = client._speech_caches.setdefault(namespace, OrderedDict())
+    for text in (first_text, third_text):
+        cache[(ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", text)] = b"cached"
+    request = SpeechRequest(
+        text="existing",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
+    )
+    client._record_local_tts_usage(request, 1, now=100.0)
+
+    with pytest.raises(GroqApiError, match="batch usage"):
+        client._check_local_tts_free_tier_batch(
+            [
+                SpeechRequest(
+                    text=first_text,
+                    model=ORPHEUS_ENGLISH_MODEL,
+                    voice=ORPHEUS_ENGLISH_VOICE,
+                    cache_max=2,
+                ),
+                SpeechRequest(
+                    text=second_text,
+                    model=ORPHEUS_ENGLISH_MODEL,
+                    voice=ORPHEUS_ENGLISH_VOICE,
+                    cache_max=2,
+                ),
+                SpeechRequest(
+                    text=third_text,
+                    model=ORPHEUS_ENGLISH_MODEL,
+                    voice=ORPHEUS_ENGLISH_VOICE,
+                    cache_max=2,
+                ),
+            ],
+            now=100.0,
+        )
+
+    assert list(client._speech_caches[namespace]) == [
+        (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", first_text),
+        (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", third_text),
+    ]
+
+
+def test_tts_batch_free_tier_guard_returns_when_model_has_no_limits(monkeypatch):
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    monkeypatch.setattr(client, "_free_tier_limits", lambda model: None)
+
+    assert client._check_local_tts_free_tier_batch(
+        [
+            SpeechRequest(
+                text="hello",
+                model=ORPHEUS_ENGLISH_MODEL,
+                voice=ORPHEUS_ENGLISH_VOICE,
+            )
+        ],
+        now=100.0,
+    ) == [5]
+
+
+def test_tts_batch_free_tier_guard_skips_unprotected_requests(monkeypatch):
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    monkeypatch.setattr(
+        client,
+        "_free_tier_limits",
+        lambda model: {
+            "requests_per_minute": 0,
+            "requests_per_day": 0,
+            "tokens_per_minute": 0,
+            "tokens_per_day": 0,
+        },
+    )
+
+    assert client._check_local_tts_free_tier_batch(
+        [
+            SpeechRequest(
+                text="hello",
+                model=ORPHEUS_ENGLISH_MODEL,
+                voice=ORPHEUS_ENGLISH_VOICE,
+                protect_free_tier=False,
+            )
+        ],
+        now=100.0,
+    ) == [5]
+
+
+def test_tts_batch_free_tier_guard_blocks_daily_requests(monkeypatch):
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    request = SpeechRequest(
+        text="existing",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
+    )
+    monkeypatch.setattr(
+        client,
+        "_free_tier_limits",
+        lambda model: {
+            "requests_per_minute": 100,
+            "requests_per_day": 1,
+            "tokens_per_minute": 1000,
+            "tokens_per_day": 1000,
+        },
+    )
+    client._record_local_tts_usage(request, 1, now=100.0)
+
+    with pytest.raises(GroqApiError, match="requests per day"):
+        client._check_local_tts_free_tier_batch([request], now=100.0)
+
+
+def test_tts_batch_free_tier_guard_blocks_minute_tokens(monkeypatch):
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    request = SpeechRequest(
+        text="hello",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
+    )
+    monkeypatch.setattr(
+        client,
+        "_free_tier_limits",
+        lambda model: {
+            "requests_per_minute": 100,
+            "requests_per_day": 100,
+            "tokens_per_minute": 6,
+            "tokens_per_day": 1000,
+        },
+    )
+    client._record_local_tts_usage(request, 2, now=100.0)
+
+    with pytest.raises(GroqApiError, match="tokens per minute"):
+        client._check_local_tts_free_tier_batch([request], now=100.0)
+
+
+def test_tts_batch_free_tier_guard_blocks_daily_tokens(monkeypatch):
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    request = SpeechRequest(
+        text="hello",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
+    )
+    monkeypatch.setattr(
+        client,
+        "_free_tier_limits",
+        lambda model: {
+            "requests_per_minute": 100,
+            "requests_per_day": 100,
+            "tokens_per_minute": 1000,
+            "tokens_per_day": 6,
+        },
+    )
+    client._record_local_tts_usage(request, 2, now=100.0)
+
+    with pytest.raises(GroqApiError, match="tokens per day"):
+        client._check_local_tts_free_tier_batch([request], now=100.0)
+
+
+def test_tts_split_helpers_handle_overlong_words_and_blank_segments(monkeypatch):
+    assert _split_overlong_tts_segment("aa bbb cc", 5) == ["aa", "bbb", "cc"]
+    assert _split_overlong_tts_segment("aa bbbbbbb", 5) == ["aa", "bbbbb", "bb"]
+    assert _split_overlong_tts_segment("   ", 2) == ["  ", " "]
+    assert _split_tts_text("   ", 5) == [""]
+
+    class Boundary:
+        def split(self, text):
+            return ["", "Hello.", "World."]
+
+    monkeypatch.setattr(tts, "_SENTENCE_BOUNDARY", Boundary())
+    assert _split_tts_text("ignored", 20) == ["Hello. World."]
+
+
+def test_tts_input_chunks_rejects_vocal_directions_that_fill_limit():
+    with pytest.raises(ValueError, match="Vocal directions leave no room"):
+        _tts_input_chunks("hello", "[too long]", max_chars=10)
+
+
 class DummyClient:
+    def __init__(self):
+        self.calls = []
+
     async def async_synthesize_speech(self, request):
+        self.calls.append(
+            {
+                "text": request.text,
+                "voice": request.voice,
+                "model": request.model,
+                "response_format": request.response_format,
+                "cache_max": request.cache_max,
+                "protect_free_tier": request.protect_free_tier,
+            }
+        )
         return b"audio-bytes"
+
+
+class DummyBatchGuardClient(DummyClient):
+    def _check_local_tts_free_tier_batch(self, requests):
+        raise GroqApiError(
+            "batch would exceed local free-tier usage",
+            status=429,
+            error_type="rate_limit_exceeded",
+        )
+
+
+class ExplodingClient(DummyClient):
+    async def async_synthesize_speech(self, request):
+        raise RuntimeError("boom")
 
 
 class DummyConfigEntry:
@@ -556,19 +883,186 @@ async def test_tts_returns_raw_wav_without_processing():
 
 
 @pytest.mark.asyncio
-async def test_tts_rejects_orpheus_input_over_200_chars():
+async def test_tts_unknown_client_error_returns_none():
     data = {
         "url": "http://example.com",
         "model": ORPHEUS_ENGLISH_MODEL,
         "voice": ORPHEUS_ENGLISH_VOICE,
         "unique_id": "uid",
     }
-    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), ExplodingClient())
+
+    ext, payload = await entity.async_get_tts_audio("Hello", "en", options=None)
+
+    assert ext is None
+    assert payload is None
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_whitespace_only_input_before_api():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    ext, payload = await entity.async_get_tts_audio(" " * 201, "en", options=None)
+
+    assert ext is None
+    assert payload is None
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_orpheus_input_over_200_chars_without_normalization():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
 
     ext, payload = await entity.async_get_tts_audio("x" * 201, "en", options=None)
 
     assert ext is None
     assert payload is None
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_long_input_when_long_tts_disabled_with_normalization():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    ext, payload = await entity.async_get_tts_audio(
+        "x" * 201,
+        "en",
+        options={"normalize_audio": True},
+    )
+
+    assert ext is None
+    assert payload is None
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_per_call_long_tts_override_when_config_disabled():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    ext, payload = await entity.async_get_tts_audio(
+        "x" * 201,
+        "en",
+        options={"enable_long_tts": True},
+    )
+
+    assert ext is None
+    assert payload is None
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_checks_ffmpeg_before_sending_long_tts_chunks(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(
+        DummyHass(),
+        DummyConfigEntry(data, {"enable_long_tts": True}),
+        client,
+    )
+    monkeypatch.setattr("custom_components.groq.tts.shutil.which", lambda name: None)
+
+    ext, payload = await entity.async_get_tts_audio(
+        f"{'A' * 198}. {'B' * 40}.",
+        "en",
+        options=None,
+    )
+
+    assert ext is None
+    assert payload is None
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_checks_batch_free_tier_guard_before_long_tts_api(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyBatchGuardClient()
+    entity = GroqTTSEntity(
+        DummyHass(),
+        DummyConfigEntry(data, {"enable_long_tts": True}),
+        client,
+    )
+    monkeypatch.setattr(
+        "custom_components.groq.tts.shutil.which",
+        lambda name: "/usr/bin/ffmpeg",
+    )
+
+    ext, payload = await entity.async_get_tts_audio(
+        f"{'A' * 198}. {'B' * 40}.",
+        "en",
+        options=None,
+    )
+
+    assert ext is None
+    assert payload is None
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_too_many_long_tts_chunks_before_api(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(
+        DummyHass(),
+        DummyConfigEntry(data, {"enable_long_tts": True}),
+        client,
+    )
+    monkeypatch.setattr(
+        "custom_components.groq.tts.shutil.which",
+        lambda name: "/usr/bin/ffmpeg",
+    )
+
+    ext, payload = await entity.async_get_tts_audio(
+        " ".join(f"{chr(65 + index) * 199}." for index in range(11)),
+        "en",
+        options=None,
+    )
+
+    assert ext is None
+    assert payload is None
+    assert client.calls == []
 
 
 class DummyProc:

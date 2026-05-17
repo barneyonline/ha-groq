@@ -59,6 +59,7 @@
       "required": "Toto pole je povinné.",
       "unknown": "Neočekávaná chyba při ověřování klíče API. Zkuste to znovu.",
       "unknown_error": "Neočekávaná chyba – zkuste to prosím znovu.",
+            "ffmpeg_required": "Pro povolení této možnosti nainstalujte ffmpeg.",
       "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
       "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
@@ -195,6 +196,7 @@
             "voice": "Hlas",
             "vocal_directions": "Výchozí hlasové směry",
             "normalize_audio": "Povolit hlasitost generovaného zvuku (využívá více CPU)",
+            "enable_long_tts": "Povolit dlouhá oznámení TTS (využívá více CPU)",
             "protect_free_tier": "Bezplatná ochrana"
           },
           "data_description": {
@@ -202,7 +204,8 @@
             "model": "Model řeči Groq používaný ke generování zvuku.",
             "voice": "Hlasová persona používaná vybraným modelem řeči. Změna modelu vymaže hlasy, které nejsou pro nový model dostupné.",
             "vocal_directions": "Volitelný styl přednesu připojený k řeči, jako je veselý nebo šepot. Můžete si vybrat předvolbu nebo zadat vlastní.",
-            "normalize_audio": "Převádí výstup na normalizovaný MP3 s ffmpeg pro konzistentnější hlasitost na malých reproduktorech.",
+            "normalize_audio": "Převádí výstup na normalizovaný MP3 s ffmpeg pro konzistentnější hlasitost na malých reproduktorech. Vyžaduje ffmpeg; pokud ffmpeg není nainstalován, je vypnuto.",
+            "enable_long_tts": "Rozdělí delší oznámení do více požadavků Groq a spojí je pomocí ffmpeg. Může to využívat více CPU a více kvóty požadavků Groq. Vyžaduje ffmpeg; pokud ffmpeg není nainstalován, je vypnuto.",
             "protect_free_tier": "Když Groq ohlásí, že tato služba dosáhla požadavku, tokenu nebo známého limitu počtu znaků pro převod textu na řeč, Home Assistant pozastaví pouze tuto službu do doby resetování před odesláním dalších požadavků."
           }
         }
@@ -260,8 +263,8 @@
   },
   "issues": {
     "ffmpeg_missing": {
-      "title": "ffmpeg je vyžadována pro normalizaci zvuku Groq",
-      "description": "Služba Text-to-Speech Groq {service_name} je nakonfigurována tak, aby normalizovala generovaný zvuk, ale Home Assistant nemohl spustit ffmpeg. Nainstalujte ffmpeg na hostitele Home Assistant nebo vypněte normalizaci zvuku pro tuto službu Groq Text-to-Speech."
+      "title": "ffmpeg je vyžadován pro zpracování zvuku Groq",
+      "description": "Služba Groq Text-to-Speech {service_name} je nakonfigurována ke zpracování generovaného zvuku pomocí ffmpeg, ale Home Assistant nemohl ffmpeg spustit. Nainstalujte ffmpeg na hostitele Home Assistant nebo vypněte normalizaci zvuku a Long TTS pro tuto službu Groq Text-to-Speech."
     },
     "model_access": {
       "title": "Model Groq není k dispozici",

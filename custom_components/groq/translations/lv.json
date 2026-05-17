@@ -58,6 +58,7 @@
       "required": "Šis lauks ir obligāts.",
       "unknown": "Negaidīta kļūda, apstiprinot API atslēgu. Lūdzu, mēģiniet vēlreiz.",
       "unknown_error": "Negaidīta kļūda — lūdzu, mēģiniet vēlreiz.",
+            "ffmpeg_required": "Instalējiet ffmpeg, lai iespējotu šo opciju.",
       "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
       "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
       "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
@@ -195,6 +196,7 @@
             "voice": "Balss",
             "vocal_directions": "Noklusējuma balss virzieni",
             "normalize_audio": "Iespējot ģenerētā audio skaļumu (izmanto vairāk CPU)",
+            "enable_long_tts": "Iespējot garus TTS paziņojumus (izmanto vairāk CPU)",
             "protect_free_tier": "Brīvā līmeņa aizsardzība"
           },
           "data_description": {
@@ -202,7 +204,8 @@
             "model": "Groq runas modelis, ko izmanto audio ģenerēšanai.",
             "voice": "Balss persona, ko izmanto atlasītais runas modelis. Mainot modeli, tiek notīrītas balsis, kas nav pieejamas jaunajam modelim.",
             "vocal_directions": "Izvēles piegādes stils, kas pievienots runai, piemēram, jautrs vai čuksts. Varat izvēlēties sākotnējo iestatījumu vai ierakstīt savu.",
-            "normalize_audio": "Pārvērš izvadi par normalizētu MP3 ar ffmpeg, lai nodrošinātu konsekventāku skaļumu mazos skaļruņos.",
+            "normalize_audio": "Pārvērš izvadi par normalizētu MP3 ar ffmpeg, lai nodrošinātu konsekventāku skaļumu mazos skaļruņos. Nepieciešams ffmpeg; atspējots, ja ffmpeg nav instalēts.",
+            "enable_long_tts": "Sadala garākus paziņojumus vairākos Groq pieprasījumos un savieno tos ar ffmpeg. Tas var izmantot vairāk CPU un vairāk Groq pieprasījumu kvotas. Nepieciešams ffmpeg; atspējots, ja ffmpeg nav instalēts.",
             "protect_free_tier": "Kad Groq ziņo, ka šis pakalpojums ir sasniedzis pieprasījumu, marķieri vai zināmo teksta pārvēršanas runā rakstzīmju ierobežojumu, Home Assistant aptur tikai šo pakalpojumu līdz atiestatīšanas laikam, pirms tiek nosūtīti papildu pieprasījumi."
           }
         }
@@ -260,8 +263,8 @@
   },
   "issues": {
     "ffmpeg_missing": {
-      "title": "ffmpeg ir nepieciešams Groq audio normalizēšanai",
-      "description": "Teksta pārvēršanas runā pakalpojums Groq {service_name} ir konfigurēts, lai normalizētu ģenerēto audio, bet Home Assistant nevarēja palaist ffmpeg. Instalējiet ffmpeg Home Assistant resursdatorā vai izslēdziet audio normalizēšanu šim pakalpojumam Groq teksta pārvēršana runā."
+      "title": "ffmpeg ir nepieciešams Groq audio apstrādei",
+      "description": "Groq Text-to-Speech pakalpojums {service_name} ir konfigurēts apstrādāt ģenerēto audio ar ffmpeg, bet Home Assistant nevarēja palaist ffmpeg. Instalējiet ffmpeg Home Assistant resursdatorā vai izslēdziet audio normalizēšanu un Long TTS šim Groq Text-to-Speech pakalpojumam."
     },
     "model_access": {
       "title": "Groq modelis nav pieejams",

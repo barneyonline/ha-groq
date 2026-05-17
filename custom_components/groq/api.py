@@ -1063,6 +1063,96 @@ class GroqApiClient:
             )
         return token_estimate
 
+    def _check_local_tts_free_tier_batch(
+        self,
+        requests: list[SpeechRequest],
+        *,
+        now: float | None = None,
+    ) -> list[int]:
+        """Raise before sending a TTS batch that exceeds known free-tier limits."""
+        token_estimates = [
+            self._estimate_tts_token_usage(request.text) for request in requests
+        ]
+        now = now if now is not None else asyncio.get_running_loop().time()
+        simulated_caches: dict[str, OrderedDict[tuple[str, str, str, str], None]] = {}
+        simulated_usage: dict[str, list[int]] = {}
+
+        for request, token_estimate in zip(requests, token_estimates, strict=True):
+            if request.cache_max > 0:
+                namespace = request.service_id or f"{request.model}:{request.voice}"
+                cache = simulated_caches.get(namespace)
+                if cache is None:
+                    cache = OrderedDict.fromkeys(
+                        self._speech_caches.get(namespace, OrderedDict())
+                    )
+                    simulated_caches[namespace] = cache
+                cache_key = (
+                    request.model,
+                    request.voice,
+                    request.response_format,
+                    request.text,
+                )
+                if cache_key in cache:
+                    cache.move_to_end(cache_key)
+                    continue
+                cache[cache_key] = None
+                while len(cache) > request.cache_max:
+                    cache.popitem(last=False)
+
+            if not request.protect_free_tier:
+                continue
+            limits = self._free_tier_limits(request.model)
+            if limits is None:
+                continue
+
+            state = self._tts_usage_state(request)
+            self._prune_local_tts_usage(state, now)
+            usage_key = self._tts_guard_key(request) or (
+                f"tts:{request.model}:{request.voice}"
+            )
+            usage = simulated_usage.get(usage_key)
+            if usage is None:
+                usage = [
+                    len(state.minute_request_timestamps),
+                    len(state.request_timestamps),
+                    state.minute_token_total,
+                    state.daily_token_total,
+                ]
+                simulated_usage[usage_key] = usage
+            usage[0] += 1
+            usage[1] += 1
+            usage[2] += token_estimate
+            usage[3] += token_estimate
+            if usage[0] > limits["requests_per_minute"]:
+                raise GroqApiError(
+                    "Groq free tier guard blocked this TTS request before sending it: "
+                    f"estimated batch usage would exceed {limits['requests_per_minute']} requests per minute.",
+                    status=429,
+                    error_type="rate_limit_exceeded",
+                )
+            if usage[1] > limits["requests_per_day"]:
+                raise GroqApiError(
+                    "Groq free tier guard blocked this TTS request before sending it: "
+                    f"estimated batch usage would exceed {limits['requests_per_day']} requests per day.",
+                    status=429,
+                    error_type="rate_limit_exceeded",
+                )
+            if usage[2] > limits["tokens_per_minute"]:
+                raise GroqApiError(
+                    "Groq free tier guard blocked this TTS request before sending it: "
+                    f"estimated batch text usage would exceed {limits['tokens_per_minute']} tokens per minute.",
+                    status=429,
+                    error_type="rate_limit_exceeded",
+                )
+            if usage[3] > limits["tokens_per_day"]:
+                raise GroqApiError(
+                    "Groq free tier guard blocked this TTS request before sending it: "
+                    f"estimated batch text usage would exceed {limits['tokens_per_day']} tokens per day.",
+                    status=429,
+                    error_type="rate_limit_exceeded",
+                )
+        return token_estimates
+
     def _record_local_tts_usage(
         self,
         request: SpeechRequest,

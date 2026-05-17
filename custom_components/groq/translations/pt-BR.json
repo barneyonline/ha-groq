@@ -58,6 +58,7 @@
       "required": "Este campo é obrigatório.",
       "unknown": "Erro inesperado ao validar a chave API. Por favor, tente novamente.",
       "unknown_error": "Erro inesperado — tente novamente.",
+            "ffmpeg_required": "Instale o ffmpeg para habilitar esta opção.",
       "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
       "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
       "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
@@ -195,6 +196,7 @@
             "voice": "Voz",
             "vocal_directions": "Direções vocais padrão",
             "normalize_audio": "Habilita volume para áudio gerado (usa mais CPU)",
+            "enable_long_tts": "Habilitar anúncios TTS longos (usa mais CPU)",
             "protect_free_tier": "Proteção de nível gratuito"
           },
           "data_description": {
@@ -202,7 +204,8 @@
             "model": "O modelo de fala Groq usado para gerar áudio.",
             "voice": "A persona de voz usada pelo modelo de fala selecionado. A alteração do modelo elimina vozes que não estão disponíveis para o novo modelo.",
             "vocal_directions": "Estilo de entrega opcional anexado à fala, como alegre ou sussurrado. Você pode escolher uma predefinição ou digitar a sua própria.",
-            "normalize_audio": "Converte a saída para MP3 normalizado com ffmpeg para volume mais consistente em alto-falantes pequenos.",
+            "normalize_audio": "Converte a saída para MP3 normalizado com ffmpeg para volume mais consistente em alto-falantes pequenos. Requer ffmpeg; desativado se o ffmpeg não estiver instalado.",
+            "enable_long_tts": "Divide anúncios mais longos em várias solicitações Groq e os une com ffmpeg. Isso pode usar mais CPU e mais cota de solicitações Groq. Requer ffmpeg; desativado se o ffmpeg não estiver instalado.",
             "protect_free_tier": "Quando Groq relata que este serviço atingiu uma solicitação, token ou limite conhecido de caracteres de conversão de texto em fala, Home Assistant pausa apenas este serviço até o tempo de redefinição antes de enviar mais solicitações."
           }
         }
@@ -260,8 +263,8 @@
   },
   "issues": {
     "ffmpeg_missing": {
-      "title": "ffmpeg é necessário para normalização de áudio Groq",
-      "description": "O serviço de conversão de texto em fala Groq {service_name} está configurado para normalizar o áudio gerado, mas Home Assistant não pôde iniciar ffmpeg. Instale ffmpeg no host Home Assistant ou desative a normalização de áudio para este serviço de conversão de texto em fala Groq."
+      "title": "ffmpeg é necessário para processamento de áudio Groq",
+      "description": "O serviço Groq Text-to-Speech {service_name} está configurado para processar o áudio gerado com ffmpeg, mas o Home Assistant não conseguiu iniciar o ffmpeg. Instale o ffmpeg no host do Home Assistant ou desative a normalização de áudio e Long TTS para este serviço Groq Text-to-Speech."
     },
     "model_access": {
       "title": "O modelo Groq não está disponível",

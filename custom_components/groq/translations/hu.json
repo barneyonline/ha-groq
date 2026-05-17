@@ -58,6 +58,7 @@
       "required": "Ezt a mezőt kötelező kitölteni.",
       "unknown": "Váratlan hiba a API kulcs érvényesítésekor. Kérjük, próbálja újra.",
       "unknown_error": "Váratlan hiba – kérjük, próbálja újra.",
+            "ffmpeg_required": "Telepítse az ffmpeg-et az opció engedélyezéséhez.",
       "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
       "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
       "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
@@ -195,6 +196,7 @@
             "voice": "Hang",
             "vocal_directions": "Alapértelmezett énekirányok",
             "normalize_audio": "Hangerő engedélyezése a generált hanghoz (több CPU-t használ)",
+            "enable_long_tts": "Hosszú TTS bejelentések engedélyezése (több CPU-t használ)",
             "protect_free_tier": "Free-Tier Protection"
           },
           "data_description": {
@@ -202,7 +204,8 @@
             "model": "A hang generálására használt Groq beszédmodell.",
             "voice": "A kiválasztott beszédmodell által használt hangszemély. A modell megváltoztatása törli azokat a hangokat, amelyek nem állnak rendelkezésre az új modellhez.",
             "vocal_directions": "Választható kézbesítési stílus a beszéd elé, például vidám vagy suttogó. Választhat egy előre beállított értéket, vagy beírhatja a sajátját.",
-            "normalize_audio": "Normalizált MP3-vé alakítja a kimenetet a ffmpeg-vel, hogy egyenletesebb legyen a hangerő kis hangszórókon.",
+            "normalize_audio": "Normalizált MP3-vé alakítja a kimenetet a ffmpeg-vel, hogy egyenletesebb legyen a hangerő kis hangszórókon. ffmpeg szükséges; le van tiltva, ha az ffmpeg nincs telepítve.",
+            "enable_long_tts": "A hosszabb bejelentéseket több Groq-kérésre bontja, majd ffmpeg segítségével összefűzi. Ez több CPU-t és több Groq-kéréskvótát használhat. ffmpeg szükséges; le van tiltva, ha az ffmpeg nincs telepítve.",
             "protect_free_tier": "Amikor a Groq azt jelenti, hogy ez a szolgáltatás elért egy kérést, tokent vagy ismert szövegfelolvasó karakterkorlátot, a Home Assistant csak ezt a szolgáltatást szünetelteti a visszaállítási időpontig, mielőtt további kéréseket küldene."
           }
         }
@@ -260,8 +263,8 @@
   },
   "issues": {
     "ffmpeg_missing": {
-      "title": "ffmpeg szükséges a Groq hang normalizálásához",
-      "description": "A Groq Text-to-Speech szolgáltatás, {service_name} úgy van konfigurálva, hogy normalizálja a generált hangot, de a Home Assistant nem tudta elindítani a ffmpeg-t. Telepítse a ffmpeg-t a Home Assistant gazdagépen, vagy kapcsolja ki a hang normalizálását ennél a Groq szövegfelolvasó szolgáltatásnál."
+      "title": "Az ffmpeg szükséges a Groq hangfeldolgozásához",
+      "description": "A(z) {service_name} Groq Text-to-Speech szolgáltatás úgy van beállítva, hogy az előállított hangot ffmpeg segítségével dolgozza fel, de a Home Assistant nem tudta elindítani az ffmpeg-et. Telepítse az ffmpeg-et a Home Assistant gazdagépére, vagy kapcsolja ki a hangnormalizálást és a Long TTS funkciót ennél a Groq Text-to-Speech szolgáltatásnál."
     },
     "model_access": {
       "title": "A Groq modell nem elérhető",
