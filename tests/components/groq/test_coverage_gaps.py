@@ -32,7 +32,6 @@ from custom_components.groq import (
     model_registry as model_registry_module,
     repairs as repairs_module,
     text_generation as text_generation_module,
-    tts_engine as tts_engine_module,
 )
 from custom_components.groq.ai_task import (
     GroqAITaskEntity,
@@ -42,6 +41,7 @@ from custom_components.groq.ai_task import (
 from custom_components.groq.api import (
     ChatCompletionResult,
     GroqApiClient,
+    SpeechRequest,
     StructuredGenerationRequest,
     TextGenerationRequest,
     VisionRequest,
@@ -179,7 +179,6 @@ from custom_components.groq.text_generation import (
     voluptuous_schema_to_json_schema,
 )
 from custom_components.groq.tts import GroqTTSEntity
-from custom_components.groq.tts_engine import GroqRateLimitError, GroqTTSEngine
 
 
 class DummyEntry:
@@ -318,7 +317,7 @@ class DummyPostSession:
         self.responses = list(responses)
         self.calls = []
 
-    def post(self, *args, **kwargs):
+    def request(self, *args, **kwargs):
         self.calls.append({"args": args, "kwargs": kwargs})
         response = self.responses.pop(0)
         if isinstance(response, BaseException):
@@ -1725,9 +1724,10 @@ def test_model_registry_branches():
     assert infer_capabilities("custom-whisper") == frozenset(
         {GroqCapability.SPEECH_TO_TEXT}
     )
-    assert infer_capabilities("custom-tts") == frozenset(
+    assert infer_capabilities("custom-orpheus") == frozenset(
         {GroqCapability.TEXT_TO_SPEECH}
     )
+    assert infer_capabilities("custom-tts") == frozenset()
     assert GroqCapability.VISION in infer_capabilities("custom-vision-model")
     assert GroqCapability.COMPOUND in infer_capabilities("groq/compound-custom")
     with (
@@ -3318,24 +3318,21 @@ async def test_ai_task_and_conversation_setup_properties():
 
 
 @pytest.mark.asyncio
-async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
+async def test_tts_entity_and_api_remaining_paths(monkeypatch):
     entry = DummyEntry()
     entry.data = {"unique_id": "entry-uid", "model": "m", "voice": "v", "url": "url"}
-    engine = SimpleNamespace(
-        calls=[],
-        get_supported_langs=lambda: ["en"],
-    )
+    client = SimpleNamespace(calls=[])
 
-    async def async_get_tts(hass, text, **kwargs):
-        engine.calls.append((text, kwargs))
-        return SimpleNamespace(content=b"audio")
+    async def async_synthesize_speech(request):
+        client.calls.append(request)
+        return b"audio"
 
-    engine.async_get_tts = async_get_tts
+    client.async_synthesize_speech = async_synthesize_speech
     entity = GroqTTSEntity(
-        DummyHass(), entry, engine, {"name": "tts", "unique_id": "tts-id"}
+        DummyHass(), entry, client, {"name": "tts", "unique_id": "tts-id"}
     )
     assert entity.default_language == "en"
-    assert entity.supported_languages == ["en"]
+    assert entity.supported_languages == ["ar", "en"]
     assert entity.device_info["identifiers"] == {("groq", "tts-id")}
     assert entity.device_info["name"] == "tts"
     assert entity.has_entity_name is True
@@ -3347,17 +3344,14 @@ async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
     )
     assert fmt == "wav"
     assert audio == b"audio"
-    assert engine.calls[0][0] == "[warm] hello"
+    assert client.calls[0].text == "[warm] hello"
     assert await entity.async_get_tts_audio("x" * 201, "en") == (None, None)
 
-    async def cancelled_tts(hass, text, **kwargs):
+    async def cancelled_tts(request):
         raise asyncio.CancelledError
 
-    cancel_engine = SimpleNamespace(
-        async_get_tts=cancelled_tts,
-        get_supported_langs=lambda: ["en"],
-    )
-    cancel_entity = GroqTTSEntity(DummyHass(), entry, cancel_engine, {})
+    cancel_client = SimpleNamespace(async_synthesize_speech=cancelled_tts)
+    cancel_entity = GroqTTSEntity(DummyHass(), entry, cancel_client, {})
     assert await cancel_entity.async_get_tts_audio("hello", "en") == (None, None)
 
     async def missing_ffmpeg(*args, **kwargs):
@@ -3381,49 +3375,47 @@ async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
     ) == (None, None)
     assert ffmpeg_issues == [("entry-id", "tts-id")]
 
-    tts_engine = GroqTTSEngine("key", "voice", "model", "url", cache_max=1)
-    assert tts_engine.available is True
-    assert tts_engine_module._payload_mentions_model_access([]) is False
+    api_client = GroqApiClient(DummyHass(), api_key="key")
+    assert api_client.available is True
+    assert api_module._payload_mentions_model_access([]) is False
     assert (
-        tts_engine_module._payload_mentions_model_access(
+        api_module._payload_mentions_model_access(
             {"error": "Model custom/missing not found"}
         )
         is True
     )
-    assert tts_engine._estimate_token_usage("") == 1
-    assert tts_engine._free_tier_limits("missing") is None
-    tts_engine._protect_free_tier = False
-    assert tts_engine._check_local_free_tier_limit("text") == 4
-    tts_engine._record_local_usage(1)
-    assert tts_engine.close() is None
-    assert tts_engine.get_supported_langs() == ["ar", "en"]
-    assert "retry after 1 seconds" in tts_engine._rate_limit_message(
-        {"retry-after": "1"}
+    assert api_client._estimate_tts_token_usage("") == 1
+    assert api_client._free_tier_limits("missing") is None
+    request = SpeechRequest(
+        text="text",
+        model="canopylabs/orpheus-v1-english",
+        voice="voice",
+        protect_free_tier=False,
     )
-    tts_engine._request_timestamps.extend([1.0, 100000.0])
-    tts_engine._token_timestamps.extend([(1.0, 1), (100000.0, 2)])
-    tts_engine._prune_local_usage(100000.0)
-    assert list(tts_engine._request_timestamps) == [100000.0]
+    assert api_client._check_local_tts_free_tier_limit(request) == 4
+    guarded_request = SpeechRequest(
+        text="text",
+        model="canopylabs/orpheus-v1-english",
+        voice="voice",
+    )
+    state = api_client._tts_usage_state(guarded_request)
+    state.request_timestamps.extend([1.0, 100000.0])
+    state.token_timestamps.extend([(1.0, 1), (100000.0, 2)])
+    api_client._prune_local_tts_usage(state, 100000.0)
+    assert list(state.request_timestamps) == [100000.0]
 
-    limited = GroqTTSEngine(
-        "key",
-        "voice",
-        "canopylabs/orpheus-v1-english",
-        "url",
-        protect_free_tier=True,
-    )
     monkeypatch.setattr(
-        limited,
+        api_client,
         "_free_tier_limits",
-        lambda model=None: {
+        lambda model: {
             "requests_per_minute": 0,
             "requests_per_day": 10,
             "tokens_per_minute": 10,
             "tokens_per_day": 10,
         },
     )
-    with pytest.raises(GroqRateLimitError):
-        limited._check_local_free_tier_limit("text")
+    with pytest.raises(GroqApiError):
+        api_client._check_local_tts_free_tier_limit(guarded_request)
 
     for limits in (
         {
@@ -3445,25 +3437,26 @@ async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
             "tokens_per_day": 1,
         },
     ):
-        guarded = GroqTTSEngine(
-            "key",
-            "voice",
-            "canopylabs/orpheus-v1-english",
-            "url",
-            protect_free_tier=True,
-        )
+        guarded = GroqApiClient(DummyHass(), api_key="key")
         monkeypatch.setattr(
-            guarded, "_free_tier_limits", lambda model=None, limits=limits: limits
+            guarded, "_free_tier_limits", lambda model, limits=limits: limits
         )
-        with pytest.raises(GroqRateLimitError):
-            guarded._check_local_free_tier_limit("text")
+        with pytest.raises(GroqApiError):
+            guarded._check_local_tts_free_tier_limit(guarded_request)
 
-    tts_http = GroqTTSEngine(
-        "key", "voice", "model", "url", cache_max=1, protect_free_tier=False
+    tts_http = GroqApiClient(
+        DummyHass(),
+        api_key="key",
+        session=DummyPostSession(PostResponse(200, b"audio")),
     )
-    tts_http._session = DummyPostSession(PostResponse(200, b"audio"))
-    assert (await tts_http.async_get_tts(DummyHass(), "hello")).content == b"audio"
-    assert (await tts_http.async_get_tts(DummyHass(), "hello")).content == b"audio"
+    speech_request = SpeechRequest(
+        text="hello",
+        model="model",
+        voice="voice",
+        protect_free_tier=False,
+    )
+    assert await tts_http.async_synthesize_speech(speech_request) == b"audio"
+    assert await tts_http.async_synthesize_speech(speech_request) == b"audio"
 
     error_cases = [
         (
@@ -3476,7 +3469,7 @@ async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
                 {"error": "rate"},
                 {"retry-after": "1", "content-type": "application/json"},
             ),
-            GroqRateLimitError,
+            GroqRateLimitExceeded,
         ),
         (
             PostResponse(
@@ -3514,67 +3507,36 @@ async def test_tts_entity_and_engine_remaining_paths(monkeypatch):
         ),
     ]
     for response, error_type in error_cases:
-        failing = GroqTTSEngine("key", "voice", "model", "url", protect_free_tier=False)
-        failing._session = DummyPostSession(response)
+        failing = GroqApiClient(
+            DummyHass(), api_key="key", session=DummyPostSession(response)
+        )
         with pytest.raises(error_type):
-            await failing.async_get_tts(DummyHass(), "hello")
+            await failing.async_synthesize_speech(speech_request)
 
     model_access_issues = []
     monkeypatch.setattr(
-        "custom_components.groq.tts_engine.async_create_model_access_issue",
+        "custom_components.groq.api.async_create_model_access_issue",
         lambda hass, model: model_access_issues.append((hass, model)),
     )
-    model_access = GroqTTSEngine(
-        "key", "voice", "model", "url", protect_free_tier=False
+    model_access = GroqApiClient(
+        DummyHass(),
+        api_key="key",
+        session=DummyPostSession(
+            PostResponse(
+                400,
+                {"error": {"message": "Model model is not available"}},
+                {"content-type": "application/json"},
+            )
+        ),
     )
-    model_access._session = DummyPostSession(
-        PostResponse(
-            400,
-            {"error": {"message": "Model model is not available"}},
-            {"content-type": "application/json"},
-        )
-    )
-    with pytest.raises(HomeAssistantError, match="not available"):
-        await model_access.async_get_tts(DummyHass(), "hello")
+    with pytest.raises(GroqApiError, match="not available"):
+        await model_access.async_synthesize_speech(speech_request)
     assert model_access_issues == [(model_access_issues[0][0], "model")]
 
-    async def no_sleep(_delay):
-        return None
-
-    monkeypatch.setattr("custom_components.groq.tts_engine.asyncio.sleep", no_sleep)
-    retry = GroqTTSEngine("key", "voice", "model", "url", protect_free_tier=False)
-    retry._session = DummyPostSession(
-        [aiohttp.ClientError("temporary"), PostResponse(200, b"retry-audio")]
+    cancelled = GroqApiClient(
+        DummyHass(),
+        api_key="key",
+        session=DummyPostSession(asyncio.CancelledError()),
     )
-    assert (await retry.async_get_tts(DummyHass(), "retry")).content == b"retry-audio"
-
-    class AccessDenied(aiohttp.ClientError):
-        status = 403
-        message = "1010 denied"
-
-    denied = GroqTTSEngine("key", "voice", "model", "url", protect_free_tier=False)
-    denied._session = DummyPostSession([AccessDenied(), AccessDenied()])
-    with pytest.raises(HomeAssistantError, match="model access"):
-        await denied.async_get_tts(DummyHass(), "denied")
-
-    unknown_retry = GroqTTSEngine(
-        "key", "voice", "model", "url", protect_free_tier=False
-    )
-    unknown_retry._session = DummyPostSession(
-        [RuntimeError("temporary"), PostResponse(200, b"ok")]
-    )
-    assert (await unknown_retry.async_get_tts(DummyHass(), "unknown")).content == b"ok"
-
-    unknown_final = GroqTTSEngine(
-        "key", "voice", "model", "url", protect_free_tier=False
-    )
-    unknown_final._session = DummyPostSession(
-        [RuntimeError("first"), RuntimeError("second")]
-    )
-    with pytest.raises(HomeAssistantError, match="unknown error"):
-        await unknown_final.async_get_tts(DummyHass(), "unknown-final")
-
-    cancelled = GroqTTSEngine("key", "voice", "model", "url", protect_free_tier=False)
-    cancelled._session = DummyPostSession(asyncio.CancelledError())
     with pytest.raises(asyncio.CancelledError):
-        await cancelled.async_get_tts(DummyHass(), "cancel")
+        await cancelled.async_synthesize_speech(speech_request)

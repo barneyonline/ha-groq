@@ -127,7 +127,7 @@ rules:
       code:
         - custom_components/groq/manifest.json
         - custom_components/groq/api.py
-        - custom_components/groq/tts_engine.py
+        - custom_components/groq/tts.py
       tests:
         - tests/components/groq/test_manifest.py
   docs-actions:
@@ -280,7 +280,7 @@ rules:
       code:
         - custom_components/groq/config_flow.py
         - custom_components/groq/api.py
-        - custom_components/groq/tts_engine.py
+        - custom_components/groq/tts.py
       tests:
         - tests/components/groq/test_groq.py
         - tests/components/groq/test_integration_harness.py
@@ -436,7 +436,6 @@ rules:
         - custom_components/groq/repairs.py
         - custom_components/groq/services.py
         - custom_components/groq/tts.py
-        - custom_components/groq/tts_engine.py
       tests:
         - tests/components/groq/test_coverage_gaps.py
       docs:
@@ -453,7 +452,6 @@ rules:
     references:
       code:
         - custom_components/groq/api.py
-        - custom_components/groq/tts_engine.py
         - custom_components/groq/tts.py
   inject-websession:
     status: done
@@ -462,7 +460,7 @@ rules:
       code:
         - custom_components/groq/api.py
         - custom_components/groq/config_flow.py
-        - custom_components/groq/tts_engine.py
+        - custom_components/groq/tts.py
       tests:
         - tests/components/groq/test_foundation.py
         - tests/components/groq/test_coverage_gaps.py

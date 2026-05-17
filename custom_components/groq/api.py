@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict, deque
 from contextlib import suppress
+from hashlib import sha256
 import json
 import logging
 from asyncio import CancelledError
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Callable
 from urllib.parse import quote, urljoin
 
@@ -15,7 +17,7 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
-from .const import VERSION
+from .const import GROQ_FREE_TIER_LIMITS
 from .errors import GroqApiError, GroqResponseError
 from .model_registry import GroqModel, model_from_api
 from .rate_limit import GroqRateLimiter
@@ -27,9 +29,15 @@ DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
 CHAT_COMPLETIONS_PATH = "/chat/completions"
 MODELS_PATH = "/models"
 AUDIO_TRANSCRIPTIONS_PATH = "/audio/transcriptions"
+AUDIO_SPEECH_PATH = "/audio/speech"
 JSON_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
 STREAM_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
+TTS_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+AUDIO_REQUEST_RETRIES = 1
+AUDIO_RETRY_DELAY_SECONDS = 1
 MODEL_DETAIL_CONCURRENCY = 5
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_DAY_SECONDS = 24 * 60 * 60
 RESERVED_CHAT_BODY_OPTIONS = frozenset(
     {"messages", "model", "stream", "tool_choice", "tools"}
 )
@@ -106,6 +114,32 @@ class VisionRequest(TextGenerationRequest):
     """Request data for vision analysis."""
 
     image_url: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class SpeechRequest:
+    """Request data for text-to-speech generation."""
+
+    text: str
+    model: str
+    voice: str
+    response_format: str = "wav"
+    api_key: str | None = None
+    service_id: str | None = None
+    protect_free_tier: bool = True
+    cache_max: int = 256
+
+
+@dataclass(slots=True)
+class _TTSUsageState:
+    """Local text-to-speech usage counters for known free-tier limits."""
+
+    request_timestamps: deque[float] = field(default_factory=deque)
+    token_timestamps: deque[tuple[float, int]] = field(default_factory=deque)
+    minute_request_timestamps: deque[float] = field(default_factory=deque)
+    minute_token_timestamps: deque[tuple[float, int]] = field(default_factory=deque)
+    daily_token_total: int = 0
+    minute_token_total: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,6 +369,10 @@ class GroqApiClient:
         self._stream_timeout = stream_timeout or STREAM_REQUEST_TIMEOUT
         self._available = True
         self._unavailable_reason: str | None = None
+        self._speech_caches: dict[
+            str, OrderedDict[tuple[str, str, str, str], bytes]
+        ] = {}
+        self._tts_usage: dict[str, _TTSUsageState] = {}
 
     @property
     def base_url(self) -> str:
@@ -537,6 +575,50 @@ class GroqApiClient:
             raise GroqResponseError("Groq transcription response did not include text")
         return text
 
+    async def async_synthesize_speech(self, request: SpeechRequest) -> bytes:
+        """Generate speech audio with Groq's OpenAI-compatible speech endpoint."""
+        cache_key = (
+            request.model,
+            request.voice,
+            request.response_format,
+            request.text,
+        )
+        cache = self._speech_cache(request)
+        if cache is not None and cache_key in cache:
+            text_hash = sha256(request.text.encode("utf-8")).hexdigest()[:12]
+            _LOGGER.debug(
+                "Returning cached speech for model=%s voice=%s format=%s text_hash=%s",
+                request.model,
+                request.voice,
+                request.response_format,
+                text_hash,
+            )
+            cache.move_to_end(cache_key)
+            return cache[cache_key]
+
+        guard_key = self._tts_guard_key(request)
+        self._rate_limiter.raise_if_blocked(guard_key)
+        token_estimate = self._check_local_tts_free_tier_limit(request)
+        self._record_local_tts_usage(request, token_estimate)
+        payload = {
+            "model": request.model,
+            "input": request.text,
+            "voice": request.voice,
+            "response_format": request.response_format,
+        }
+        audio = await self._request_audio(
+            "POST",
+            AUDIO_SPEECH_PATH,
+            json_payload=payload,
+            api_key=request.api_key,
+            guard_key=guard_key,
+        )
+        if cache is not None:
+            cache[cache_key] = audio
+            while len(cache) > request.cache_max:
+                cache.popitem(last=False)
+        return audio
+
     def _chat_result(self, payload: dict[str, Any]) -> ChatCompletionResult:
         """Normalize a chat completion response."""
         usage = payload.get("usage")
@@ -676,6 +758,83 @@ class GroqApiClient:
             self._mark_unavailable("Network error calling Groq API")
             raise GroqApiError(f"Network error calling Groq API: {err}") from err
 
+    async def _request_audio(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict[str, Any],
+        api_key: str | None = None,
+        guard_key: str | None = None,
+    ) -> bytes:
+        """Perform an audio request and return audio bytes."""
+        session = self._session or async_get_clientsession(self._hass)
+        self._rate_limiter.raise_if_blocked(guard_key)
+        attempt = 0
+        while True:
+            try:
+                async with session.request(
+                    method,
+                    self._url(path),
+                    json=json_payload,
+                    headers=self._headers(api_key),
+                    timeout=TTS_REQUEST_TIMEOUT,
+                ) as response:
+                    body = await response.read()
+                    content_type = response.headers.get("content-type", "").lower()
+                    self._rate_limiter.update_from_headers(guard_key, response.headers)
+                    if response.status in (401, 403):
+                        raise ConfigEntryAuthFailed(
+                            "Authentication failed for Groq API"
+                        )
+                    if response.status == 429:
+                        payload = self._try_decode_json(body)
+                        GroqRateLimiter.raise_for_headers(
+                            response.headers,
+                            payload if isinstance(payload, dict) else None,
+                        )
+                    if response.status < 200 or response.status >= 300:
+                        payload = self._try_decode_json(body) or {}
+                        self._handle_http_unavailable(response.status, payload)
+                        self._create_model_access_issue(
+                            response.status, payload, json_payload
+                        )
+                        raise self._api_error(response.status, payload)
+
+                    if content_type.startswith("application/json"):
+                        payload = self._try_decode_json(body)
+                        if isinstance(payload, dict) and "error" in payload:
+                            raise self._api_error(response.status, payload)
+                        raise GroqResponseError(
+                            "Groq API returned JSON but no audio content"
+                        )
+                    if not (
+                        content_type.startswith("audio/")
+                        or content_type.startswith("application/octet-stream")
+                    ):
+                        raise GroqResponseError(
+                            f"Unexpected content-type from Groq API: {content_type}"
+                        )
+                    self._mark_available()
+                    return body
+            except CancelledError:
+                raise
+            except (GroqApiError, ConfigEntryAuthFailed):
+                raise
+            except (aiohttp.ClientError, TimeoutError) as err:
+                if attempt < AUDIO_REQUEST_RETRIES:
+                    attempt += 1
+                    await asyncio.sleep(AUDIO_RETRY_DELAY_SECONDS)
+                    _LOGGER.debug("Retrying audio HTTP call (attempt %d)", attempt + 1)
+                    continue
+                reason = (
+                    "Timed out calling Groq API"
+                    if isinstance(err, TimeoutError)
+                    else "Network error calling Groq API"
+                )
+                self._mark_unavailable(reason)
+                raise GroqApiError(f"{reason}: {err}") from err
+
     def _handle_http_unavailable(
         self,
         status: int,
@@ -726,7 +885,7 @@ class GroqApiClient:
     ) -> dict[str, str]:
         """Return request headers, optionally overriding the entry API key."""
         headers = {
-            "User-Agent": f"homeassistant-groq/{VERSION}",
+            "User-Agent": "homeassistant-groq",
         }
         if content_type:
             headers["Content-Type"] = content_type
@@ -743,6 +902,132 @@ class GroqApiClient:
     def _guard_key(request: TextGenerationRequest) -> str | None:
         """Return the per-service guard key for a request when protection is enabled."""
         return request.service_id if request.protect_free_tier else None
+
+    def _speech_cache(
+        self,
+        request: SpeechRequest,
+    ) -> OrderedDict[tuple[str, str, str, str], bytes] | None:
+        """Return the per-service speech cache, if caching is enabled."""
+        if request.cache_max <= 0:
+            return None
+        namespace = request.service_id or f"{request.model}:{request.voice}"
+        return self._speech_caches.setdefault(namespace, OrderedDict())
+
+    @staticmethod
+    def _estimate_tts_token_usage(text: str) -> int:
+        """Return a conservative local estimate for Groq TTS text usage."""
+        return max(1, len(text))
+
+    @staticmethod
+    def _free_tier_limits(model: str) -> dict[str, int] | None:
+        """Return known free-tier limits for a TTS model."""
+        return GROQ_FREE_TIER_LIMITS.get(model)
+
+    @staticmethod
+    def _tts_guard_key(request: SpeechRequest) -> str | None:
+        """Return the per-service guard key for TTS rate-limit protection."""
+        if not request.protect_free_tier:
+            return None
+        return request.service_id or f"tts:{request.model}:{request.voice}"
+
+    def _tts_usage_state(self, request: SpeechRequest) -> _TTSUsageState:
+        """Return local TTS usage state for a protected service/model."""
+        key = self._tts_guard_key(request) or f"tts:{request.model}:{request.voice}"
+        return self._tts_usage.setdefault(key, _TTSUsageState())
+
+    def _prune_local_tts_usage(self, state: _TTSUsageState, now: float) -> None:
+        """Drop local TTS usage records outside active rolling windows."""
+        oldest_daily = now - RATE_LIMIT_DAY_SECONDS
+        while state.request_timestamps and state.request_timestamps[0] <= oldest_daily:
+            state.request_timestamps.popleft()
+        while state.token_timestamps and state.token_timestamps[0][0] <= oldest_daily:
+            _timestamp, tokens = state.token_timestamps.popleft()
+            state.daily_token_total = max(0, state.daily_token_total - tokens)
+
+        oldest_minute = now - RATE_LIMIT_WINDOW_SECONDS
+        while (
+            state.minute_request_timestamps
+            and state.minute_request_timestamps[0] <= oldest_minute
+        ):
+            state.minute_request_timestamps.popleft()
+        while (
+            state.minute_token_timestamps
+            and state.minute_token_timestamps[0][0] <= oldest_minute
+        ):
+            _timestamp, tokens = state.minute_token_timestamps.popleft()
+            state.minute_token_total = max(0, state.minute_token_total - tokens)
+
+    def _check_local_tts_free_tier_limit(
+        self,
+        request: SpeechRequest,
+        *,
+        now: float | None = None,
+    ) -> int:
+        """Raise before sending a TTS request that exceeds known free-tier limits."""
+        token_estimate = self._estimate_tts_token_usage(request.text)
+        if not request.protect_free_tier:
+            return token_estimate
+        limits = self._free_tier_limits(request.model)
+        if limits is None:
+            return token_estimate
+
+        now = now if now is not None else asyncio.get_running_loop().time()
+        state = self._tts_usage_state(request)
+        self._prune_local_tts_usage(state, now)
+        minute_requests = len(state.minute_request_timestamps)
+        daily_requests = len(state.request_timestamps)
+        if minute_requests >= limits["requests_per_minute"]:
+            raise GroqApiError(
+                "Groq free tier guard blocked this TTS request before sending it: "
+                f"local usage reached {limits['requests_per_minute']} requests per minute.",
+                status=429,
+                error_type="rate_limit_exceeded",
+            )
+        if daily_requests >= limits["requests_per_day"]:
+            raise GroqApiError(
+                "Groq free tier guard blocked this TTS request before sending it: "
+                f"local usage reached {limits['requests_per_day']} requests per day.",
+                status=429,
+                error_type="rate_limit_exceeded",
+            )
+        if state.minute_token_total + token_estimate > limits["tokens_per_minute"]:
+            raise GroqApiError(
+                "Groq free tier guard blocked this TTS request before sending it: "
+                f"estimated text usage would exceed {limits['tokens_per_minute']} tokens per minute.",
+                status=429,
+                error_type="rate_limit_exceeded",
+            )
+        if state.daily_token_total + token_estimate > limits["tokens_per_day"]:
+            raise GroqApiError(
+                "Groq free tier guard blocked this TTS request before sending it: "
+                f"estimated text usage would exceed {limits['tokens_per_day']} tokens per day.",
+                status=429,
+                error_type="rate_limit_exceeded",
+            )
+        return token_estimate
+
+    def _record_local_tts_usage(
+        self,
+        request: SpeechRequest,
+        token_estimate: int,
+        *,
+        now: float | None = None,
+    ) -> None:
+        """Record an uncached TTS API attempt for local free-tier accounting."""
+        if (
+            not request.protect_free_tier
+            or self._free_tier_limits(request.model) is None
+        ):
+            return
+        now = now if now is not None else asyncio.get_running_loop().time()
+        state = self._tts_usage_state(request)
+        state.request_timestamps.append(now)
+        state.token_timestamps.append((now, token_estimate))
+        state.minute_request_timestamps.append(now)
+        state.minute_token_timestamps.append((now, token_estimate))
+        state.daily_token_total += token_estimate
+        state.minute_token_total += token_estimate
+        self._prune_local_tts_usage(state, now)
 
     @staticmethod
     def _decode_json(body: bytes) -> dict[str, Any] | list[Any]:

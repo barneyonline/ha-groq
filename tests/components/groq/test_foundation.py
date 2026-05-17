@@ -63,6 +63,7 @@ from custom_components.groq.model_registry import (
     GroqCapability,
     GroqModelRegistry,
     infer_capabilities,
+    model_from_api,
 )
 from custom_components.groq.prompt_cache import GroqPromptCache
 from custom_components.groq.runtime import build_runtime
@@ -923,6 +924,14 @@ def test_model_registry_infers_capabilities():
     assert GroqCapability.VISION in infer_capabilities(
         "meta-llama/llama-4-scout-17b-16e-instruct"
     )
+    assert GroqCapability.TEXT_TO_SPEECH in infer_capabilities(
+        "canopylabs/orpheus-custom"
+    )
+    assert infer_capabilities("playai-tts") == frozenset()
+    assert not GroqModelRegistry(
+        [model_from_api({"id": "playai-tts"})],
+        include_built_ins=False,
+    ).models_for_feature(GroqFeature.TEXT_GENERATION)
     assert GroqModelRegistry().supports(
         "llama-3.1-8b-instant", GroqFeature.TEXT_GENERATION
     )

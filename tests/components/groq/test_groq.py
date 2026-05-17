@@ -2,14 +2,14 @@ import asyncio
 import logging
 import pytest
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import aiohttp
-from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
-from custom_components.groq import config_flow, tts_engine
+from custom_components.groq import api, config_flow
+from custom_components.groq.api import GroqApiClient, SpeechRequest
 from custom_components.groq.const import normalize_enabled_features
-from custom_components.groq.tts_engine import GroqRateLimitError, GroqTTSEngine
+from custom_components.groq.errors import GroqApiError, GroqRateLimitExceeded
 from custom_components.groq.tts import GroqTTSEntity
 
 validate_user_input = config_flow.validate_user_input
@@ -61,7 +61,7 @@ def test_normalize_enabled_features_defaults_and_preserves_explicit_empty():
 
 
 class DummySession:
-    def post(self, *args, **kwargs):
+    def request(self, *args, **kwargs):
         raise aiohttp.ClientError("boom")
 
 
@@ -77,7 +77,7 @@ class DummyTimeoutSession:
     def __init__(self):
         self.calls = []
 
-    def post(self, *args, **kwargs):
+    def request(self, *args, **kwargs):
         self.calls.append({"args": args, "kwargs": kwargs})
         return DummyTimeoutResponse()
 
@@ -154,79 +154,6 @@ def test_api_clientsession_helper_loads_on_direct_use(monkeypatch):
     assert calls == ["load"]
 
 
-@pytest.mark.asyncio
-async def test_tts_clientsession_helper_preloads_with_executor(monkeypatch):
-    calls = []
-
-    def factory(hass):
-        return ("tts-session", hass)
-
-    def load_factory():
-        calls.append("load")
-        return factory
-
-    async def async_add_executor_job(func, *args):
-        calls.append("executor")
-        return func(*args)
-
-    monkeypatch.setattr(tts_engine, "_CLIENTSESSION_FACTORY", None)
-    monkeypatch.setattr(tts_engine, "_load_clientsession_factory", load_factory)
-
-    hass = SimpleNamespace(async_add_executor_job=async_add_executor_job)
-    await tts_engine.async_preload_clientsession_helper(hass)
-
-    assert tts_engine.async_get_clientsession("hass") == ("tts-session", "hass")
-    assert calls == ["executor", "load"]
-
-
-def test_tts_clientsession_helper_loads_on_direct_use(monkeypatch):
-    calls = []
-
-    def factory(hass):
-        return ("tts-session", hass)
-
-    def load_factory():
-        calls.append("load")
-        return factory
-
-    monkeypatch.setattr(tts_engine, "_CLIENTSESSION_FACTORY", None)
-    monkeypatch.setattr(tts_engine, "_load_clientsession_factory", load_factory)
-
-    assert tts_engine.async_get_clientsession("hass") == ("tts-session", "hass")
-    assert calls == ["load"]
-
-
-@pytest.mark.asyncio
-async def test_async_get_tts_network_error():
-    engine = GroqTTSEngine(None, "voice", "model", "http://example.com")
-
-    with patch.object(
-        tts_engine, "async_get_clientsession", return_value=DummySession()
-    ):
-        with pytest.raises(HomeAssistantError):
-            await engine.async_get_tts(DummyHass(), "hi")
-
-
-@pytest.mark.asyncio
-async def test_async_get_tts_timeout_is_not_logged_as_unknown(caplog, monkeypatch):
-    engine = GroqTTSEngine(None, "voice", "model", "http://example.com")
-    session = DummyTimeoutSession()
-
-    async def no_sleep(_delay):
-        return None
-
-    monkeypatch.setattr(tts_engine.asyncio, "sleep", no_sleep)
-    with patch.object(tts_engine, "async_get_clientsession", return_value=session):
-        with caplog.at_level(logging.DEBUG):
-            with pytest.raises(HomeAssistantError, match="Timed out"):
-                await engine.async_get_tts(DummyHass(), "hi")
-
-    assert len(session.calls) == 2
-    assert "Timed out calling Groq TTS API" in caplog.text
-    assert "Unknown error in async_get_tts" not in caplog.text
-    assert engine.available is False
-
-
 class DummyResponse:
     def __init__(self, status: int, headers: dict, body: bytes):
         self.status = status
@@ -244,44 +171,42 @@ class DummyResponse:
 
 
 class DummyOkJsonSession:
-    def post(self, *args, **kwargs):
+    def request(self, *args, **kwargs):
         headers = {"content-type": "application/json"}
         body = b'{"ok": true}'
         return DummyResponse(200, headers, body)
 
 
 @pytest.mark.asyncio
-async def test_async_get_tts_non_audio_2xx():
-    engine = GroqTTSEngine(None, "voice", "model", "http://example.com")
-    with patch.object(
-        tts_engine, "async_get_clientsession", return_value=DummyOkJsonSession()
-    ):
-        with pytest.raises(HomeAssistantError):
-            await engine.async_get_tts(DummyHass(), "hello")
+async def test_synthesize_speech_non_audio_2xx():
+    client = GroqApiClient(DummyHass(), api_key=None, session=DummyOkJsonSession())
+    with pytest.raises(GroqApiError):
+        await client.async_synthesize_speech(
+            SpeechRequest(text="hello", model="model", voice="voice")
+        )
 
 
 class Dummy401Session:
-    def post(self, *args, **kwargs):
+    def request(self, *args, **kwargs):
         headers = {"content-type": "text/plain"}
         body = b"unauthorized"
         return DummyResponse(401, headers, body)
 
 
 @pytest.mark.asyncio
-async def test_async_get_tts_raises_config_entry_auth_failed_on_401():
-    engine = GroqTTSEngine(None, "voice", "model", "http://example.com")
-    with patch.object(
-        tts_engine, "async_get_clientsession", return_value=Dummy401Session()
-    ):
-        with pytest.raises(ConfigEntryAuthFailed):
-            await engine.async_get_tts(DummyHass(), "hello")
+async def test_synthesize_speech_raises_config_entry_auth_failed_on_401():
+    client = GroqApiClient(DummyHass(), api_key=None, session=Dummy401Session())
+    with pytest.raises(ConfigEntryAuthFailed):
+        await client.async_synthesize_speech(
+            SpeechRequest(text="hello", model="model", voice="voice")
+        )
 
 
 class Dummy429Session:
     def __init__(self):
         self.calls = 0
 
-    def post(self, *args, **kwargs):
+    def request(self, *args, **kwargs):
         self.calls += 1
         headers = {
             "content-type": "application/json",
@@ -295,17 +220,17 @@ class Dummy429Session:
 
 
 @pytest.mark.asyncio
-async def test_async_get_tts_raises_rate_limit_error_on_429():
+async def test_synthesize_speech_raises_rate_limit_error_on_429():
     session = Dummy429Session()
-    engine = GroqTTSEngine(
-        None,
-        ORPHEUS_ENGLISH_VOICE,
-        ORPHEUS_ENGLISH_MODEL,
-        "http://example.com",
-    )
-    with patch.object(tts_engine, "async_get_clientsession", return_value=session):
-        with pytest.raises(GroqRateLimitError, match="retry after 12 seconds"):
-            await engine.async_get_tts(DummyHass(), "hello")
+    client = GroqApiClient(DummyHass(), api_key=None, session=session)
+    with pytest.raises(GroqRateLimitExceeded, match="retry after 12 seconds"):
+        await client.async_synthesize_speech(
+            SpeechRequest(
+                text="hello",
+                model="custom-tts",
+                voice=ORPHEUS_ENGLISH_VOICE,
+            )
+        )
 
     assert session.calls == 1
 
@@ -314,30 +239,107 @@ class DummyCaptureSession:
     def __init__(self):
         self.calls = []
 
-    def post(self, *args, **kwargs):
+    def request(self, *args, **kwargs):
         self.calls.append({"args": args, "kwargs": kwargs})
         headers = {"content-type": "audio/wav"}
         body = b"RIFF....WAVEfmt "
         return DummyResponse(200, headers, body)
 
 
+class DummyFlakyAudioSession:
+    def __init__(self):
+        self.calls = []
+
+    def request(self, *args, **kwargs):
+        self.calls.append({"args": args, "kwargs": kwargs})
+        if len(self.calls) == 1:
+            raise aiohttp.ClientError("temporary network error")
+        headers = {"content-type": "audio/wav"}
+        body = b"RIFF....WAVEfmt "
+        return DummyResponse(200, headers, body)
+
+
+class DummyFailingAudioSession:
+    def __init__(self, error: BaseException):
+        self.error = error
+        self.calls = []
+
+    def request(self, *args, **kwargs):
+        self.calls.append({"args": args, "kwargs": kwargs})
+        raise self.error
+
+
 @pytest.mark.asyncio
-async def test_async_get_tts_posts_orpheus_wav_payload():
-    session = DummyCaptureSession()
-    engine = GroqTTSEngine(
-        "api-key",
-        ORPHEUS_ENGLISH_VOICE,
-        ORPHEUS_ENGLISH_MODEL,
-        "https://api.groq.com/openai/v1/audio/speech",
+async def test_synthesize_speech_retries_transient_audio_network_error(monkeypatch):
+    session = DummyFlakyAudioSession()
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+
+    async def no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(api.asyncio, "sleep", no_sleep)
+
+    response = await client.async_synthesize_speech(
+        SpeechRequest(
+            text="hello",
+            model=ORPHEUS_ENGLISH_MODEL,
+            voice=ORPHEUS_ENGLISH_VOICE,
+        )
     )
 
-    with patch.object(tts_engine, "async_get_clientsession", return_value=session):
-        response = await engine.async_get_tts(DummyHass(), "hello")
+    assert response == b"RIFF....WAVEfmt "
+    assert len(session.calls) == 2
+    assert client.available is True
 
-    assert response.content == b"RIFF....WAVEfmt "
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "message"),
+    [
+        (aiohttp.ClientError("network down"), "Network error calling Groq API"),
+        (TimeoutError("slow"), "Timed out calling Groq API"),
+    ],
+)
+async def test_synthesize_speech_final_audio_network_error_marks_unavailable(
+    monkeypatch, error, message
+):
+    session = DummyFailingAudioSession(error)
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+
+    async def no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(api.asyncio, "sleep", no_sleep)
+
+    with pytest.raises(GroqApiError, match=message):
+        await client.async_synthesize_speech(
+            SpeechRequest(
+                text="hello",
+                model=ORPHEUS_ENGLISH_MODEL,
+                voice=ORPHEUS_ENGLISH_VOICE,
+            )
+        )
+
+    assert len(session.calls) == 2
+    assert client.available is False
+
+
+@pytest.mark.asyncio
+async def test_synthesize_speech_posts_orpheus_wav_payload():
+    session = DummyCaptureSession()
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+
+    response = await client.async_synthesize_speech(
+        SpeechRequest(
+            text="hello",
+            model=ORPHEUS_ENGLISH_MODEL,
+            voice=ORPHEUS_ENGLISH_VOICE,
+        )
+    )
+    assert response == b"RIFF....WAVEfmt "
     assert len(session.calls) == 1
     call = session.calls[0]
-    assert call["args"] == ("https://api.groq.com/openai/v1/audio/speech",)
+    assert call["args"] == ("POST", "https://api.groq.com/openai/v1/audio/speech")
     assert call["kwargs"]["json"] == {
         "model": ORPHEUS_ENGLISH_MODEL,
         "input": "hello",
@@ -348,23 +350,18 @@ async def test_async_get_tts_posts_orpheus_wav_payload():
 
 
 @pytest.mark.asyncio
-async def test_async_get_tts_accepts_model_voice_and_response_format_overrides():
+async def test_synthesize_speech_accepts_model_voice_and_response_format():
     session = DummyCaptureSession()
-    engine = GroqTTSEngine(
-        "api-key",
-        "default-voice",
-        "default-model",
-        "https://api.groq.com/openai/v1/audio/speech",
-    )
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
 
-    with patch.object(tts_engine, "async_get_clientsession", return_value=session):
-        await engine.async_get_tts(
-            DummyHass(),
-            "hello",
-            voice=ORPHEUS_ENGLISH_VOICE,
+    await client.async_synthesize_speech(
+        SpeechRequest(
+            text="hello",
             model=ORPHEUS_ENGLISH_MODEL,
+            voice=ORPHEUS_ENGLISH_VOICE,
             response_format="wav",
         )
+    )
 
     assert session.calls[0]["kwargs"]["json"] == {
         "model": ORPHEUS_ENGLISH_MODEL,
@@ -375,108 +372,145 @@ async def test_async_get_tts_accepts_model_voice_and_response_format_overrides()
 
 
 @pytest.mark.asyncio
-async def test_async_get_tts_local_free_tier_guard_blocks_eleventh_minute_request():
+async def test_synthesize_speech_local_free_tier_guard_blocks_eleventh_request():
     session = DummyCaptureSession()
-    engine = GroqTTSEngine(
-        "api-key",
-        ORPHEUS_ENGLISH_VOICE,
-        ORPHEUS_ENGLISH_MODEL,
-        "https://api.groq.com/openai/v1/audio/speech",
-    )
-
-    with patch.object(tts_engine, "async_get_clientsession", return_value=session):
-        for index in range(10):
-            await engine.async_get_tts(DummyHass(), f"hello {index}")
-        with pytest.raises(GroqRateLimitError, match="requests per minute"):
-            await engine.async_get_tts(DummyHass(), "hello blocked")
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+    for index in range(10):
+        await client.async_synthesize_speech(
+            SpeechRequest(
+                text=f"hello {index}",
+                model=ORPHEUS_ENGLISH_MODEL,
+                voice=ORPHEUS_ENGLISH_VOICE,
+            )
+        )
+    with pytest.raises(GroqApiError, match="requests per minute"):
+        await client.async_synthesize_speech(
+            SpeechRequest(
+                text="hello blocked",
+                model=ORPHEUS_ENGLISH_MODEL,
+                voice=ORPHEUS_ENGLISH_VOICE,
+            )
+        )
 
     assert len(session.calls) == 10
 
 
 @pytest.mark.asyncio
-async def test_async_get_tts_free_tier_guard_ignores_cache_hits():
+async def test_synthesize_speech_free_tier_guard_ignores_cache_hits():
     session = DummyCaptureSession()
-    engine = GroqTTSEngine(
-        "api-key",
-        ORPHEUS_ENGLISH_VOICE,
-        ORPHEUS_ENGLISH_MODEL,
-        "https://api.groq.com/openai/v1/audio/speech",
-    )
-
-    with patch.object(tts_engine, "async_get_clientsession", return_value=session):
-        for _ in range(20):
-            await engine.async_get_tts(DummyHass(), "same message")
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+    for _ in range(20):
+        await client.async_synthesize_speech(
+            SpeechRequest(
+                text="same message",
+                model=ORPHEUS_ENGLISH_MODEL,
+                voice=ORPHEUS_ENGLISH_VOICE,
+            )
+        )
 
     assert len(session.calls) == 1
 
 
 @pytest.mark.asyncio
-async def test_async_get_tts_cache_hit_log_redacts_text(caplog):
+async def test_synthesize_speech_cache_can_be_disabled():
     session = DummyCaptureSession()
-    engine = GroqTTSEngine(
-        "api-key",
-        ORPHEUS_ENGLISH_VOICE,
-        ORPHEUS_ENGLISH_MODEL,
-        "https://api.groq.com/openai/v1/audio/speech",
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+    request = SpeechRequest(
+        text="same message",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
+        cache_max=0,
     )
 
-    with patch.object(tts_engine, "async_get_clientsession", return_value=session):
-        await engine.async_get_tts(DummyHass(), "private spoken message")
-        with caplog.at_level(logging.DEBUG, logger="custom_components.groq.tts_engine"):
-            await engine.async_get_tts(DummyHass(), "private spoken message")
+    await client.async_synthesize_speech(request)
+    await client.async_synthesize_speech(request)
+
+    assert len(session.calls) == 2
+    assert client._speech_caches == {}
+
+
+@pytest.mark.asyncio
+async def test_synthesize_speech_header_guard_does_not_record_local_usage():
+    session = DummyCaptureSession()
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+    client._rate_limiter.update_from_headers("tts-service", {"retry-after": "60"})
+
+    with pytest.raises(GroqRateLimitExceeded, match="retry after"):
+        await client.async_synthesize_speech(
+            SpeechRequest(
+                text="blocked before send",
+                model=ORPHEUS_ENGLISH_MODEL,
+                voice=ORPHEUS_ENGLISH_VOICE,
+                service_id="tts-service",
+            )
+        )
+
+    assert session.calls == []
+    assert client._tts_usage == {}
+
+
+@pytest.mark.asyncio
+async def test_synthesize_speech_cache_hit_log_redacts_text(caplog):
+    session = DummyCaptureSession()
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+    request = SpeechRequest(
+        text="private spoken message",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
+    )
+    await client.async_synthesize_speech(request)
+    with caplog.at_level(logging.DEBUG, logger="custom_components.groq.api"):
+        await client.async_synthesize_speech(request)
 
     assert "private spoken message" not in caplog.text
     assert "text_hash=" in caplog.text
 
 
 def test_local_free_tier_guard_can_be_disabled():
-    engine = GroqTTSEngine(
-        "api-key",
-        ORPHEUS_ENGLISH_VOICE,
-        ORPHEUS_ENGLISH_MODEL,
-        "https://api.groq.com/openai/v1/audio/speech",
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    request = SpeechRequest(
+        text="hello",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
         protect_free_tier=False,
     )
-
-    for _ in range(20):
-        engine._record_local_usage(200, now=1)
-
-    assert engine._check_local_free_tier_limit("hello", now=1) == 5
+    assert client._check_local_tts_free_tier_limit(request, now=1) == 5
 
 
 def test_tts_local_usage_counters_prune_minute_and_day_windows():
-    engine = GroqTTSEngine(
-        "api-key",
-        ORPHEUS_ENGLISH_VOICE,
-        ORPHEUS_ENGLISH_MODEL,
-        "https://api.groq.com/openai/v1/audio/speech",
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    request = SpeechRequest(
+        text="hello",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
     )
+    state = client._tts_usage_state(request)
 
-    engine._record_local_usage(3, now=100.0)
-    engine._record_local_usage(5, now=150.0)
+    client._record_local_tts_usage(request, 3, now=100.0)
+    client._record_local_tts_usage(request, 5, now=150.0)
 
-    assert engine._local_usage(150.0) == (2, 2, 8, 8)
-    assert engine._local_usage(161.0) == (1, 2, 5, 8)
-    assert list(engine._minute_request_timestamps) == [150.0]
-    assert list(engine._minute_token_timestamps) == [(150.0, 5)]
+    client._prune_local_tts_usage(state, 161.0)
+    assert len(state.minute_request_timestamps) == 1
+    assert list(state.minute_request_timestamps) == [150.0]
+    assert list(state.minute_token_timestamps) == [(150.0, 5)]
 
-    after_daily_window = 150.0 + tts_engine.RATE_LIMIT_DAY_SECONDS + 1
-    assert engine._local_usage(after_daily_window) == (0, 0, 0, 0)
-    assert engine._daily_token_total == 0
-    assert engine._minute_token_total == 0
+    after_daily_window = 150.0 + api.RATE_LIMIT_DAY_SECONDS + 1
+    client._prune_local_tts_usage(state, after_daily_window)
+    assert state.daily_token_total == 0
+    assert state.minute_token_total == 0
 
 
 def test_tts_local_usage_counters_drive_token_limit_checks(monkeypatch):
-    engine = GroqTTSEngine(
-        "api-key",
-        ORPHEUS_ENGLISH_VOICE,
-        ORPHEUS_ENGLISH_MODEL,
-        "https://api.groq.com/openai/v1/audio/speech",
+    client = GroqApiClient(DummyHass(), api_key="api-key")
+    request = SpeechRequest(
+        text="hi",
+        model=ORPHEUS_ENGLISH_MODEL,
+        voice=ORPHEUS_ENGLISH_VOICE,
     )
     monkeypatch.setattr(
-        engine,
+        client,
         "_free_tier_limits",
-        lambda model=None: {
+        lambda model: {
             "requests_per_minute": 100,
             "requests_per_day": 100,
             "tokens_per_minute": 10,
@@ -484,24 +518,18 @@ def test_tts_local_usage_counters_drive_token_limit_checks(monkeypatch):
         },
     )
 
-    engine._record_local_usage(7, now=100.0)
-    engine._record_local_usage(2, now=150.0)
+    client._record_local_tts_usage(request, 7, now=100.0)
+    client._record_local_tts_usage(request, 2, now=150.0)
 
-    with pytest.raises(GroqRateLimitError, match="tokens per minute"):
-        engine._check_local_free_tier_limit("hi", now=150.0)
+    with pytest.raises(GroqApiError, match="tokens per minute"):
+        client._check_local_tts_free_tier_limit(request, now=150.0)
 
-    assert engine._check_local_free_tier_limit("hi", now=161.0) == 2
+    assert client._check_local_tts_free_tier_limit(request, now=161.0) == 2
 
 
-class DummyEngine:
-    class _Resp:
-        def __init__(self, content: bytes):
-            self.content = content
-
-    async def async_get_tts(
-        self, hass, text, voice=None, model=None, response_format=None
-    ):
-        return self._Resp(b"audio-bytes")
+class DummyClient:
+    async def async_synthesize_speech(self, request):
+        return b"audio-bytes"
 
 
 class DummyConfigEntry:
@@ -519,7 +547,7 @@ async def test_tts_returns_raw_wav_without_processing():
         "voice": ORPHEUS_ENGLISH_VOICE,
         "unique_id": "uid",
     }
-    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyEngine())
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
 
     ext, payload = await entity.async_get_tts_audio("Hello", "en", options=None)
 
@@ -535,7 +563,7 @@ async def test_tts_rejects_orpheus_input_over_200_chars():
         "voice": ORPHEUS_ENGLISH_VOICE,
         "unique_id": "uid",
     }
-    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyEngine())
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
 
     ext, payload = await entity.async_get_tts_audio("x" * 201, "en", options=None)
 
@@ -560,7 +588,7 @@ async def test_tts_ffmpeg_failure_returns_none(monkeypatch):
         "unique_id": "uid",
     }
     options = {"normalize_audio": True}
-    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, options), DummyEngine())
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, options), DummyClient())
 
     async def fake_exec(*args, **kwargs):  # noqa: ANN001, D401
         return DummyProc(returncode=1)
