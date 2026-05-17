@@ -298,9 +298,11 @@ def service_compound_builtin_tools(
         return compound_builtin_tools_request_value(value)
     if not active_registry.supports(model, GroqCapability.COMPOUND):
         return None
-    if (raw_tools := request_body_compound_builtin_tools(
-        entry_value(config_entry, service_data, CONF_REQUEST_BODY_OPTIONS)
-    )) is not None:
+    if (
+        raw_tools := request_body_compound_builtin_tools(
+            entry_value(config_entry, service_data, CONF_REQUEST_BODY_OPTIONS)
+        )
+    ) is not None:
         return raw_tools
     return []
 

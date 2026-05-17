@@ -699,6 +699,13 @@ def test_api_payload_and_extractors_cover_optional_shapes():
     assert build_vision_payload(
         VisionRequest(prompt="p", model="m", image_url="url", system_prompt="s")
     )["messages"][0] == {"role": "system", "content": "s"}
+    assert (
+        api_module._compound_builtin_tools_from_payload(
+            {"compound_custom": {"tools": []}}
+        )
+        is None
+    )
+    assert api_module.compound_builtin_tools_require_latest({"bad": True}) is False
 
     payload = {"choices": [{"message": {"content": [{"text": "a"}, {"text": "b"}]}}]}
     assert extract_chat_text(payload) == "a\nb"
@@ -1506,6 +1513,22 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
         )
         == "unsupported_compound_builtin_tools_model"
     )
+    assert "does not support Compound built-in tools" in (
+        text_generation_module.compound_builtin_tools_error_message(
+            registry,
+            "llama-3.1-8b-instant",
+            ["web_search"],
+        )
+        or ""
+    )
+    assert "does not support Compound built-in tools" in (
+        text_generation_module.request_body_options_error_message(
+            registry,
+            "llama-3.1-8b-instant",
+            {"compound_custom": {"tools": {"enabled_tools": ["web_search"]}}},
+        )
+        or ""
+    )
     assert "unsupported or incompatible Compound built-in tools" in (
         text_generation_module.request_body_options_error_message(
             registry,
@@ -1518,9 +1541,24 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
         )
         or ""
     )
-    assert text_generation_module.request_body_compound_builtin_tools(
-        {"compound_custom": {"tools": {"enabled_tools": [{"bad": True}]}}}
-    ) == []
+    assert (
+        text_generation_module.request_body_compound_builtin_tools(
+            {"compound_custom": {"tools": {"enabled_tools": [{"bad": True}]}}}
+        )
+        == []
+    )
+    assert (
+        text_generation_module.request_body_compound_builtin_tools(
+            {"compound_custom": {"tools": {"enabled_tools": {"bad": True}}}}
+        )
+        == []
+    )
+    assert (
+        text_generation_module.request_body_compound_builtin_tools(
+            {"compound_custom": {"tools": {}}}
+        )
+        is None
+    )
     assert (
         text_generation_module.request_body_options_validation_error(
             registry,
@@ -1734,11 +1772,14 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
     assert text_generation_module.service_stream(entry, service_data) is True
     assert text_generation_module.service_stream(entry, {}) is True
     assert text_generation_module.service_prompt_caching(entry, service_data) is True
-    assert service_compound_builtin_tools(
-        entry,
-        {"model": "groq/compound"},
-        GroqModelRegistry(),
-    ) == []
+    assert (
+        service_compound_builtin_tools(
+            entry,
+            {"model": "groq/compound"},
+            GroqModelRegistry(),
+        )
+        == []
+    )
     assert service_compound_builtin_tools(
         entry,
         {
@@ -1763,6 +1804,14 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
         },
         GroqModelRegistry(),
     ) == ["web_search"]
+    assert service_compound_builtin_tools(
+        entry,
+        {
+            "model": "groq/compound",
+            CONF_COMPOUND_BUILTIN_TOOLS: {"bad": True},
+        },
+        GroqModelRegistry(),
+    ) == [{"bad": True}]
     assert service_compound_builtin_tools(
         entry,
         {
@@ -2486,6 +2535,14 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
     assert _request_options({"include_reasoning": True})["include_reasoning"] is True
     assert _request_options({"model": "groq/compound"})["compound_builtin_tools"] == []
     assert _request_options(
+        {
+            "model": "groq/compound",
+            "request_body_options": {
+                "compound_custom": {"tools": {"enabled_tools": ["web_search"]}}
+            },
+        }
+    )["compound_builtin_tools"] == ["web_search"]
+    assert _request_options(
         {},
         {
             "model": "groq/compound",
@@ -2515,9 +2572,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
         == []
     )
     assert (
-        _request_options({"model": "llama-3.1-8b-instant"})[
-            "compound_builtin_tools"
-        ]
+        _request_options({"model": "llama-3.1-8b-instant"})["compound_builtin_tools"]
         is None
     )
 
@@ -2660,7 +2715,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
                     ATTR_PROMPT: "p",
                 }
             )
-    )
+        )
     runtime.services_by_type["text_generation"][0].pop(CONF_COMPOUND_BUILTIN_TOOLS)
     runtime.services_by_type["text_generation"][0]["model"] = "openai/gpt-oss-20b"
     runtime.services_by_type["text_generation"][0]["structured_outputs"] = True
