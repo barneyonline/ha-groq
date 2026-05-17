@@ -58,7 +58,9 @@
       "required": "Acest câmp este obligatoriu.",
       "unknown": "Eroare neașteptată la validarea cheii API. Vă rugăm să încercați din nou.",
       "unknown_error": "Eroare neașteptată — vă rugăm să încercați din nou.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Format de raționament",
             "include_reasoning": "Includeți raționamentul",
             "prompt_caching": "Cache de răspuns local",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Utilizați ieșiri structurate",
             "schema_name": "Numele schemei",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Modul în care modelele de raționament susținute expun conținutul raționamentului.",
             "include_reasoning": "Solicită conținut de raționament pe modelele acceptate atunci când nu este setat niciun format de raționament.",
             "prompt_caching": "Memorează în cache răspunsurile de serviciu Home Assistant la nivel local pentru modelele acceptate.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Solicită JSON care urmează schema configurată atunci când acest serviciu este utilizat pentru generarea de date.",
             "schema_name": "Un identificator scurt trimis către Groq cu schema.",
             "schema": "JSON Schema obiect trimis ca response_format.json_schema.schema.",

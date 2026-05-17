@@ -37,8 +37,10 @@ from .feature_registry import GroqFeature
 from .model_registry import GroqCapability, GroqModelRegistry
 from .runtime import async_get_runtime
 from .text_generation import (
+    compound_builtin_tools_error_message,
     request_body_options_error_message,
     request_context_window_error,
+    service_compound_builtin_tools,
     service_include_reasoning,
     service_max_tokens,
     service_model,
@@ -270,6 +272,11 @@ class GroqAITaskEntity(AITaskEntity):
             include_reasoning=service_include_reasoning(
                 self._config_entry, self._service_data
             ),
+            compound_builtin_tools=service_compound_builtin_tools(
+                self._config_entry,
+                self._service_data,
+                self._model_registry,
+            ),
             extra_body=service_request_body_options(
                 self._config_entry,
                 self._service_data,
@@ -308,6 +315,7 @@ class GroqAITaskEntity(AITaskEntity):
             reasoning_effort=text_request.reasoning_effort,
             reasoning_format=text_request.reasoning_format,
             include_reasoning=text_request.include_reasoning,
+            compound_builtin_tools=text_request.compound_builtin_tools,
             extra_body=text_request.extra_body,
             service_id=text_request.service_id,
             protect_free_tier=text_request.protect_free_tier,
@@ -342,6 +350,12 @@ class GroqAITaskEntity(AITaskEntity):
 
     def _raise_request_errors(self, request: TextGenerationRequest) -> None:
         """Raise Home Assistant errors for invalid Groq request options."""
+        if error := compound_builtin_tools_error_message(
+            self._model_registry,
+            request.model,
+            request.compound_builtin_tools,
+        ):
+            raise HomeAssistantError(error)
         if error := request_body_options_error_message(
             self._model_registry,
             request.model,

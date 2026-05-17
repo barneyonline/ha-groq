@@ -58,7 +58,9 @@
       "select_voice_for_model": "Select a voice for the selected model.",
       "required": "This field is required.",
       "unknown": "Unexpected error validating the API key. Please try again.",
-      "unknown_error": "Unexpected error — please try again."
+      "unknown_error": "Unexpected error — please try again.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Reasoning format",
             "include_reasoning": "Include reasoning",
             "prompt_caching": "Local response cache",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Use structured outputs",
             "schema_name": "Schema name",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "How supported reasoning models expose reasoning content.",
             "include_reasoning": "Requests reasoning content on supported models when no reasoning format is set.",
             "prompt_caching": "Caches matching Home Assistant service responses locally for supported models.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Requests JSON that follows the configured schema when this service is used for data generation.",
             "schema_name": "A short identifier sent to Groq with the schema.",
             "schema": "JSON Schema object sent as response_format.json_schema.schema.",

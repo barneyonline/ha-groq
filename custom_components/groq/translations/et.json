@@ -58,7 +58,9 @@
       "required": "See väli on kohustuslik.",
       "unknown": "Ootamatu tõrge võtme API valideerimisel. Palun proovi uuesti.",
       "unknown_error": "Ootamatu viga – proovige uuesti.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Põhjendusvorm",
             "include_reasoning": "Kaasake arutluskäik",
             "prompt_caching": "Kohalik vastuste vahemälu",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Kasutage struktureeritud väljundeid",
             "schema_name": "Skeemi nimi",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Kuidas toetatud arutlusmudelid arutlussisu paljastavad.",
             "include_reasoning": "Nõuab põhjendatud sisu toetatud mudelitel, kui arutlusvormingut pole määratud.",
             "prompt_caching": "Vahemälu, mis vastavad Home Assistant teenuse vastustele toetatud mudelite jaoks kohapeal.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Nõuab JSON, mis järgib konfigureeritud skeemi, kui seda teenust kasutatakse andmete genereerimiseks.",
             "schema_name": "Lühike identifikaator, mis saadeti numbrile Groq koos skeemiga.",
             "schema": "JSON Schema objekt saadeti kui response_format.json_schema.schema.",

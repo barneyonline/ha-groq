@@ -58,7 +58,9 @@
       "required": "Dette felt er påkrævet.",
       "unknown": "Uventet fejl under validering af API-nøglen. Prøv venligst igen.",
       "unknown_error": "Uventet fejl — prøv venligst igen.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Begrundelsesformat",
             "include_reasoning": "Inkluder ræsonnement",
             "prompt_caching": "Lokal svarcache",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Brug strukturerede output",
             "schema_name": "Skemanavn",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Hvordan understøttede ræsonnementmodeller afslører ræsonnementindhold.",
             "include_reasoning": "Anmoder om begrundelsesindhold på understøttede modeller, når der ikke er indstillet et begrundelsesformat.",
             "prompt_caching": "Caches, der matcher Home Assistant-servicesvar lokalt for understøttede modeller.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Anmoder om JSON, der følger det konfigurerede skema, når denne service bruges til datagenerering.",
             "schema_name": "En kort identifikator sendt til Groq med skemaet.",
             "schema": "JSON Schema objekt sendt som response_format.json_schema.schema.",

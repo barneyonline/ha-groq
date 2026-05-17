@@ -58,7 +58,9 @@
       "required": "Ezt a mezőt kötelező kitölteni.",
       "unknown": "Váratlan hiba a API kulcs érvényesítésekor. Kérjük, próbálja újra.",
       "unknown_error": "Váratlan hiba – kérjük, próbálja újra.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Indoklás formátuma",
             "include_reasoning": "Tartalmazza az érvelést",
             "prompt_caching": "Helyi válaszgyorsítótár",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Strukturált kimenetek használata",
             "schema_name": "Sémanév",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Hogyan mutatják be a támogatott érvelési modellek érvelési tartalmat.",
             "include_reasoning": "Indoklási tartalmat kér a támogatott modelleken, ha nincs beállítva érvelési formátum.",
             "prompt_caching": "Gyorsítótárak a Home Assistant szolgáltatás válaszainak helyileg a támogatott modellekhez.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "JSON kódot kér, amely követi a konfigurált sémát, amikor ezt a szolgáltatást adatgenerálásra használják.",
             "schema_name": "A sémával együtt a Groq számára elküldött rövid azonosító.",
             "schema": "JSON Schema objektum elküldve response_format.json_schema.sémaként.",

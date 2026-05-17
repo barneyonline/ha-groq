@@ -83,7 +83,9 @@ After adding an account, open the Groq integration page and add one or more serv
 - Text-to-Speech: name, model, voice, optional vocal directions, optional audio normalization, and free-tier protection.
 - Image Recognition: name, model, system prompt, and free-tier protection.
 
-Advanced Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, structured output schema, strict schema mode, and additional Groq request body options.
+Advanced Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, Compound built-in tool allow-lists, structured output schema, strict schema mode, and additional Groq request body options.
+
+Compound built-in tools are opt-in. For `groq/compound` and `groq/compound-mini`, the integration sends an explicit empty built-in tool allow-list unless you enable tools such as web search, visit website, browser automation, code execution, or Wolfram Alpha in the service's advanced options. Enabling these tools allows Groq to run server-side tools and inspect external content for the request.
 
 You can add more than one Groq account. The integration prevents adding the same API key twice.
 

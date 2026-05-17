@@ -58,7 +58,9 @@
       "required": "Questo campo è obbligatorio.",
       "unknown": "Errore imprevisto durante la convalida della chiave API. Per favore riprova.",
       "unknown_error": "Errore imprevisto: riprova.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Formato del ragionamento",
             "include_reasoning": "Includere il ragionamento",
             "prompt_caching": "Cache di risposta locale",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Utilizzare risultati strutturati",
             "schema_name": "Nome dello schema",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "In che modo i modelli di ragionamento supportati espongono il contenuto del ragionamento.",
             "include_reasoning": "Richiede il contenuto del ragionamento sui modelli supportati quando non è impostato alcun formato di ragionamento.",
             "prompt_caching": "Memorizza nella cache localmente le risposte del servizio Home Assistant corrispondenti per i modelli supportati.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Richiede JSON che segue lo schema configurato quando questo servizio viene utilizzato per la generazione dei dati.",
             "schema_name": "Un identificatore breve inviato a Groq con lo schema.",
             "schema": "Oggetto JSON Schema inviato come response_format.json_schema.schema.",

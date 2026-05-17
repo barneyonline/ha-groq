@@ -28,7 +28,9 @@ from .feature_registry import GroqFeature
 from .model_registry import GroqCapability, GroqModelRegistry
 from .runtime import async_get_runtime
 from .text_generation import (
+    compound_builtin_tools_error_message,
     request_body_options_error_message,
+    service_compound_builtin_tools,
     service_include_reasoning,
     service_max_tokens,
     service_model,
@@ -557,6 +559,12 @@ class GroqConversationEntity(ConversationEntity):
                 request.extra_body,
             ):
                 raise HomeAssistantError(error)
+            if error := compound_builtin_tools_error_message(
+                self._model_registry,
+                request.model,
+                request.compound_builtin_tools,
+            ):
+                raise HomeAssistantError(error)
             if error := request_context_window_error(self._model_registry, request):
                 raise HomeAssistantError(error)
             if use_streaming:
@@ -632,6 +640,11 @@ class GroqConversationEntity(ConversationEntity):
             ),
             include_reasoning=service_include_reasoning(
                 self._config_entry, self._service_data
+            ),
+            compound_builtin_tools=service_compound_builtin_tools(
+                self._config_entry,
+                self._service_data,
+                self._model_registry,
             ),
             extra_body=service_request_body_options(
                 self._config_entry,

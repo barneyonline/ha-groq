@@ -58,7 +58,9 @@
       "select_voice_for_model": "Vyberte hlas pro vybraný model.",
       "required": "Toto pole je povinné.",
       "unknown": "Neočekávaná chyba při ověřování klíče API. Zkuste to znovu.",
-      "unknown_error": "Neočekávaná chyba – zkuste to prosím znovu."
+      "unknown_error": "Neočekávaná chyba – zkuste to prosím znovu.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Formát odůvodnění",
             "include_reasoning": "Uveďte zdůvodnění",
             "prompt_caching": "Místní mezipaměť odpovědí",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Používejte strukturované výstupy",
             "schema_name": "Název schématu",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Jak podporované modely uvažování vystavují obsah uvažování.",
             "include_reasoning": "Vyžaduje obsah odůvodnění u podporovaných modelů, pokud není nastaven žádný formát odůvodnění.",
             "prompt_caching": "Mezipaměti odpovídající odpovědím služby Home Assistant lokálně pro podporované modely.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Vyžaduje JSON, které se řídí nakonfigurovaným schématem, když je tato služba použita pro generování dat.",
             "schema_name": "Krátký identifikátor odeslaný do Groq se schématem.",
             "schema": "Objekt JSON Schema odeslán jako response_format.json_schema.schema.",

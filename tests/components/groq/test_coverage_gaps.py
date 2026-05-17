@@ -53,6 +53,7 @@ from custom_components.groq.api import (
     extract_executed_tools,
 )
 from custom_components.groq.const import (
+    CONF_COMPOUND_BUILTIN_TOOLS,
     CONF_API_KEY,
     CONF_ENABLED_FEATURES,
     CONF_MODEL,
@@ -171,6 +172,7 @@ from custom_components.groq.text_generation import (
     is_reasoning_model,
     selector_to_json_schema,
     service_include_reasoning,
+    service_compound_builtin_tools,
     service_request_body_options,
     service_schema,
     service_schema_name,
@@ -645,6 +647,53 @@ def test_api_payload_and_extractors_cover_optional_shapes():
         )["include_reasoning"]
         is True
     )
+    assert build_text_generation_payload(
+        TextGenerationRequest(
+            prompt="p",
+            model="groq/compound",
+            compound_builtin_tools=[],
+        )
+    )["compound_custom"] == {"tools": {"enabled_tools": []}}
+    assert build_text_generation_payload(
+        TextGenerationRequest(
+            prompt="p",
+            model="groq/compound",
+            compound_builtin_tools="web_search",
+        )
+    )["compound_custom"] == {"tools": {"enabled_tools": ["web_search"]}}
+    assert build_text_generation_payload(
+        TextGenerationRequest(
+            prompt="p",
+            model="groq/compound",
+            compound_builtin_tools=["browser_automation", "web_search"],
+        )
+    )["compound_custom"] == {
+        "tools": {"enabled_tools": ["web_search", "browser_automation"]}
+    }
+    with pytest.raises(ValueError, match="unsupported tool ids"):
+        build_text_generation_payload(
+            TextGenerationRequest(
+                prompt="p",
+                model="groq/compound",
+                compound_builtin_tools=["web_search", "bad_tool"],
+            )
+        )
+    with pytest.raises(ValueError, match="requires web_search"):
+        build_text_generation_payload(
+            TextGenerationRequest(
+                prompt="p",
+                model="groq/compound",
+                compound_builtin_tools=["browser_automation"],
+            )
+        )
+    with pytest.raises(ValueError, match="string or list"):
+        build_text_generation_payload(
+            TextGenerationRequest(
+                prompt="p",
+                model="groq/compound",
+                compound_builtin_tools={"bad": True},
+            )
+        )
     assert build_structured_generation_payload(
         StructuredGenerationRequest(prompt="p", model="m")
     )["response_format"] == {"type": "json_object"}
@@ -766,10 +815,19 @@ async def test_api_client_covers_json_stream_and_error_paths():
     chunks = [
         chunk
         async for chunk in stream_client.async_stream_text(
-            TextGenerationRequest(prompt="p", model="m", api_key="request-key")
+            TextGenerationRequest(
+                prompt="p",
+                model="groq/compound",
+                api_key="request-key",
+                compound_builtin_tools=["web_search", "wolfram_alpha"],
+            )
         )
     ]
     assert chunks == ["Hi"]
+    assert (
+        stream_client._session.calls[0]["kwargs"]["headers"]["Groq-Model-Version"]
+        == "latest"
+    )
 
     with pytest.raises(GroqApiError, match="invalid JSON"):
         GroqApiClient._decode_json(b"{")
@@ -1442,6 +1500,45 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
         == "unsupported_structured_outputs_model"
     )
     assert (
+        text_generation_module.request_body_options_validation_error(
+            registry,
+            "llama-3.1-8b-instant",
+            {"compound_custom": {"tools": {"enabled_tools": ["web_search"]}}},
+        )
+        == "unsupported_compound_builtin_tools_model"
+    )
+    assert "unsupported or incompatible Compound built-in tools" in (
+        text_generation_module.request_body_options_error_message(
+            registry,
+            "groq/compound",
+            {
+                "compound_custom": {
+                    "tools": {"enabled_tools": ["web_search", "bad_tool"]}
+                }
+            },
+        )
+        or ""
+    )
+    assert text_generation_module.request_body_compound_builtin_tools(
+        {"compound_custom": {"tools": {"enabled_tools": [{"bad": True}]}}}
+    ) == []
+    assert (
+        text_generation_module.request_body_options_validation_error(
+            registry,
+            "groq/compound",
+            {"compound_custom": {"tools": {"enabled_tools": [{"bad": True}]}}},
+        )
+        == "invalid_compound_builtin_tools"
+    )
+    assert (
+        text_generation_module.request_body_options_validation_error(
+            registry,
+            "groq/compound",
+            {"compound_custom": {"tools": {"enabled_tools": ["browser_automation"]}}},
+        )
+        == "invalid_compound_builtin_tools"
+    )
+    assert (
         validate_text_generation_input(
             {
                 "model": "groq/compound",
@@ -1638,6 +1735,55 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
     assert text_generation_module.service_stream(entry, service_data) is True
     assert text_generation_module.service_stream(entry, {}) is True
     assert text_generation_module.service_prompt_caching(entry, service_data) is True
+    assert service_compound_builtin_tools(
+        entry,
+        {"model": "groq/compound"},
+        GroqModelRegistry(),
+    ) == []
+    assert service_compound_builtin_tools(
+        entry,
+        {
+            "model": "groq/compound",
+            CONF_COMPOUND_BUILTIN_TOOLS: ["web_search", "code_interpreter"],
+        },
+        GroqModelRegistry(),
+    ) == ["web_search", "code_interpreter"]
+    assert service_compound_builtin_tools(
+        entry,
+        {
+            "model": "groq/compound",
+            CONF_COMPOUND_BUILTIN_TOOLS: ["web_search", "bad_tool"],
+        },
+        GroqModelRegistry(),
+    ) == ["web_search", "bad_tool"]
+    assert service_compound_builtin_tools(
+        entry,
+        {
+            "model": "llama-3.1-8b-instant",
+            CONF_COMPOUND_BUILTIN_TOOLS: ["web_search"],
+        },
+        GroqModelRegistry(),
+    ) == ["web_search"]
+    assert service_compound_builtin_tools(
+        entry,
+        {
+            "model": "groq/compound",
+            "request_body_options": {
+                "compound_custom": {
+                    "tools": {"enabled_tools": ["visit_website", "wolfram_alpha"]}
+                }
+            },
+        },
+        GroqModelRegistry(),
+    ) == ["visit_website", "wolfram_alpha"]
+    assert (
+        service_compound_builtin_tools(
+            entry,
+            {"model": "llama-3.1-8b-instant"},
+            GroqModelRegistry(),
+        )
+        is None
+    )
     assert service_request_body_options(entry, service_data) == {"user": "ha"}
     assert service_request_body_options(
         entry,
@@ -2338,6 +2484,42 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
             "text_generation",
         )
     assert _request_options({"include_reasoning": True})["include_reasoning"] is True
+    assert _request_options({"model": "groq/compound"})["compound_builtin_tools"] == []
+    assert _request_options(
+        {},
+        {
+            "model": "groq/compound",
+            CONF_COMPOUND_BUILTIN_TOOLS: ["web_search", "wolfram_alpha"],
+        },
+    )["compound_builtin_tools"] == ["web_search", "wolfram_alpha"]
+    custom_compound_registry = GroqModelRegistry(
+        [
+            GroqModel(
+                "custom/compound",
+                capabilities=frozenset(
+                    {
+                        GroqCapability.TEXT_GENERATION,
+                        GroqCapability.COMPOUND,
+                    }
+                ),
+            )
+        ],
+        include_built_ins=False,
+    )
+    assert (
+        _request_options(
+            {"model": "custom/compound"},
+            {},
+            custom_compound_registry,
+        )["compound_builtin_tools"]
+        == []
+    )
+    assert (
+        _request_options({"model": "llama-3.1-8b-instant"})[
+            "compound_builtin_tools"
+        ]
+        is None
+    )
 
     key = _cache_key("ns", {"b": 2, "a": 1})
     _cache_set(runtime, "openai/gpt-oss-20b", key, {"text": "cached"})
@@ -2462,6 +2644,27 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
             )
         )
     runtime.model_registry = original_registry
+    runtime.services_by_type["text_generation"][0]["model"] = "groq/compound"
+    runtime.services_by_type["text_generation"][0].pop("structured_outputs", None)
+    runtime.services_by_type["text_generation"][0].pop("schema", None)
+    runtime.services_by_type["text_generation"][0][CONF_COMPOUND_BUILTIN_TOOLS] = [
+        "web_search",
+        "bad_tool",
+    ]
+    with pytest.raises(ServiceValidationError, match="unsupported tool ids"):
+        await _handle_generate_text(hass)(
+            service_call(
+                {
+                    ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: "text-id",
+                    ATTR_PROMPT: "p",
+                }
+            )
+    )
+    runtime.services_by_type["text_generation"][0].pop(CONF_COMPOUND_BUILTIN_TOOLS)
+    runtime.services_by_type["text_generation"][0]["model"] = "openai/gpt-oss-20b"
+    runtime.services_by_type["text_generation"][0]["structured_outputs"] = True
+    runtime.services_by_type["text_generation"][0]["schema"] = {"type": "object"}
     generated = await _handle_generate_text(hass)(
         service_call(
             {
@@ -3191,6 +3394,20 @@ async def test_ai_task_helpers_and_fallback_paths():
             SimpleNamespace(name="task", instructions="Return data", structure=None),
             SimpleNamespace(conversation_id="c"),
         )
+    bad_compound_tools_entity = GroqAITaskEntity(
+        DummyHass(),
+        entry,
+        {
+            "model": "groq/compound",
+            CONF_COMPOUND_BUILTIN_TOOLS: ["web_search", "bad_tool"],
+        },
+        DummyClient(),
+    )
+    with pytest.raises(HomeAssistantError, match="unsupported tool ids"):
+        await bad_compound_tools_entity._async_generate_data(
+            SimpleNamespace(name="task", instructions="Return data", structure=None),
+            SimpleNamespace(conversation_id="c"),
+        )
 
 
 @pytest.mark.asyncio
@@ -3307,6 +3524,25 @@ async def test_ai_task_and_conversation_setup_properties():
     )
     with pytest.raises(HomeAssistantError, match="response_format"):
         await body_error_conversation._async_handle_message(
+            SimpleNamespace(
+                text="hello",
+                language="en",
+                agent_id="conversation.groq_assist",
+                extra_system_prompt=None,
+            ),
+            SimpleNamespace(conversation_id="c"),
+        )
+    bad_compound_tools_conversation = conversation_module.GroqConversationEntity(
+        DummyHass(),
+        entry,
+        {
+            "model": "groq/compound",
+            CONF_COMPOUND_BUILTIN_TOOLS: ["web_search", "bad_tool"],
+        },
+        DummyClient(),
+    )
+    with pytest.raises(HomeAssistantError, match="unsupported tool ids"):
+        await bad_compound_tools_conversation._async_handle_message(
             SimpleNamespace(
                 text="hello",
                 language="en",

@@ -58,7 +58,9 @@
       "required": "To pole jest wymagane.",
       "unknown": "Nieoczekiwany błąd podczas sprawdzania klucza API. Spróbuj ponownie.",
       "unknown_error": "Nieoczekiwany błąd — spróbuj ponownie.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Format rozumowania",
             "include_reasoning": "Dołącz uzasadnienie",
             "prompt_caching": "Lokalna pamięć podręczna odpowiedzi",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Użyj ustrukturyzowanych wyników",
             "schema_name": "Nazwa schematu",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Jak obsługiwane modele rozumowania ujawniają treść rozumowania.",
             "include_reasoning": "Żąda treści uzasadnienia w obsługiwanych modelach, gdy nie ustawiono żadnego formatu rozumowania.",
             "prompt_caching": "Lokalnie buforuje odpowiedzi serwisowe Home Assistant dla obsługiwanych modeli.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Żąda JSON zgodnego ze skonfigurowanym schematem, gdy ta usługa jest używana do generowania danych.",
             "schema_name": "Krótki identyfikator wysyłany do Groq wraz ze schematem.",
             "schema": "Obiekt JSON Schema przesłany jako response_format.json_schema.schema.",

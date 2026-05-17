@@ -58,7 +58,9 @@
       "required": "Ce champ est obligatoire.",
       "unknown": "Erreur inattendue lors de la validation de la clé API. Veuillez réessayer.",
       "unknown_error": "Erreur inattendue : veuillez réessayer.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Format de raisonnement",
             "include_reasoning": "Inclure le raisonnement",
             "prompt_caching": "Cache de réponses local",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Utiliser des sorties structurées",
             "schema_name": "Nom du schéma",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Comment les modèles de raisonnement pris en charge exposent le contenu du raisonnement.",
             "include_reasoning": "Demande du contenu de raisonnement sur les modèles pris en charge lorsqu'aucun format de raisonnement n'est défini.",
             "prompt_caching": "Met en cache localement les réponses du service Home Assistant pour les modèles pris en charge.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Demande JSON qui suit le schéma configuré lorsque ce service est utilisé pour la génération de données.",
             "schema_name": "Un identifiant court envoyé à Groq avec le schéma.",
             "schema": "Objet JSON Schema envoyé en tant que response_format.json_schema.schema.",

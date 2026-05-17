@@ -58,7 +58,9 @@
       "required": "Dit veld is verplicht.",
       "unknown": "Onverwachte fout bij het valideren van de API-sleutel. Probeer het opnieuw.",
       "unknown_error": "Onverwachte fout — probeer het opnieuw.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Redeneringsformaat",
             "include_reasoning": "Geef een redenering",
             "prompt_caching": "Lokale antwoordcache",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Gebruik gestructureerde uitvoer",
             "schema_name": "Schemanaam",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Hoe ondersteunde redeneermodellen redeneerinhoud blootleggen.",
             "include_reasoning": "Vraagt ​​om redeneerinhoud op ondersteunde modellen als er geen redeneerformaat is ingesteld.",
             "prompt_caching": "Cachet lokaal overeenkomende Home Assistant-servicereacties voor ondersteunde modellen.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Verzoekt JSON die het geconfigureerde schema volgt wanneer deze service wordt gebruikt voor het genereren van gegevens.",
             "schema_name": "Een korte identificatie die samen met het schema naar Groq wordt verzonden.",
             "schema": "JSON Schema-object verzonden als response_format.json_schema.schema.",

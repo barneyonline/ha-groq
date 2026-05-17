@@ -58,7 +58,9 @@
       "select_voice_for_model": "Wählen Sie eine Stimme für das ausgewählte Modell aus.",
       "required": "Dieses Feld ist erforderlich.",
       "unknown": "Unerwarteter Fehler bei der Validierung des API-Schlüssels. Bitte versuchen Sie es erneut.",
-      "unknown_error": "Unerwarteter Fehler – bitte versuchen Sie es erneut."
+      "unknown_error": "Unerwarteter Fehler – bitte versuchen Sie es erneut.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Argumentationsformat",
             "include_reasoning": "Begründung hinzufügen",
             "prompt_caching": "Lokaler Antwortcache",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Verwenden Sie strukturierte Ausgaben",
             "schema_name": "Schemaname",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Wie unterstützte Argumentationsmodelle Argumentationsinhalte offenlegen.",
             "include_reasoning": "Fordert Begründungsinhalte zu unterstützten Modellen an, wenn kein Begründungsformat festgelegt ist.",
             "prompt_caching": "Speichert passende Home Assistant-Dienstantworten lokal für unterstützte Modelle.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Fordert JSON an, das dem konfigurierten Schema folgt, wenn dieser Dienst für die Datengenerierung verwendet wird.",
             "schema_name": "Eine kurze Kennung, die mit dem Schema an Groq gesendet wird.",
             "schema": "JSON Schema-Objekt gesendet als response_format.json_schema.schema.",

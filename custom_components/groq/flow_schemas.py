@@ -12,6 +12,8 @@ from homeassistant.helpers.selector import selector
 from .const import (
     CONF_ADVANCED_OPTIONS,
     CONF_API_KEY,
+    COMPOUND_BUILTIN_TOOL_OPTIONS,
+    CONF_COMPOUND_BUILTIN_TOOLS,
     CONF_ENABLED_FEATURES,
     CONF_INCLUDE_REASONING,
     CONF_LANGUAGE,
@@ -63,6 +65,7 @@ from .const import (
     VOCAL_DIRECTION_OPTIONS,
     voice_options_for_model,
 )
+from .compound_tools import compound_builtin_tools_are_valid
 from .feature_registry import GroqFeature
 from .model_registry import GroqCapability, GroqModelRegistry
 from .text_generation import request_body_options_validation_error
@@ -201,6 +204,11 @@ def sanitize_text_generation_service_data(
 
     if not _supports_model_option(model_registry, model, GroqFeature.PROMPT_CACHING):
         data.pop(CONF_PROMPT_CACHING, None)
+
+    if not _supports_model_option(model_registry, model, GroqCapability.COMPOUND):
+        data.pop(CONF_COMPOUND_BUILTIN_TOOLS, None)
+        if isinstance(request_body_options, dict):
+            request_body_options.pop("compound_custom", None)
 
     if not _supports_model_option(
         model_registry,
@@ -553,6 +561,21 @@ def text_generation_advanced_schema(
                 default=values.get(CONF_PROMPT_CACHING, False),
             )
         ] = selector({"boolean": {}})
+    if _supports_model_option(model_registry, model, GroqCapability.COMPOUND):
+        schema[
+            vol.Optional(
+                CONF_COMPOUND_BUILTIN_TOOLS,
+                default=values.get(CONF_COMPOUND_BUILTIN_TOOLS, []),
+            )
+        ] = selector(
+            {
+                "select": {
+                    "options": COMPOUND_BUILTIN_TOOL_OPTIONS,
+                    "multiple": True,
+                    "mode": "list",
+                }
+            }
+        )
     if _supports_model_option(model_registry, model, GroqFeature.STRUCTURED_OUTPUTS):
         schema.update(
             {
@@ -622,6 +645,7 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_REASONING_FORMAT,
         CONF_SERVICE_TIER,
         CONF_STOP,
+        CONF_COMPOUND_BUILTIN_TOOLS,
     ):
         if data.get(key) in ("", None):
             data.pop(key, None)
@@ -633,6 +657,8 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
         data.pop(CONF_SCHEMA, None)
     if not data.get(CONF_INCLUDE_REASONING):
         data.pop(CONF_INCLUDE_REASONING, None)
+    if not data.get(CONF_COMPOUND_BUILTIN_TOOLS):
+        data.pop(CONF_COMPOUND_BUILTIN_TOOLS, None)
     return data
 
 
@@ -671,6 +697,14 @@ def validate_text_generation_input(
         GroqCapability.TOOL_CALLING,
     ):
         errors[CONF_LLM_HASS_API] = "unsupported_tool_calling_model"
+    compound_builtin_tools = user_input.get(CONF_COMPOUND_BUILTIN_TOOLS)
+    if compound_builtin_tools:
+        if not _supports_model_option(model_registry, model, GroqCapability.COMPOUND):
+            errors[CONF_COMPOUND_BUILTIN_TOOLS] = (
+                "unsupported_compound_builtin_tools_model"
+            )
+        elif not compound_builtin_tools_are_valid(compound_builtin_tools):
+            errors[CONF_COMPOUND_BUILTIN_TOOLS] = "invalid_compound_builtin_tools"
     active_registry = model_registry or GroqModelRegistry()
     if body_error := request_body_options_validation_error(
         active_registry,

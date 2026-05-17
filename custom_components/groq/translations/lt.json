@@ -58,7 +58,9 @@
       "required": "Šis laukas yra būtinas.",
       "unknown": "Netikėta klaida tikrinant API raktą. Bandykite dar kartą.",
       "unknown_error": "Netikėta klaida – bandykite dar kartą.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Samprotavimo formatas",
             "include_reasoning": "Įtraukite samprotavimus",
             "prompt_caching": "Vietinė atsakymų talpykla",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Naudokite struktūrinius išėjimus",
             "schema_name": "Schemos pavadinimas",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Kaip palaikomi samprotavimo modeliai atskleidžia samprotavimo turinį.",
             "include_reasoning": "Prašo samprotavimo turinio palaikomuose modeliuose, kai nenustatytas joks argumentavimo formatas.",
             "prompt_caching": "Talpyklos, atitinkančios palaikomų modelių Home Assistant paslaugų atsakymus.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Prašo JSON, kuris atitinka sukonfigūruotą schemą, kai ši paslauga naudojama duomenims generuoti.",
             "schema_name": "Trumpas identifikatorius, išsiųstas į Groq su schema.",
             "schema": "JSON Schema objektas išsiųstas kaip response_format.json_schema.schema.",

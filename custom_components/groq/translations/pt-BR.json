@@ -58,7 +58,9 @@
       "required": "Este campo é obrigatório.",
       "unknown": "Erro inesperado ao validar a chave API. Por favor, tente novamente.",
       "unknown_error": "Erro inesperado — tente novamente.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Formato de raciocínio",
             "include_reasoning": "Incluir raciocínio",
             "prompt_caching": "Cache de resposta local",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Use resultados estruturados",
             "schema_name": "Nome do esquema",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Como os modelos de raciocínio suportados expõem o conteúdo do raciocínio.",
             "include_reasoning": "Solicita conteúdo de raciocínio em modelos suportados quando nenhum formato de raciocínio está definido.",
             "prompt_caching": "Armazena em cache as respostas do serviço Home Assistant localmente para modelos suportados.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Solicita JSON que segue o esquema configurado quando este serviço é utilizado para geração de dados.",
             "schema_name": "Um identificador curto enviado para Groq com o esquema.",
             "schema": "Objeto JSON Schema enviado como response_format.json_schema.schema.",

@@ -43,6 +43,7 @@ from custom_components.groq.conversation import (
 )
 from custom_components.groq.const import (
     COMPOUND_MODELS,
+    CONF_COMPOUND_BUILTIN_TOOLS,
     CONF_INCLUDE_REASONING,
     CONF_MODEL,
     CONF_PROMPT_CACHING,
@@ -444,6 +445,7 @@ def test_payload_builders_use_openai_compatible_shapes():
             service_tier="flex",
             reasoning_effort="low",
             reasoning_format="parsed",
+            compound_builtin_tools=["visit_website", "web_search"],
             extra_body={
                 "citation_options": "disabled",
                 "compound_custom": {"tools": {"enabled_tools": ["web_search"]}},
@@ -491,7 +493,9 @@ def test_payload_builders_use_openai_compatible_shapes():
         "reasoning_effort": "low",
         "reasoning_format": "parsed",
         "citation_options": "disabled",
-        "compound_custom": {"tools": {"enabled_tools": ["web_search"]}},
+        "compound_custom": {
+            "tools": {"enabled_tools": ["web_search", "visit_website"]}
+        },
         "disable_tool_validation": True,
         "documents": [{"text": "static context"}],
         "exclude_domains": ["old.example"],
@@ -652,6 +656,73 @@ async def test_api_client_generates_text_and_sends_auth_header():
         "https://api.groq.com/openai/v1/chat/completions",
     )
     assert call["kwargs"]["headers"]["Authorization"] == "Bearer request-api-key"
+    assert "Groq-Model-Version" not in call["kwargs"]["headers"]
+
+
+@pytest.mark.asyncio
+async def test_api_client_sends_latest_header_for_latest_compound_tools():
+    session = DummySession(
+        DummyResponse(
+            200,
+            {"content-type": "application/json"},
+            {
+                "model": "groq/compound",
+                "choices": [{"message": {"content": "done"}}],
+                "usage": {"total_tokens": 3},
+            },
+        )
+    )
+    client = GroqApiClient(
+        DummyHass(),
+        api_key="api-key",
+        base_url="https://api.groq.com/openai/v1",
+        session=session,
+    )
+
+    await client.async_generate_text(
+        TextGenerationRequest(
+            prompt="Go",
+            model="groq/compound",
+            compound_builtin_tools=["web_search", "visit_website"],
+        )
+    )
+
+    assert session.calls[0]["kwargs"]["headers"]["Groq-Model-Version"] == "latest"
+
+
+@pytest.mark.asyncio
+async def test_api_client_sends_latest_header_for_raw_compound_tools():
+    session = DummySession(
+        DummyResponse(
+            200,
+            {"content-type": "application/json"},
+            {
+                "model": "groq/compound",
+                "choices": [{"message": {"content": "done"}}],
+                "usage": {"total_tokens": 3},
+            },
+        )
+    )
+    client = GroqApiClient(
+        DummyHass(),
+        api_key="api-key",
+        base_url="https://api.groq.com/openai/v1",
+        session=session,
+    )
+
+    await client.async_generate_text(
+        TextGenerationRequest(
+            prompt="Go",
+            model="groq/compound",
+            extra_body={
+                "compound_custom": {
+                    "tools": {"enabled_tools": ["web_search", "wolfram_alpha"]}
+                }
+            },
+        )
+    )
+
+    assert session.calls[0]["kwargs"]["headers"]["Groq-Model-Version"] == "latest"
 
 
 @pytest.mark.asyncio
@@ -1009,6 +1080,63 @@ def test_text_generation_config_flow_rejects_llm_tools_for_unsupported_models():
     )
 
     assert errors == {CONF_LLM_HASS_API: "unsupported_tool_calling_model"}
+
+
+def test_text_generation_config_flow_validates_compound_builtin_tools():
+    errors = validate_text_generation_input(
+        {
+            CONF_MODEL: "llama-3.1-8b-instant",
+            CONF_COMPOUND_BUILTIN_TOOLS: ["web_search"],
+        }
+    )
+
+    assert errors == {
+        CONF_COMPOUND_BUILTIN_TOOLS: "unsupported_compound_builtin_tools_model"
+    }
+
+    errors = validate_text_generation_input(
+        {
+            CONF_MODEL: "groq/compound",
+            CONF_COMPOUND_BUILTIN_TOOLS: ["web_search", "bad_tool"],
+        }
+    )
+
+    assert errors == {CONF_COMPOUND_BUILTIN_TOOLS: "invalid_compound_builtin_tools"}
+
+    errors = validate_text_generation_input(
+        {
+            CONF_MODEL: "groq/compound",
+            CONF_COMPOUND_BUILTIN_TOOLS: ["browser_automation"],
+        }
+    )
+
+    assert errors == {CONF_COMPOUND_BUILTIN_TOOLS: "invalid_compound_builtin_tools"}
+
+    errors = validate_text_generation_input(
+        {
+            CONF_MODEL: "groq/compound",
+            CONF_COMPOUND_BUILTIN_TOOLS: [
+                "web_search",
+                "browser_automation",
+                "code_interpreter",
+            ],
+        }
+    )
+
+    assert errors == {}
+
+    errors = validate_text_generation_input(
+        {
+            CONF_MODEL: "groq/compound",
+            "request_body_options": {
+                "compound_custom": {
+                    "tools": {"enabled_tools": ["web_search", "bad_tool"]}
+                }
+            },
+        }
+    )
+
+    assert errors == {"request_body_options": "invalid_compound_builtin_tools"}
 
 
 def test_text_generation_config_flow_rejects_structured_outputs_for_unsupported_models():

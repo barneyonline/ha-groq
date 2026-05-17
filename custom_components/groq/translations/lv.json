@@ -58,7 +58,9 @@
       "required": "Šis lauks ir obligāts.",
       "unknown": "Negaidīta kļūda, apstiprinot API atslēgu. Lūdzu, mēģiniet vēlreiz.",
       "unknown_error": "Negaidīta kļūda — lūdzu, mēģiniet vēlreiz.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls."
+      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Sprieduma formāts",
             "include_reasoning": "Iekļaujiet pamatojumu",
             "prompt_caching": "Lokālā atbilžu kešatmiņa",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Izmantojiet strukturētas izvades",
             "schema_name": "Shēmas nosaukums",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Kā atbalstītie argumentācijas modeļi atklāj argumentācijas saturu.",
             "include_reasoning": "Pieprasa argumentācijas saturu atbalstītajos modeļos, ja nav iestatīts argumentācijas formāts.",
             "prompt_caching": "Kešatmiņas, kas atbilst Home Assistant pakalpojumu atbildēm lokāli atbalstītajiem modeļiem.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Pieprasa JSON, kas seko konfigurētajai shēmai, kad šis pakalpojums tiek izmantots datu ģenerēšanai.",
             "schema_name": "Īss identifikators, kas nosūtīts uz Groq ar shēmu.",
             "schema": "JSON Schema objekts nosūtīts kā response_format.json_schema.shēma.",

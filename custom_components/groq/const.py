@@ -32,6 +32,7 @@ CONF_REASONING_FORMAT = "reasoning_format"
 CONF_INCLUDE_REASONING = "include_reasoning"
 CONF_PROMPT_CACHING = "prompt_caching"
 CONF_STREAM = "stream"
+CONF_COMPOUND_BUILTIN_TOOLS = "compound_builtin_tools"
 CONF_REQUEST_BODY_OPTIONS = "request_body_options"
 CONF_SCHEMA = "schema"
 CONF_SCHEMA_NAME = "schema_name"
@@ -161,6 +162,21 @@ COMPOUND_MODELS = {
     "groq/compound",
     "groq/compound-mini",
 }
+COMPOUND_BUILTIN_TOOL_OPTIONS = [
+    {"value": "web_search", "label": "Web search"},
+    {"value": "visit_website", "label": "Visit website"},
+    {"value": "browser_automation", "label": "Browser automation"},
+    {"value": "code_interpreter", "label": "Code execution"},
+    {"value": "wolfram_alpha", "label": "Wolfram Alpha"},
+]
+COMPOUND_BUILTIN_TOOLS = tuple(
+    option["value"] for option in COMPOUND_BUILTIN_TOOL_OPTIONS
+)
+COMPOUND_BUILTIN_TOOLS_REQUIRING_LATEST = (
+    "visit_website",
+    "browser_automation",
+    "wolfram_alpha",
+)
 REASONING_EFFORT_OPTIONS = [
     {"value": "", "label": "Model default"},
     {"value": "none", "label": "None"},

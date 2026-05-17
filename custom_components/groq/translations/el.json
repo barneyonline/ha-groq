@@ -58,7 +58,9 @@
       "select_voice_for_model": "Επιλέξτε μια φωνή για το επιλεγμένο μοντέλο.",
       "required": "Αυτό το πεδίο είναι υποχρεωτικό.",
       "unknown": "Μη αναμενόμενο σφάλμα κατά την επικύρωση του κλειδιού API. Δοκιμάστε ξανά.",
-      "unknown_error": "Μη αναμενόμενο σφάλμα — δοκιμάστε ξανά."
+      "unknown_error": "Μη αναμενόμενο σφάλμα — δοκιμάστε ξανά.",
+      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
     }
   },
   "options": {
@@ -120,6 +122,7 @@
             "reasoning_format": "Μορφή αιτιολογίας",
             "include_reasoning": "Συμπεριλάβετε τον συλλογισμό",
             "prompt_caching": "Τοπική κρυφή μνήμη απόκρισης",
+            "compound_builtin_tools": "Compound built-in tools",
             "structured_outputs": "Χρησιμοποιήστε δομημένες εξόδους",
             "schema_name": "Όνομα σχήματος",
             "schema": "JSON schema",
@@ -137,6 +140,7 @@
             "reasoning_format": "Πώς τα υποστηριζόμενα μοντέλα συλλογιστικής εκθέτουν το συλλογιστικό περιεχόμενο.",
             "include_reasoning": "Ζητάει συλλογιστικό περιεχόμενο σε υποστηριζόμενα μοντέλα όταν δεν έχει οριστεί μορφή συλλογισμού.",
             "prompt_caching": "Αποθηκεύσεις κρυφής μνήμης που αντιστοιχούν στις αποκρίσεις της υπηρεσίας Home Assistant τοπικά για υποστηριζόμενα μοντέλα.",
+            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
             "structured_outputs": "Ζητάει το JSON που ακολουθεί το διαμορφωμένο σχήμα όταν αυτή η υπηρεσία χρησιμοποιείται για τη δημιουργία δεδομένων.",
             "schema_name": "Ένα σύντομο αναγνωριστικό στάλθηκε στο Groq με το σχήμα.",
             "schema": "Το αντικείμενο JSON Schema στάλθηκε ως response_format.json_schema.schema.",

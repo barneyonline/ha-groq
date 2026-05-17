@@ -15,6 +15,10 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
+from .compound_tools import (
+    compound_builtin_tools_payload_value,
+    compound_builtin_tools_require_latest,
+)
 from .const import VERSION
 from .errors import GroqApiError, GroqResponseError
 from .model_registry import GroqModel, model_from_api
@@ -30,6 +34,8 @@ AUDIO_TRANSCRIPTIONS_PATH = "/audio/transcriptions"
 JSON_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
 STREAM_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
 MODEL_DETAIL_CONCURRENCY = 5
+GROQ_MODEL_VERSION_HEADER = "Groq-Model-Version"
+GROQ_LATEST_MODEL_VERSION = "latest"
 RESERVED_CHAT_BODY_OPTIONS = frozenset(
     {"messages", "model", "stream", "tool_choice", "tools"}
 )
@@ -86,6 +92,7 @@ class TextGenerationRequest:
     include_reasoning: bool | None = None
     reasoning: bool = False
     stream: bool = False
+    compound_builtin_tools: str | list[str] | tuple[str, ...] | set[str] | None = None
     extra_body: dict[str, Any] | None = None
     api_key: str | None = None
     service_id: str | None = None
@@ -186,6 +193,22 @@ def build_text_generation_payload(request: TextGenerationRequest) -> dict[str, A
                 if value is not None and key not in RESERVED_CHAT_BODY_OPTIONS
             }
         )
+    if request.compound_builtin_tools is not None:
+        compound_custom = payload.get("compound_custom")
+        if isinstance(compound_custom, dict):
+            compound_custom = dict(compound_custom)
+        else:
+            compound_custom = {}
+        tools = compound_custom.get("tools")
+        if isinstance(tools, dict):
+            tools = dict(tools)
+        else:
+            tools = {}
+        tools["enabled_tools"] = compound_builtin_tools_payload_value(
+            request.compound_builtin_tools
+        )
+        compound_custom["tools"] = tools
+        payload["compound_custom"] = compound_custom
     if request.tools is not None:
         payload["tools"] = request.tools
     if request.tool_choice is not None:
@@ -230,6 +253,26 @@ def build_vision_payload(request: VisionRequest) -> dict[str, Any]:
             {"role": "system", "content": request.system_prompt},
         )
     return payload
+
+
+def _compound_builtin_tools_from_payload(payload: dict[str, Any] | None) -> Any:
+    """Return enabled Compound built-in tools from a chat payload."""
+    if not isinstance(payload, dict):
+        return None
+    compound_custom = payload.get("compound_custom")
+    if not isinstance(compound_custom, dict):
+        return None
+    tools = compound_custom.get("tools")
+    if not isinstance(tools, dict):
+        return None
+    return tools.get("enabled_tools")
+
+
+def _compound_model_version_for_payload(payload: dict[str, Any] | None) -> str | None:
+    """Return the Compound system version header needed by a chat payload."""
+    if compound_builtin_tools_require_latest(_compound_builtin_tools_from_payload(payload)):
+        return GROQ_LATEST_MODEL_VERSION
+    return None
 
 
 def extract_chat_text(payload: dict[str, Any]) -> str:
@@ -568,7 +611,11 @@ class GroqApiClient:
     ) -> dict[str, Any]:
         """Perform a JSON request and return a JSON object."""
         session = self._session or async_get_clientsession(self._hass)
-        headers = self._headers(api_key, content_type=content_type)
+        headers = self._headers(
+            api_key,
+            content_type=content_type,
+            compound_model_version=_compound_model_version_for_payload(json_payload),
+        )
         self._rate_limiter.raise_if_blocked(guard_key)
         request_kwargs: dict[str, Any] = {
             "headers": headers,
@@ -633,7 +680,12 @@ class GroqApiClient:
                 method,
                 self._url(path),
                 json=json_payload,
-                headers=self._headers(api_key),
+                headers=self._headers(
+                    api_key,
+                    compound_model_version=_compound_model_version_for_payload(
+                        json_payload
+                    ),
+                ),
                 timeout=self._stream_timeout,
             ) as response:
                 self._rate_limiter.update_from_headers(guard_key, response.headers)
@@ -723,6 +775,7 @@ class GroqApiClient:
         api_key: str | None = None,
         *,
         content_type: str | None = "application/json",
+        compound_model_version: str | None = None,
     ) -> dict[str, str]:
         """Return request headers, optionally overriding the entry API key."""
         headers = {
@@ -730,6 +783,8 @@ class GroqApiClient:
         }
         if content_type:
             headers["Content-Type"] = content_type
+        if compound_model_version:
+            headers[GROQ_MODEL_VERSION_HEADER] = compound_model_version
         effective_api_key = api_key or self._api_key
         if effective_api_key:
             headers["Authorization"] = f"Bearer {effective_api_key}"

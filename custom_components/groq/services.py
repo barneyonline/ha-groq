@@ -40,9 +40,11 @@ from .api import (
     VisionRequest,
 )
 from .const import (
+    CONF_COMPOUND_BUILTIN_TOOLS,
     CONF_INCLUDE_REASONING,
     CONF_LANGUAGE,
     CONF_MAX_TOKENS,
+    CONF_MODEL,
     CONF_NAME,
     CONF_PROTECT_FREE_TIER,
     CONF_REASONING_EFFORT,
@@ -67,14 +69,17 @@ from .const import (
     FEATURE_TEXT_GENERATION,
     UNIQUE_ID,
 )
+from .compound_tools import compound_builtin_tools_request_value
 from .errors import translated_service_error
 from .feature_registry import GroqFeature
-from .model_registry import DEFAULT_VISION_MODEL
+from .model_registry import DEFAULT_VISION_MODEL, GroqCapability, GroqModelRegistry
 from .runtime import GroqRuntimeData, async_get_runtime
 from .repairs import async_create_model_configuration_issue
 from .subentries import service_data_for_type
 from .text_generation import (
+    compound_builtin_tools_error_message,
     request_body_options_error_message,
+    request_body_compound_builtin_tools,
     request_context_window_error,
 )
 
@@ -463,6 +468,7 @@ def _reasoning_requested(
 def _request_options(
     data: dict[str, Any],
     service_data: dict[str, Any] | None = None,
+    model_registry: GroqModelRegistry | None = None,
 ) -> dict[str, Any]:
     """Return shared chat completion request options."""
     service_data = service_data or {}
@@ -491,11 +497,42 @@ def _request_options(
         # Only send include_reasoning when enabled. Some Groq models reject a
         # false/null reasoning flag even though they accept omitted options.
         "include_reasoning": True if include_reasoning else None,
+        "compound_builtin_tools": _compound_builtin_tools_option(
+            data,
+            service_data,
+            model_registry,
+        ),
         "extra_body": data.get(
             ATTR_REQUEST_BODY_OPTIONS,
             service_data.get(CONF_REQUEST_BODY_OPTIONS),
         ),
     }
+
+
+def _compound_builtin_tools_option(
+    data: dict[str, Any],
+    service_data: dict[str, Any],
+    model_registry: GroqModelRegistry | None = None,
+) -> list[str] | None:
+    """Return Compound built-in tool allow-list for service actions."""
+    model = str(data.get(ATTR_MODEL, service_data.get(CONF_MODEL, DEFAULT_TEXT_MODEL)))
+    if CONF_COMPOUND_BUILTIN_TOOLS in service_data:
+        return compound_builtin_tools_request_value(
+            service_data[CONF_COMPOUND_BUILTIN_TOOLS]
+        )
+    is_compound = (
+        model_registry.supports(model, GroqCapability.COMPOUND)
+        if model_registry is not None
+        else model.lower().startswith("groq/compound")
+    )
+    if not is_compound:
+        return None
+    raw_tools = request_body_compound_builtin_tools(
+        data.get(ATTR_REQUEST_BODY_OPTIONS, service_data.get(CONF_REQUEST_BODY_OPTIONS))
+    )
+    if raw_tools is not None:
+        return raw_tools
+    return []
 
 
 def _coerce_completion_tokens(value: Any) -> int | None:
@@ -542,6 +579,12 @@ def _ensure_request_body_features(
     request: TextGenerationRequest,
 ) -> None:
     """Raise when advanced body options require unsupported model features."""
+    if error := compound_builtin_tools_error_message(
+        runtime.model_registry,
+        request.model,
+        request.compound_builtin_tools,
+    ):
+        raise _service_error("request_invalid", error, message=error)
     if error := request_body_options_error_message(
         runtime.model_registry,
         request.model,
@@ -562,6 +605,7 @@ def _request_cache_fields(request: TextGenerationRequest) -> dict[str, Any]:
         "reasoning_effort": request.reasoning_effort,
         "reasoning_format": request.reasoning_format,
         "include_reasoning": request.include_reasoning,
+        "compound_builtin_tools": request.compound_builtin_tools,
         "extra_body": request.extra_body,
     }
 
@@ -920,7 +964,11 @@ def _handle_generate_text(
                     ATTR_SYSTEM_PROMPT,
                     DEFAULT_SYSTEM_PROMPT,
                 ),
-                **_request_options(call.data, service_data),
+                **_request_options(
+                    call.data,
+                    service_data,
+                    runtime.model_registry,
+                ),
                 service_id=service_data.get(UNIQUE_ID),
                 protect_free_tier=_service_protect_free_tier(service_data),
                 schema=schema,
@@ -942,7 +990,11 @@ def _handle_generate_text(
                     ATTR_SYSTEM_PROMPT,
                     DEFAULT_SYSTEM_PROMPT,
                 ),
-                **_request_options(call.data, service_data),
+                **_request_options(
+                    call.data,
+                    service_data,
+                    runtime.model_registry,
+                ),
                 service_id=service_data.get(UNIQUE_ID),
                 protect_free_tier=_service_protect_free_tier(service_data),
             )

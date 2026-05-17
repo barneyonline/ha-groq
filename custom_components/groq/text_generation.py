@@ -17,7 +17,13 @@ from .api import (
     build_structured_generation_payload,
     build_text_generation_payload,
 )
+from .compound_tools import (
+    compound_builtin_tools_are_valid,
+    compound_builtin_tools_request_value,
+    normalize_compound_builtin_tools,
+)
 from .const import (
+    CONF_COMPOUND_BUILTIN_TOOLS,
     CONF_INCLUDE_REASONING,
     CONF_MAX_TOKENS,
     CONF_MODEL,
@@ -47,7 +53,7 @@ from .const import (
     UNIQUE_ID,
 )
 from .feature_registry import GroqFeature
-from .model_registry import GroqModelRegistry
+from .model_registry import GroqCapability, GroqModelRegistry
 from .subentries import service_data_for_type
 
 _SCHEMA_NAME_RE = re.compile(r"[^a-zA-Z0-9_-]+")
@@ -60,6 +66,7 @@ _REQUEST_BODY_REASONING_KEYS = frozenset(
     }
 )
 _STRUCTURED_RESPONSE_FORMAT_TYPES = frozenset({"json_object", "json_schema"})
+_MISSING = object()
 
 
 def entry_value(
@@ -232,6 +239,72 @@ def service_prompt_caching(
     return bool(entry_value(config_entry, service_data, CONF_PROMPT_CACHING, False))
 
 
+def request_body_compound_builtin_tool_value(
+    extra_body: Any,
+) -> Any:
+    """Return raw enabled_tools from request_body_options, or a missing sentinel."""
+    if not isinstance(extra_body, dict):
+        return _MISSING
+    compound_custom = extra_body.get("compound_custom")
+    if not isinstance(compound_custom, dict):
+        return _MISSING
+    tools = compound_custom.get("tools")
+    if not isinstance(tools, dict) or "enabled_tools" not in tools:
+        return _MISSING
+    return tools.get("enabled_tools")
+
+
+def request_body_compound_builtin_tools(extra_body: Any) -> list[str] | None:
+    """Return raw Compound built-in tools from request_body_options."""
+    value = request_body_compound_builtin_tool_value(extra_body)
+    if value is _MISSING:
+        return None
+    return normalize_compound_builtin_tools(value)
+
+
+def compound_builtin_tools_error_message(
+    model_registry: GroqModelRegistry,
+    model: str,
+    tools: Any,
+) -> str | None:
+    """Return a runtime error for invalid dedicated Compound built-in tools."""
+    if tools is None:
+        return None
+    if not model_registry.supports(model, GroqCapability.COMPOUND):
+        return f"Groq model {model} does not support Compound built-in tools"
+    if not compound_builtin_tools_are_valid(tools):
+        return (
+            "Configured Compound built-in tools contain unsupported tool ids "
+            "or incompatible selections"
+        )
+    return None
+
+
+def service_compound_builtin_tools(
+    config_entry: ConfigEntry,
+    service_data: dict[str, Any],
+    model_registry: GroqModelRegistry | None = None,
+) -> list[str] | None:
+    """Return the allowed Compound built-in tools for this service.
+
+    Compound systems enable server-side tools by default when the request omits
+    compound_custom.tools.enabled_tools. Return an empty allow-list for Compound
+    models unless the service explicitly opted in.
+    """
+    model = service_model(config_entry, service_data)
+    active_registry = model_registry or GroqModelRegistry()
+    value = entry_value(config_entry, service_data, CONF_COMPOUND_BUILTIN_TOOLS)
+    if value is not None:
+        return compound_builtin_tools_request_value(value)
+    if not active_registry.supports(model, GroqCapability.COMPOUND):
+        return None
+    if (raw_tools := request_body_compound_builtin_tools(
+        entry_value(config_entry, service_data, CONF_REQUEST_BODY_OPTIONS)
+    )) is not None:
+        return raw_tools
+    return []
+
+
 def service_protect_free_tier(
     config_entry: ConfigEntry,
     service_data: dict[str, Any],
@@ -322,6 +395,12 @@ def request_body_options_validation_error(
         return None
     if RESERVED_CHAT_BODY_OPTIONS.intersection(extra_body):
         return "reserved_request_body_option"
+    raw_compound_tools = request_body_compound_builtin_tool_value(extra_body)
+    if raw_compound_tools is not _MISSING:
+        if not model_registry.supports(model, GroqCapability.COMPOUND):
+            return "unsupported_compound_builtin_tools_model"
+        if not compound_builtin_tools_are_valid(raw_compound_tools):
+            return "invalid_compound_builtin_tools"
     if _request_body_requests_structured_outputs(
         extra_body
     ) and not model_registry.supports(model, GroqFeature.STRUCTURED_OUTPUTS):
@@ -355,6 +434,16 @@ def request_body_options_error_message(
         return (
             f"Groq model {model} does not support reasoning options in "
             "request_body_options"
+        )
+    if error == "unsupported_compound_builtin_tools_model":
+        return (
+            f"Groq model {model} does not support Compound built-in tools in "
+            "request_body_options"
+        )
+    if error == "invalid_compound_builtin_tools":
+        return (
+            "request_body_options compound_custom.tools.enabled_tools contains "
+            "unsupported or incompatible Compound built-in tools"
         )
     return None
 
