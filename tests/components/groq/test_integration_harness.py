@@ -1864,6 +1864,7 @@ async def test_text_to_speech_subentry_flow_rejects_invalid_response_format(
     flow = config_flow.GroqServiceSubentryFlow()
     flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
     _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(config_flow.shutil, "which", lambda name: None)
 
     result = await flow.async_step_user(
         {

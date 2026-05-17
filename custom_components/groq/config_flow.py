@@ -803,6 +803,18 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
             user_input = clean_service_input(user_input)
             selected_model = user_input.get(CONF_MODEL) or baseline_model
             voice_options = voice_options_for_model(selected_model)
+            if user_input.get(CONF_RESPONSE_FORMAT) not in (None, *RESPONSE_FORMATS):
+                user_input.pop(CONF_RESPONSE_FORMAT, None)
+                return self.async_show_form(
+                    step_id=FEATURE_TEXT_TO_SPEECH,
+                    data_schema=text_to_speech_schema(
+                        user_input,
+                        model_options,
+                        voice_options,
+                        ffmpeg_available=ffmpeg_available,
+                    ),
+                    errors={CONF_RESPONSE_FORMAT: "invalid_response_format"},
+                )
             ffmpeg_errors: dict[str, str] = {}
             if not ffmpeg_available and user_input.get(CONF_NORMALIZE_AUDIO):
                 ffmpeg_errors[CONF_NORMALIZE_AUDIO] = "ffmpeg_required"
@@ -854,18 +866,6 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                         ffmpeg_available=ffmpeg_available,
                     ),
                     errors={CONF_VOICE: "invalid_voice"},
-                )
-            if user_input.get(CONF_RESPONSE_FORMAT) not in (None, *RESPONSE_FORMATS):
-                user_input.pop(CONF_RESPONSE_FORMAT, None)
-                return self.async_show_form(
-                    step_id=FEATURE_TEXT_TO_SPEECH,
-                    data_schema=text_to_speech_schema(
-                        user_input,
-                        model_options,
-                        voice_options,
-                        ffmpeg_available=ffmpeg_available,
-                    ),
-                    errors={CONF_RESPONSE_FORMAT: "invalid_response_format"},
                 )
             self._tts_model_context = None
             return self._create_service_entry(FEATURE_TEXT_TO_SPEECH, user_input)
