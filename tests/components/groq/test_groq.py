@@ -992,7 +992,11 @@ async def test_tts_checks_ffmpeg_before_sending_long_tts_chunks(monkeypatch):
         DummyConfigEntry(data, {"enable_long_tts": True}),
         client,
     )
-    monkeypatch.setattr("custom_components.groq.tts.shutil.which", lambda name: None)
+
+    async def missing_ffmpeg(*args, **kwargs):  # noqa: ANN001
+        raise FileNotFoundError
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", missing_ffmpeg)
 
     ext, payload = await entity.async_get_tts_audio(
         f"{'A' * 198}. {'B' * 40}.",

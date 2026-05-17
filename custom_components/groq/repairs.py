@@ -67,7 +67,7 @@ def async_delete_ffmpeg_missing_issue(
     entry: ConfigEntry,
     service_data: dict[str, Any] | None = None,
 ) -> None:
-    """Delete the ffmpeg repair issue after normalization succeeds."""
+    """Delete the ffmpeg repair issue after audio processing succeeds."""
     with suppress(Exception):
         ir.async_delete_issue(
             hass,

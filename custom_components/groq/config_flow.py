@@ -31,6 +31,7 @@ from .const import (
     CONF_MODEL,
     CONF_NAME,
     CONF_NORMALIZE_AUDIO,
+    CONF_RESPONSE_FORMAT,
     CONF_SERVICE_TYPE,
     CONF_VOICE,
     DEFAULT_MODEL,
@@ -41,6 +42,7 @@ from .const import (
     FEATURE_TEXT_GENERATION,
     FEATURE_TEXT_TO_SPEECH,
     MODELS,
+    RESPONSE_FORMATS,
     SETUP_FEATURES,
     STT_MODELS,
     TEXT_MODELS,
@@ -801,12 +803,32 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
             user_input = clean_service_input(user_input)
             selected_model = user_input.get(CONF_MODEL) or baseline_model
             voice_options = voice_options_for_model(selected_model)
-            if not ffmpeg_available and (
-                user_input.get(CONF_NORMALIZE_AUDIO)
-                or user_input.get(CONF_ENABLE_LONG_TTS)
+            if user_input.get(CONF_RESPONSE_FORMAT) not in (None, *RESPONSE_FORMATS):
+                user_input.pop(CONF_RESPONSE_FORMAT, None)
+                return self.async_show_form(
+                    step_id=FEATURE_TEXT_TO_SPEECH,
+                    data_schema=text_to_speech_schema(
+                        user_input,
+                        model_options,
+                        voice_options,
+                        ffmpeg_available=ffmpeg_available,
+                    ),
+                    errors={CONF_RESPONSE_FORMAT: "invalid_response_format"},
+                )
+            ffmpeg_errors: dict[str, str] = {}
+            if not ffmpeg_available and user_input.get(CONF_NORMALIZE_AUDIO):
+                ffmpeg_errors[CONF_NORMALIZE_AUDIO] = "ffmpeg_required"
+            if not ffmpeg_available and user_input.get(CONF_ENABLE_LONG_TTS):
+                ffmpeg_errors[CONF_ENABLE_LONG_TTS] = "ffmpeg_required"
+            if not ffmpeg_available and user_input.get(CONF_RESPONSE_FORMAT) not in (
+                None,
+                "wav",
             ):
+                ffmpeg_errors[CONF_RESPONSE_FORMAT] = "ffmpeg_required"
+            if ffmpeg_errors:
                 user_input[CONF_NORMALIZE_AUDIO] = False
                 user_input[CONF_ENABLE_LONG_TTS] = False
+                user_input[CONF_RESPONSE_FORMAT] = "wav"
                 return self.async_show_form(
                     step_id=FEATURE_TEXT_TO_SPEECH,
                     data_schema=text_to_speech_schema(
@@ -815,10 +837,7 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                         voice_options,
                         ffmpeg_available=False,
                     ),
-                    errors={
-                        CONF_NORMALIZE_AUDIO: "ffmpeg_required",
-                        CONF_ENABLE_LONG_TTS: "ffmpeg_required",
-                    },
+                    errors=ffmpeg_errors,
                 )
             if selected_model != baseline_model and user_input.get(CONF_VOICE):
                 self._tts_model_context = selected_model

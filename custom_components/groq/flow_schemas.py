@@ -44,6 +44,7 @@ from .const import (
     CONF_VOICE,
     DEFAULT_MODEL,
     DEFAULT_PROTECT_FREE_TIER,
+    DEFAULT_RESPONSE_FORMAT,
     DEFAULT_STT_LANGUAGE,
     DEFAULT_STT_MODEL,
     DEFAULT_SYSTEM_PROMPT,
@@ -55,6 +56,7 @@ from .const import (
     MODELS,
     REASONING_EFFORT_OPTIONS,
     REASONING_FORMAT_OPTIONS,
+    RESPONSE_FORMATS,
     SERVICE_TIER_OPTIONS,
     SETUP_FEATURES,
     STT_LANGUAGE_OPTIONS,
@@ -87,6 +89,16 @@ def _model_default(
     if default in options:
         return default
     return options[0]
+
+
+def _response_format_default(values: dict[str, Any]) -> str:
+    """Return a TTS response format selector default."""
+    configured = values.get(CONF_RESPONSE_FORMAT)
+    if isinstance(configured, str):
+        configured = configured.strip().lower()
+        if configured in RESPONSE_FORMATS:
+            return configured
+    return DEFAULT_RESPONSE_FORMAT
 
 
 def _supports_model_option(
@@ -384,6 +396,9 @@ def text_to_speech_schema(
     selected_model = _model_default(values, CONF_MODEL, DEFAULT_MODEL, models)
     voices = voice_options or voice_options_for_model(selected_model)
     ffmpeg_option_selector = selector({"boolean": {"read_only": not ffmpeg_available}})
+    response_formats = (
+        RESPONSE_FORMATS if ffmpeg_available else [DEFAULT_RESPONSE_FORMAT]
+    )
     voice_field = (
         vol.Required(CONF_VOICE)
         if clear_voice
@@ -403,6 +418,14 @@ def text_to_speech_schema(
                 default=selected_model,
             ): selector({"select": {"options": models}}),
             voice_field: selector({"select": {"options": voices}}),
+            vol.Optional(
+                CONF_RESPONSE_FORMAT,
+                default=(
+                    _response_format_default(values)
+                    if ffmpeg_available
+                    else DEFAULT_RESPONSE_FORMAT
+                ),
+            ): selector({"select": {"options": response_formats}}),
             vol.Optional(
                 CONF_VOCAL_DIRECTIONS,
                 default=values.get(CONF_VOCAL_DIRECTIONS, ""),
@@ -648,7 +671,6 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
     """Remove blank service fields before storing a subentry."""
     data = dict(user_input)
     data.pop(CONF_API_KEY, None)
-    data.pop(CONF_RESPONSE_FORMAT, None)
     # Empty strings come back from optional selectors when the user leaves them
     # blank. Drop those values so service calls can fall back to integration
     # defaults instead of storing meaningless overrides.
@@ -658,12 +680,17 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_LANGUAGE,
         CONF_REASONING_EFFORT,
         CONF_REASONING_FORMAT,
+        CONF_RESPONSE_FORMAT,
         CONF_SERVICE_TIER,
         CONF_STOP,
         CONF_COMPOUND_BUILTIN_TOOLS,
     ):
         if data.get(key) in ("", None):
             data.pop(key, None)
+    if isinstance(data.get(CONF_RESPONSE_FORMAT), str):
+        data[CONF_RESPONSE_FORMAT] = data[CONF_RESPONSE_FORMAT].strip().lower()
+        if not data[CONF_RESPONSE_FORMAT]:
+            data.pop(CONF_RESPONSE_FORMAT, None)
     if not data.get(CONF_LLM_HASS_API):
         data.pop(CONF_LLM_HASS_API, None)
     if not data.get(CONF_REQUEST_BODY_OPTIONS):

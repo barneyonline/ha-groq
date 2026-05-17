@@ -1,361 +1,363 @@
 {
-  "config": {
-    "initiate_flow": {
-      "user": "Добавете Groq акаунт"
-    },
-    "step": {
-      "user": {
-        "title": "Добавете Groq",
-        "description": "Вижте документацията за допълнителна информация.",
-        "data": {
-          "name": "Име",
-          "api_key": "Въведете ключ Groq API"
+    "config": {
+        "initiate_flow": {
+            "user": "Добавете Groq акаунт"
         },
-        "data_description": {
-          "name": "Приветливо име за този Groq акаунт. Използвайте това, за да идентифицирате ключа API или проекта за фактуриране.",
-          "api_key": "Groq API ключ за този акаунт. Добавете друг Groq акаунт, ако искате да използвате различен ключ за отделен набор от услуги."
-        }
-      },
-      "reauth_confirm": {
-        "title": "Повторно удостоверяване на Groq",
-        "description": "Вашите идентификационни данни вече не са валидни. Моля, въведете нов API ключ.",
-        "data": {
-          "api_key": "Groq API ключ"
-        }
-      },
-      "reconfigure": {
-        "title": "Преконфигурирайте Groq",
-        "description": "Актуализирайте името на акаунта Groq или сменете ключа API.",
-        "data": {
-          "name": "Име",
-          "api_key": "Ключ Groq API"
+        "step": {
+            "user": {
+                "title": "Добавете Groq",
+                "description": "Вижте документацията за допълнителна информация.",
+                "data": {
+                    "name": "Име",
+                    "api_key": "Въведете ключ Groq API"
+                },
+                "data_description": {
+                    "name": "Приветливо име за този Groq акаунт. Използвайте това, за да идентифицирате ключа API или проекта за фактуриране.",
+                    "api_key": "Groq API ключ за този акаунт. Добавете друг Groq акаунт, ако искате да използвате различен ключ за отделен набор от услуги."
+                }
+            },
+            "reauth_confirm": {
+                "title": "Повторно удостоверяване на Groq",
+                "description": "Вашите идентификационни данни вече не са валидни. Моля, въведете нов API ключ.",
+                "data": {
+                    "api_key": "Groq API ключ"
+                }
+            },
+            "reconfigure": {
+                "title": "Преконфигурирайте Groq",
+                "description": "Актуализирайте името на акаунта Groq или сменете ключа API.",
+                "data": {
+                    "name": "Име",
+                    "api_key": "Ключ Groq API"
+                },
+                "data_description": {
+                    "name": "Приветливо име за този Groq акаунт.",
+                    "api_key": "Допълнителен резервен ключ API. Оставете празно, за да запазите текущия ключ API."
+                }
+            }
         },
-        "data_description": {
-          "name": "Приветливо име за този Groq акаунт.",
-          "api_key": "Допълнителен резервен ключ API. Оставете празно, за да запазите текущия ключ API."
-        }
-      }
-    },
-    "abort": {
-      "reconfigure_successful": "Groq акаунтът е актуализиран успешно.",
-      "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
-    },
-    "error": {
-      "cannot_connect": "Не може да се свърже с Groq. Моля, проверете мрежовата си връзка и опитайте отново.",
-      "duplicate_api_key": "Друг Groq акаунт вече използва този API ключ.",
-      "invalid_auth": "Невалиден Groq API ключ. Моля, въведете валиден ключ.",
-      "wrong_api_key": "Невалиден API ключ. Моля, въведете валиден API ключ.",
-      "invalid_url": "Невалиден URL. Моля, въведете валиден URL.",
-      "invalid_enabled_features": "Една или повече избрани функции не се поддържат.",
-      "invalid_response_format": "Невалиден формат на отговора.",
-      "unsupported_reasoning_model": "Избраният модел не поддържа опции за разсъждение.",
-      "unsupported_prompt_caching_model": "Избраният модел не поддържа локално кеширане на отговорите.",
-      "unsupported_structured_outputs_model": "Избраният модел не поддържа структурирани изходи.",
-      "reserved_request_body_option": "Допълнителните опции на тялото на заявката не могат да заменят модел, съобщения или поток. Вместо това използвайте специалните полета.",
-      "max_completion_tokens_exceeded": "Избраният модел не поддържа толкова много максимални жетони за завършване.",
-      "invalid_voice": "Избраният глас не е наличен за избрания модел.",
-      "select_voice_for_model": "Изберете глас за избрания модел.",
-      "required": "Това поле е задължително.",
-      "unknown": "Неочаквана грешка при валидиране на ключа API. Моля, опитайте отново.",
-      "unknown_error": "Неочаквана грешка — моля, опитайте отново.",
+        "abort": {
+            "reconfigure_successful": "Groq акаунтът е актуализиран успешно.",
+            "reauth_successful": "You're all set. Groq has been reconnected with the new API key."
+        },
+        "error": {
+            "cannot_connect": "Не може да се свърже с Groq. Моля, проверете мрежовата си връзка и опитайте отново.",
+            "duplicate_api_key": "Друг Groq акаунт вече използва този API ключ.",
+            "invalid_auth": "Невалиден Groq API ключ. Моля, въведете валиден ключ.",
+            "wrong_api_key": "Невалиден API ключ. Моля, въведете валиден API ключ.",
+            "invalid_url": "Невалиден URL. Моля, въведете валиден URL.",
+            "invalid_enabled_features": "Една или повече избрани функции не се поддържат.",
+            "invalid_response_format": "Invalid response format.",
+            "unsupported_reasoning_model": "Избраният модел не поддържа опции за разсъждение.",
+            "unsupported_prompt_caching_model": "Избраният модел не поддържа локално кеширане на отговорите.",
+            "unsupported_structured_outputs_model": "Избраният модел не поддържа структурирани изходи.",
+            "reserved_request_body_option": "Допълнителните опции на тялото на заявката не могат да заменят модел, съобщения или поток. Вместо това използвайте специалните полета.",
+            "max_completion_tokens_exceeded": "Избраният модел не поддържа толкова много максимални жетони за завършване.",
+            "invalid_voice": "Избраният глас не е наличен за избрания модел.",
+            "select_voice_for_model": "Изберете глас за избрания модел.",
+            "required": "Това поле е задължително.",
+            "unknown": "Неочаквана грешка при валидиране на ключа API. Моля, опитайте отново.",
+            "unknown_error": "Неочаквана грешка — моля, опитайте отново.",
             "ffmpeg_required": "Инсталирайте ffmpeg, за да активирате тази опция.",
-      "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
-      "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
-      "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Конфигурирайте опциите на Groq",
-        "data": {
-          "api_key": "Ключ Groq API"
-        },
-        "data_description": {
-          "api_key": "Допълнителен резервен API ключ за този Groq акаунт."
+            "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
+            "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
+            "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
         }
-      }
-    }
-  },
-  "config_subentries": {
-    "text_generation": {
-      "entry_type": "Услуга за генериране на текст",
-      "initiate_flow": {
-        "user": "Добавете генериране на текст",
-        "reconfigure": "Преконфигуриране на генерирането на текст"
-      },
-      "abort": {
-        "reconfigure_successful": "Услугата за генериране на текст е актуализирана успешно."
-      },
-      "step": {
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Конфигурирайте опциите на Groq",
+                "data": {
+                    "api_key": "Ключ Groq API"
+                },
+                "data_description": {
+                    "api_key": "Допълнителен резервен API ключ за този Groq акаунт."
+                }
+            }
+        }
+    },
+    "config_subentries": {
         "text_generation": {
-          "title": "Генериране на текст",
-          "description": "Избрани възможности на модела: {model_capabilities}",
-          "data": {
-            "name": "Име",
-            "model": "Модел",
-            "system_prompt": "Системна подкана",
-            "temperature": "Температура",
-            "advanced_options": "Конфигуриране на разширени опции за заявка",
-            "protect_free_tier": "Безплатна защита",
-            "llm_hass_api": "Home Assistant LLM API"
-          },
-          "data_description": {
-            "name": "Приветливо име за тази услуга за генериране на текст. Home Assistant използва това за Assist и AI обекти на задачи.",
-            "model": "Моделът за чат Groq, използван за текстови отговори, Assist разговори и задачи за генериране на данни.",
-            "system_prompt": "Инструкции, които ръководят модела. По подразбиране съвпада с подканата за задача Home Assistant на AI.",
-            "temperature": "Контролира вариацията на отговора. По-ниските стойности са по-предвидими; по-високите стойности са по-креативни.",
-            "advanced_options": "Отваря разширени контроли за по-рядко срещани Groq опции за заявки за чат.",
-            "protect_free_tier": "Когато Groq съобщи, че тази услуга е достигнала лимит на заявка или токен, Home Assistant поставя на пауза само тази услуга до времето за нулиране на Groq, преди да изпрати още заявки.",
-            "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
-          }
+            "entry_type": "Услуга за генериране на текст",
+            "initiate_flow": {
+                "user": "Добавете генериране на текст",
+                "reconfigure": "Преконфигуриране на генерирането на текст"
+            },
+            "abort": {
+                "reconfigure_successful": "Услугата за генериране на текст е актуализирана успешно."
+            },
+            "step": {
+                "text_generation": {
+                    "title": "Генериране на текст",
+                    "description": "Избрани възможности на модела: {model_capabilities}",
+                    "data": {
+                        "name": "Име",
+                        "model": "Модел",
+                        "system_prompt": "Системна подкана",
+                        "temperature": "Температура",
+                        "advanced_options": "Конфигуриране на разширени опции за заявка",
+                        "protect_free_tier": "Безплатна защита",
+                        "llm_hass_api": "Home Assistant LLM API"
+                    },
+                    "data_description": {
+                        "name": "Приветливо име за тази услуга за генериране на текст. Home Assistant използва това за Assist и AI обекти на задачи.",
+                        "model": "Моделът за чат Groq, използван за текстови отговори, Assist разговори и задачи за генериране на данни.",
+                        "system_prompt": "Инструкции, които ръководят модела. По подразбиране съвпада с подканата за задача Home Assistant на AI.",
+                        "temperature": "Контролира вариацията на отговора. По-ниските стойности са по-предвидими; по-високите стойности са по-креативни.",
+                        "advanced_options": "Отваря разширени контроли за по-рядко срещани Groq опции за заявки за чат.",
+                        "protect_free_tier": "Когато Groq съобщи, че тази услуга е достигнала лимит на заявка или токен, Home Assistant поставя на пауза само тази услуга до времето за нулиране на Groq, преди да изпрати още заявки.",
+                        "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
+                    }
+                },
+                "text_generation_advanced": {
+                    "title": "Разширено генериране на текст",
+                    "data": {
+                        "max_tokens": "Макс. токени за завършване",
+                        "top_p": "Топ П",
+                        "stop": "Спиране на последователности",
+                        "seed": "Семе",
+                        "service_tier": "Ниво на обслужване",
+                        "stream": "Поток Assist отговори",
+                        "reasoning_effort": "Усилие за разсъждение",
+                        "reasoning_format": "Формат на разсъждение",
+                        "include_reasoning": "Включете разсъждение",
+                        "prompt_caching": "Локален кеш за отговори",
+                        "compound_builtin_tools": "Compound built-in tools",
+                        "structured_outputs": "Използвайте структурирани изходи",
+                        "schema_name": "Име на схема",
+                        "schema": "JSON schema",
+                        "strict": "Режим на строга схема",
+                        "request_body_options": "Допълнителни опции за тялото на заявката"
+                    },
+                    "data_description": {
+                        "max_tokens": "Ограничава броя на токените, които Groq може да генерира в отговора.",
+                        "top_p": "Алтернативен контрол на пробите. По-ниските стойности ограничават генерирането до по-вероятни токени.",
+                        "stop": "Една стоп последователност на ред. Генерирането спира, когато се създаде произволна последователност.",
+                        "seed": "Най-успешно детерминистично извадково начало за повтарящи се отговори.",
+                        "service_tier": "Опционално ниво на обработка Groq за заявката.",
+                        "stream": "Поточно предава отговорите на Assist в журнала за чат Home Assistant, когато се поддържа.",
+                        "reasoning_effort": "Бюджет за разсъждение само за поддържани модели за разсъждение.",
+                        "reasoning_format": "Как поддържаните модели на разсъждения разкриват съдържанието на разсъжденията.",
+                        "include_reasoning": "Изисква съдържание за мотивиране на поддържани модели, когато не е зададен формат за мотивиране.",
+                        "prompt_caching": "Кешира съвпадащи Home Assistant сервизни отговори локално за поддържани модели.",
+                        "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
+                        "structured_outputs": "Изисква JSON, който следва конфигурираната схема, когато тази услуга се използва за генериране на данни.",
+                        "schema_name": "Кратък идентификатор, изпратен до Groq със схемата.",
+                        "schema": "JSON Schema обект, изпратен като response_format.json_schema.schema.",
+                        "strict": "Използва Groq ограничено декодиране, когато избраният модел поддържа стриктно структурирани изходи.\nОбектът",
+                        "request_body_options": "JSON е обединен в тялото на заявката за завършване на чат. Това е разширеното преминаване за всяка Groq опция за създаване на тяло за чат, която не е показана като специално поле, включително citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+                    }
+                }
+            }
         },
-        "text_generation_advanced": {
-          "title": "Разширено генериране на текст",
-          "data": {
-            "max_tokens": "Макс. токени за завършване",
-            "top_p": "Топ П",
-            "stop": "Спиране на последователности",
-            "seed": "Семе",
-            "service_tier": "Ниво на обслужване",
-            "stream": "Поток Assist отговори",
-            "reasoning_effort": "Усилие за разсъждение",
-            "reasoning_format": "Формат на разсъждение",
-            "include_reasoning": "Включете разсъждение",
-            "prompt_caching": "Локален кеш за отговори",
-            "compound_builtin_tools": "Compound built-in tools",
-            "structured_outputs": "Използвайте структурирани изходи",
-            "schema_name": "Име на схема",
-            "schema": "JSON schema",
-            "strict": "Режим на строга схема",
-            "request_body_options": "Допълнителни опции за тялото на заявката"
-          },
-          "data_description": {
-            "max_tokens": "Ограничава броя на токените, които Groq може да генерира в отговора.",
-            "top_p": "Алтернативен контрол на пробите. По-ниските стойности ограничават генерирането до по-вероятни токени.",
-            "stop": "Една стоп последователност на ред. Генерирането спира, когато се създаде произволна последователност.",
-            "seed": "Най-успешно детерминистично извадково начало за повтарящи се отговори.",
-            "service_tier": "Опционално ниво на обработка Groq за заявката.",
-            "stream": "Поточно предава отговорите на Assist в журнала за чат Home Assistant, когато се поддържа.",
-            "reasoning_effort": "Бюджет за разсъждение само за поддържани модели за разсъждение.",
-            "reasoning_format": "Как поддържаните модели на разсъждения разкриват съдържанието на разсъжденията.",
-            "include_reasoning": "Изисква съдържание за мотивиране на поддържани модели, когато не е зададен формат за мотивиране.",
-            "prompt_caching": "Кешира съвпадащи Home Assistant сервизни отговори локално за поддържани модели.",
-            "compound_builtin_tools": "Allows selected Groq server-side tools for Compound models. Leave empty to block built-in web browsing, website visits, browser automation, code execution, and Wolfram Alpha.",
-            "structured_outputs": "Изисква JSON, който следва конфигурираната схема, когато тази услуга се използва за генериране на данни.",
-            "schema_name": "Кратък идентификатор, изпратен до Groq със схемата.",
-            "schema": "JSON Schema обект, изпратен като response_format.json_schema.schema.",
-            "strict": "Използва Groq ограничено декодиране, когато избраният модел поддържа стриктно структурирани изходи.\nОбектът",
-            "request_body_options": "JSON е обединен в тялото на заявката за завършване на чат. Това е разширеното преминаване за всяка Groq опция за създаване на тяло за чат, която не е показана като специално поле, включително citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
-          }
-        }
-      }
-    },
-    "speech_to_text": {
-      "entry_type": "Услуга за преобразуване на реч в текст",
-      "initiate_flow": {
-        "user": "Добавяне на говор към текст",
-        "reconfigure": "Преконфигуриране на говор към текст"
-      },
-      "abort": {
-        "reconfigure_successful": "Услугата за преобразуване на реч в текст е актуализирана успешно."
-      },
-      "step": {
         "speech_to_text": {
-          "title": "Реч към текст",
-          "data": {
-            "name": "Име",
-            "model": "Модел",
-            "language": "Език",
-            "protect_free_tier": "Безплатна защита"
-          },
-          "data_description": {
-            "name": "Удобно име за този екземпляр на услугата за преобразуване на реч в текст.",
-            "model": "Моделът Groq Whisper, използван за транскрибиране на аудио.",
-            "language": "Езикова подсказка, изпратена до Groq за транскрипция. По подразбиране е езикът, конфигуриран в Home Assistant, когато е наличен.",
-            "protect_free_tier": "Когато Groq съобщи, че тази услуга е достигнала ограничение за заявка или токен, Home Assistant поставя на пауза само тази услуга до времето за нулиране на Groq, преди да изпрати още заявки."
-          }
-        }
-      }
-    },
-    "text_to_speech": {
-      "entry_type": "Услуга Text-to-Speech",
-      "initiate_flow": {
-        "user": "Добавяне на текст към говор",
-        "reconfigure": "Преконфигуриране на текст към говор"
-      },
-      "abort": {
-        "reconfigure_successful": "Услугата Text-to-Speech актуализирана успешно."
-      },
-      "step": {
+            "entry_type": "Услуга за преобразуване на реч в текст",
+            "initiate_flow": {
+                "user": "Добавяне на говор към текст",
+                "reconfigure": "Преконфигуриране на говор към текст"
+            },
+            "abort": {
+                "reconfigure_successful": "Услугата за преобразуване на реч в текст е актуализирана успешно."
+            },
+            "step": {
+                "speech_to_text": {
+                    "title": "Реч към текст",
+                    "data": {
+                        "name": "Име",
+                        "model": "Модел",
+                        "language": "Език",
+                        "protect_free_tier": "Безплатна защита"
+                    },
+                    "data_description": {
+                        "name": "Удобно име за този екземпляр на услугата за преобразуване на реч в текст.",
+                        "model": "Моделът Groq Whisper, използван за транскрибиране на аудио.",
+                        "language": "Езикова подсказка, изпратена до Groq за транскрипция. По подразбиране е езикът, конфигуриран в Home Assistant, когато е наличен.",
+                        "protect_free_tier": "Когато Groq съобщи, че тази услуга е достигнала ограничение за заявка или токен, Home Assistant поставя на пауза само тази услуга до времето за нулиране на Groq, преди да изпрати още заявки."
+                    }
+                }
+            }
+        },
         "text_to_speech": {
-          "title": "Преобразуване на текст в реч",
-          "data": {
-            "name": "Име",
-            "model": "Модел",
-            "voice": "Глас",
-            "vocal_directions": "Гласови указания по подразбиране",
-            "normalize_audio": "Активиране на силата на звука за генерирано аудио (използва повече CPU)",
-            "enable_long_tts": "Активиране на дълги TTS съобщения (използва повече CPU)",
-            "protect_free_tier": "Безплатна защита"
-          },
-          "data_description": {
-            "name": "Удобно име за този екземпляр на услугата Text-to-Speech.",
-            "model": "Речевият модел Groq, използван за генериране на аудио.",
-            "voice": "Гласовата персона, използвана от избрания говорен модел. Промяната на модела изчиства гласовете, които не са налични за новия модел.",
-            "vocal_directions": "Незадължителен стил на предаване, добавен към речта, като например весел или шепот. Можете да изберете предварителна настройка или да въведете своя собствена.",
-            "normalize_audio": "Преобразува изхода в нормализиран MP3 с ffmpeg за по-постоянна сила на звука на малки високоговорители. Изисква ffmpeg; деактивирано е, ако ffmpeg не е инсталиран.",
-            "enable_long_tts": "Разделя по-дългите съобщения на няколко Groq заявки и ги сшива с ffmpeg. Това може да използва повече CPU и повече Groq квота за заявки. Изисква ffmpeg; деактивирано е, ако ffmpeg не е инсталиран.",
-            "protect_free_tier": "Когато Groq докладва, че тази услуга е достигнала заявка, токен или известно ограничение за знаци за текст към говор, Home Assistant поставя на пауза само тази услуга до времето за нулиране, преди да изпрати още заявки."
-          }
-        }
-      }
-    },
-    "image_recognition": {
-      "entry_type": "Услуга за разпознаване на изображения",
-      "initiate_flow": {
-        "user": "Добавяне на разпознаване на изображение",
-        "reconfigure": "Преконфигуриране на разпознаването на изображения"
-      },
-      "abort": {
-        "reconfigure_successful": "Услугата за разпознаване на изображения е актуализирана успешно."
-      },
-      "step": {
+            "entry_type": "Услуга Text-to-Speech",
+            "initiate_flow": {
+                "user": "Добавяне на текст към говор",
+                "reconfigure": "Преконфигуриране на текст към говор"
+            },
+            "abort": {
+                "reconfigure_successful": "Услугата Text-to-Speech актуализирана успешно."
+            },
+            "step": {
+                "text_to_speech": {
+                    "title": "Преобразуване на текст в реч",
+                    "data": {
+                        "name": "Име",
+                        "model": "Модел",
+                        "voice": "Глас",
+                        "vocal_directions": "Гласови указания по подразбиране",
+                        "normalize_audio": "Активиране на силата на звука за генерирано аудио (използва повече CPU)",
+                        "enable_long_tts": "Активиране на дълги TTS съобщения (използва повече CPU)",
+                        "protect_free_tier": "Безплатна защита",
+                        "response_format": "Playback format"
+                    },
+                    "data_description": {
+                        "name": "Удобно име за този екземпляр на услугата Text-to-Speech.",
+                        "model": "Речевият модел Groq, използван за генериране на аудио.",
+                        "voice": "Гласовата персона, използвана от избрания говорен модел. Промяната на модела изчиства гласовете, които не са налични за новия модел.",
+                        "vocal_directions": "Незадължителен стил на предаване, добавен към речта, като например весел или шепот. Можете да изберете предварителна настройка или да въведете своя собствена.",
+                        "normalize_audio": "Normalizes generated audio with ffmpeg for more consistent loudness on small speakers. ffmpeg is also required when playback format is MP3 or FLAC.",
+                        "enable_long_tts": "Разделя по-дългите съобщения на няколко Groq заявки и ги сшива с ffmpeg. Това може да използва повече CPU и повече Groq квота за заявки. Изисква ffmpeg; деактивирано е, ако ffmpeg не е инсталиран.",
+                        "protect_free_tier": "Когато Groq докладва, че тази услуга е достигнала заявка, токен или известно ограничение за знаци за текст към говор, Home Assistant поставя на пауза само тази услуга до времето за нулиране, преди да изпрати още заявки.",
+                        "response_format": "Audio format served by Home Assistant after Groq generates WAV audio. WAV is the default; MP3 is the safest choice for most speakers, and FLAC is available for lossless playback on supported speakers."
+                    }
+                }
+            }
+        },
         "image_recognition": {
-          "title": "Разпознаване на изображения",
-          "data": {
-            "name": "Име",
-            "model": "Модел",
-            "system_prompt": "Системна подкана",
-            "protect_free_tier": "Безплатна защита"
-          },
-          "data_description": {
-            "name": "Удобно име за този екземпляр на услугата за разпознаване на изображения.",
-            "model": "Визуалният модел Groq, използван за проверка на изображения.",
-            "system_prompt": "Незадължителни инструкции, които ръководят как се отговаря на въпросите за изображения.",
-            "protect_free_tier": "Когато Groq съобщи, че тази услуга е достигнала лимит на заявка или токен, Home Assistant поставя на пауза само тази услуга до времето за нулиране на Groq, преди да изпрати още заявки."
-          }
+            "entry_type": "Услуга за разпознаване на изображения",
+            "initiate_flow": {
+                "user": "Добавяне на разпознаване на изображение",
+                "reconfigure": "Преконфигуриране на разпознаването на изображения"
+            },
+            "abort": {
+                "reconfigure_successful": "Услугата за разпознаване на изображения е актуализирана успешно."
+            },
+            "step": {
+                "image_recognition": {
+                    "title": "Разпознаване на изображения",
+                    "data": {
+                        "name": "Име",
+                        "model": "Модел",
+                        "system_prompt": "Системна подкана",
+                        "protect_free_tier": "Безплатна защита"
+                    },
+                    "data_description": {
+                        "name": "Удобно име за този екземпляр на услугата за разпознаване на изображения.",
+                        "model": "Визуалният модел Groq, използван за проверка на изображения.",
+                        "system_prompt": "Незадължителни инструкции, които ръководят как се отговаря на въпросите за изображения.",
+                        "protect_free_tier": "Когато Groq съобщи, че тази услуга е достигнала лимит на заявка или токен, Home Assistant поставя на пауза само тази услуга до времето за нулиране на Groq, преди да изпрати още заявки."
+                    }
+                }
+            }
         }
-      }
+    },
+    "entity": {
+        "ai_task": {
+            "data_generation_tasks": {
+                "name": "Задачи за генериране на данни"
+            }
+        },
+        "conversation": {
+            "assist": {
+                "name": "Assist"
+            }
+        },
+        "stt": {
+            "speech_to_text": {
+                "name": "Преобразуване на реч в текст"
+            }
+        },
+        "tts": {
+            "text_to_speech": {
+                "name": "Преобразуване на текст в реч"
+            }
+        }
+    },
+    "issues": {
+        "ffmpeg_missing": {
+            "title": "ffmpeg is required for Groq audio processing",
+            "description": "The Groq Text-to-Speech service {service_name} is configured to process generated audio with ffmpeg, but Home Assistant could not run ffmpeg for the requested audio processing. Install ffmpeg on the Home Assistant host, choose WAV playback when conversion is enabled, or turn off audio normalization and Long TTS for this Groq Text-to-Speech service."
+        },
+        "model_access": {
+            "title": "Моделът Groq не е наличен",
+            "description": "Groq съобщи, че моделът {model} не е достъпен за този акаунт. Проверете името на модела в конзолата Groq, потвърдете, че моделът е активиран за акаунта или изберете различен модел Groq в тази интеграция."
+        },
+        "model_configuration": {
+            "title": "Конфигурацията на сервизния модел Groq е невалидна",
+            "description": "Groq услугата {service_name} е конфигурирана да използва модел {model}, но не е известно, че този модел поддържа {feature}. Изберете модел, който поддържа този тип услуга."
+        }
+    },
+    "exceptions": {
+        "multiple_services_match": {
+            "message": "Няколко Groq услуги съответстват на service_id: {service_id}"
+        },
+        "config_entry_not_found": {
+            "message": "Groq запис в конфигурацията не е намерен: {entry_id}"
+        },
+        "no_loaded_config_entry": {
+            "message": "Не е намерен зареден запис в конфигурацията на Groq"
+        },
+        "multiple_config_entries": {
+            "message": "Заредени са множество Groq конфигурационни записи; осигурете config_entry_id или service_id"
+        },
+        "service_not_found": {
+            "message": "Groq {service_type} услугата не е намерена: {service_id}"
+        },
+        "multiple_services_configured": {
+            "message": "Конфигурирани са множество Groq {service_type} услуги; осигурете service_id"
+        },
+        "unsupported_model": {
+            "message": "Groq модел {model} не е известно да поддържа {feature}"
+        },
+        "completion_token_limit": {
+            "message": "Groq модел {model} поддържа най-много {limit} токени за завършване"
+        },
+        "select_one_camera": {
+            "message": "Изберете само една камера"
+        },
+        "camera_capture_failed": {
+            "message": "Не можа да се заснеме изображение от фотоапарата {entity_id}"
+        },
+        "local_image_path_not_allowed": {
+            "message": "Пътят на локалното изображение не е в Home Assistant на allowlist_external_dirs"
+        },
+        "local_image_not_found": {
+            "message": "Локален файл с изображение не е намерен: {path}"
+        },
+        "local_file_not_image": {
+            "message": "Локалният файл не е изображение: {path}"
+        },
+        "image_media_unresolvable": {
+            "message": "Не можа да се разреши файл с изображение: {path}"
+        },
+        "selected_media_not_image": {
+            "message": "Избраната медия не е изображение: {path}"
+        },
+        "image_source_required": {
+            "message": "Изберете обект на камера, файл с изображение, локален път на изображение или изображение URL"
+        },
+        "invalid_image_url": {
+            "message": "Изображението URL трябва да бъде http, https или данни за изображение URL"
+        },
+        "image_too_large": {
+            "message": "Избраното изображение е твърде голямо; максималният размер е {limit_mb} MB"
+        },
+        "local_audio_path_not_allowed": {
+            "message": "Локалният аудио път не е в allowlist_external_dirs на Home Assistant"
+        },
+        "local_audio_not_found": {
+            "message": "Локален аудио файл не е намерен: {path}"
+        },
+        "local_file_not_audio": {
+            "message": "Локалният файл не е аудио: {path}"
+        },
+        "audio_media_unresolvable": {
+            "message": "Не можа да се разреши аудио файл: {path}"
+        },
+        "audio_media_local_required": {
+            "message": "Избраното аудио трябва да се преобразува в локален файл"
+        },
+        "selected_media_not_audio": {
+            "message": "Избраната медия не е аудио: {path}"
+        },
+        "audio_source_required": {
+            "message": "Изберете аудио файл или локален аудио път"
+        },
+        "audio_too_large": {
+            "message": "Избраното аудио е твърде голямо; максималният размер е {limit_mb} MB"
+        },
+        "request_invalid": {
+            "message": "{message}"
+        }
     }
-  },
-  "entity": {
-    "ai_task": {
-      "data_generation_tasks": {
-        "name": "Задачи за генериране на данни"
-      }
-    },
-    "conversation": {
-      "assist": {
-        "name": "Assist"
-      }
-    },
-    "stt": {
-      "speech_to_text": {
-        "name": "Преобразуване на реч в текст"
-      }
-    },
-    "tts": {
-      "text_to_speech": {
-        "name": "Преобразуване на текст в реч"
-      }
-    }
-  },
-  "issues": {
-    "ffmpeg_missing": {
-      "title": "ffmpeg е необходим за обработка на аудио от Groq",
-      "description": "Услугата Groq Text-to-Speech {service_name} е конфигурирана да обработва генерираното аудио с ffmpeg, но Home Assistant не можа да стартира ffmpeg. Инсталирайте ffmpeg на хоста на Home Assistant или изключете аудио нормализацията и Long TTS за тази Groq Text-to-Speech услуга."
-    },
-    "model_access": {
-      "title": "Моделът Groq не е наличен",
-      "description": "Groq съобщи, че моделът {model} не е достъпен за този акаунт. Проверете името на модела в конзолата Groq, потвърдете, че моделът е активиран за акаунта или изберете различен модел Groq в тази интеграция."
-    },
-    "model_configuration": {
-      "title": "Конфигурацията на сервизния модел Groq е невалидна",
-      "description": "Groq услугата {service_name} е конфигурирана да използва модел {model}, но не е известно, че този модел поддържа {feature}. Изберете модел, който поддържа този тип услуга."
-    }
-  },
-  "exceptions": {
-    "multiple_services_match": {
-      "message": "Няколко Groq услуги съответстват на service_id: {service_id}"
-    },
-    "config_entry_not_found": {
-      "message": "Groq запис в конфигурацията не е намерен: {entry_id}"
-    },
-    "no_loaded_config_entry": {
-      "message": "Не е намерен зареден запис в конфигурацията на Groq"
-    },
-    "multiple_config_entries": {
-      "message": "Заредени са множество Groq конфигурационни записи; осигурете config_entry_id или service_id"
-    },
-    "service_not_found": {
-      "message": "Groq {service_type} услугата не е намерена: {service_id}"
-    },
-    "multiple_services_configured": {
-      "message": "Конфигурирани са множество Groq {service_type} услуги; осигурете service_id"
-    },
-    "unsupported_model": {
-      "message": "Groq модел {model} не е известно да поддържа {feature}"
-    },
-    "completion_token_limit": {
-      "message": "Groq модел {model} поддържа най-много {limit} токени за завършване"
-    },
-    "select_one_camera": {
-      "message": "Изберете само една камера"
-    },
-    "camera_capture_failed": {
-      "message": "Не можа да се заснеме изображение от фотоапарата {entity_id}"
-    },
-    "local_image_path_not_allowed": {
-      "message": "Пътят на локалното изображение не е в Home Assistant на allowlist_external_dirs"
-    },
-    "local_image_not_found": {
-      "message": "Локален файл с изображение не е намерен: {path}"
-    },
-    "local_file_not_image": {
-      "message": "Локалният файл не е изображение: {path}"
-    },
-    "image_media_unresolvable": {
-      "message": "Не можа да се разреши файл с изображение: {path}"
-    },
-    "selected_media_not_image": {
-      "message": "Избраната медия не е изображение: {path}"
-    },
-    "image_source_required": {
-      "message": "Изберете обект на камера, файл с изображение, локален път на изображение или изображение URL"
-    },
-    "invalid_image_url": {
-      "message": "Изображението URL трябва да бъде http, https или данни за изображение URL"
-    },
-    "image_too_large": {
-      "message": "Избраното изображение е твърде голямо; максималният размер е {limit_mb} MB"
-    },
-    "local_audio_path_not_allowed": {
-      "message": "Локалният аудио път не е в allowlist_external_dirs на Home Assistant"
-    },
-    "local_audio_not_found": {
-      "message": "Локален аудио файл не е намерен: {path}"
-    },
-    "local_file_not_audio": {
-      "message": "Локалният файл не е аудио: {path}"
-    },
-    "audio_media_unresolvable": {
-      "message": "Не можа да се разреши аудио файл: {path}"
-    },
-    "audio_media_local_required": {
-      "message": "Избраното аудио трябва да се преобразува в локален файл"
-    },
-    "selected_media_not_audio": {
-      "message": "Избраната медия не е аудио: {path}"
-    },
-    "audio_source_required": {
-      "message": "Изберете аудио файл или локален аудио път"
-    },
-    "audio_too_large": {
-      "message": "Избраното аудио е твърде голямо; максималният размер е {limit_mb} MB"
-    },
-    "request_invalid": {
-      "message": "{message}"
-    }
-  }
 }
