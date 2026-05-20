@@ -1182,6 +1182,16 @@ def test_prompt_cache_evicts_lru_and_clears():
     assert cache.size == 0
 
 
+def test_prompt_cache_compacts_stale_expiry_entries():
+    cache = GroqPromptCache(max_size=1, default_ttl=300)
+
+    for index in range(128):
+        cache.set("same", {"text": str(index)})
+
+    assert cache.get("same") == {"text": "127"}
+    assert len(cache._expiry_heap) <= 64
+
+
 @pytest.mark.asyncio
 async def test_generate_text_service_uses_cache():
     entry = DummyEntry()
