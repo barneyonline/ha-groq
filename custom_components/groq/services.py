@@ -15,12 +15,6 @@ from urllib.parse import urlparse
 
 import voluptuous as vol
 
-from homeassistant.components import camera
-from homeassistant.components.media_source import (
-    Unresolvable,
-    async_resolve_media,
-    is_media_source_id,
-)
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import (
@@ -122,6 +116,33 @@ MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 _REGISTERED = "services_registered"
 _SERVICES_YAML = Path(__file__).with_name("services.yaml")
+
+
+class _LazyCameraModule:
+    """Import Home Assistant camera helpers only when a camera image is used."""
+
+    def __getattr__(self, name: str) -> Any:
+        from homeassistant.components import camera as camera_module
+
+        return getattr(camera_module, name)
+
+
+camera = _LazyCameraModule()
+
+
+async def async_resolve_media(*args: Any, **kwargs: Any) -> Any:
+    """Resolve media-source ids without importing media_source during setup."""
+    from homeassistant.components.media_source import async_resolve_media as resolve
+
+    return await resolve(*args, **kwargs)
+
+
+def is_media_source_id(value: str) -> bool:
+    """Return whether a value is a media-source id."""
+    from homeassistant.components.media_source import is_media_source_id as check
+
+    return check(value)
+
 
 _ENTRY_SELECTOR = vol.Optional(ATTR_CONFIG_ENTRY_ID)
 _SERVICE_SELECTOR = vol.Optional(ATTR_SERVICE_ID)
@@ -799,6 +820,8 @@ async def _image_from_media_source(hass: HomeAssistant, image_file: str) -> str:
     """Return a data URL or URL from a Home Assistant media-source image."""
     if not is_media_source_id(image_file):
         return await _image_from_local_path(hass, image_file)
+    from homeassistant.components.media_source import Unresolvable
+
     try:
         media = await async_resolve_media(hass, image_file, None)
     except Unresolvable as err:
@@ -874,6 +897,8 @@ async def _audio_from_media_source(
     """Return audio bytes and filename from Home Assistant media or local path."""
     if not is_media_source_id(audio_file):
         return await _audio_from_local_path(hass, audio_file)
+    from homeassistant.components.media_source import Unresolvable
+
     try:
         media = await async_resolve_media(hass, audio_file, None)
     except Unresolvable as err:

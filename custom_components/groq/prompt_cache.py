@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
+from heapq import heappop, heappush
 from time import monotonic
 from typing import Any
 
@@ -28,6 +29,7 @@ class GroqPromptCache:
         self._max_size = max(0, max_size)
         self._default_ttl = default_ttl
         self._entries: OrderedDict[str, PromptCacheEntry] = OrderedDict()
+        self._expiry_heap: list[tuple[float, str]] = []
 
     @property
     def size(self) -> int:
@@ -62,23 +64,36 @@ class GroqPromptCache:
             created_at=now,
             expires_at=expires_at,
         )
+        if expires_at is not None:
+            heappush(self._expiry_heap, (expires_at, key))
         self._entries.move_to_end(key)
         while len(self._entries) > self._max_size:
             self._entries.popitem(last=False)
+        self._compact_expiry_heap_if_needed()
 
     def clear(self) -> int:
         """Clear the cache and return the number of removed entries."""
         count = len(self._entries)
         self._entries.clear()
+        self._expiry_heap.clear()
         return count
 
     def _purge_expired(self) -> None:
         """Remove expired entries."""
         now = monotonic()
-        expired = [
-            key
+        while self._expiry_heap and self._expiry_heap[0][0] <= now:
+            expires_at, key = heappop(self._expiry_heap)
+            entry = self._entries.get(key)
+            if entry is not None and entry.expires_at == expires_at:
+                self._entries.pop(key, None)
+
+    def _compact_expiry_heap_if_needed(self) -> None:
+        """Rebuild expiry bookkeeping when stale heap entries accumulate."""
+        if len(self._expiry_heap) <= max(64, len(self._entries) * 2):
+            return
+        self._expiry_heap = [
+            (entry.expires_at, key)
             for key, entry in self._entries.items()
-            if entry.expires_at is not None and entry.expires_at <= now
+            if entry.expires_at is not None
         ]
-        for key in expired:
-            self._entries.pop(key, None)
+        self._expiry_heap.sort()

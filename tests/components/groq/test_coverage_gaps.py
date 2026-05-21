@@ -160,6 +160,7 @@ from custom_components.groq.services import (
     _service_options,
     _service_from_call,
     _service_subentries,
+    async_resolve_media,
     async_register_services,
     async_unregister_services,
     async_update_service_descriptions,
@@ -2871,6 +2872,24 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
     bad_subentry_entry = DummyEntry()
     bad_subentry_entry.subentries = {"bad": SimpleNamespace(data={})}
     assert service_data_by_type(bad_subentry_entry) == {}
+
+
+@pytest.mark.asyncio
+async def test_lazy_media_source_resolver_wrapper(monkeypatch):
+    """Cover the lazy media-source resolver import wrapper."""
+
+    async def fake_resolve(*args, **kwargs):
+        return SimpleNamespace(args=args, kwargs=kwargs)
+
+    monkeypatch.setattr(
+        "homeassistant.components.media_source.async_resolve_media",
+        fake_resolve,
+    )
+
+    resolved = await async_resolve_media("hass", "media-source://media/file.jpg", None)
+
+    assert resolved.args == ("hass", "media-source://media/file.jpg", None)
+    assert resolved.kwargs == {}
 
 
 @pytest.mark.asyncio
