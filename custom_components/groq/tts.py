@@ -647,9 +647,7 @@ class GroqTTSEntity(TextToSpeechEntity):
                 and output_format == ORPHEUS_RESPONSE_FORMAT
                 and _audio_needs_compatibility_transcode(audio_content)
             ):
-                _LOGGER.debug(
-                    "Rewriting Groq WAV audio for media player compatibility"
-                )
+                _LOGGER.debug("Rewriting Groq WAV audio for media player compatibility")
                 needs_ffmpeg = True
                 await self._async_check_ffmpeg(output_format, normalize_audio)
 

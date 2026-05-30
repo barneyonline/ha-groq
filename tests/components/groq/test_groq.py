@@ -48,10 +48,19 @@ FORMAT_ONLY_WAV_BYTES = (
     + b"WAVEfmt "
     + struct.pack("<IHHIIHH", 16, 1, 1, 24000, 48000, 2, 16)
 )
+TRUNCATED_CHUNK_WAV_BYTES = b"RIFF" + struct.pack("<I", 16) + b"WAVEdata\x04\0\0\0\0"
+SHORT_FORMAT_WAV_BYTES = (
+    b"RIFF" + struct.pack("<I", 16) + b"WAVEfmt " + struct.pack("<I", 4) + b"\0" * 4
+)
 
 
 async def _async_return(value):
     return value
+
+
+def test_tts_wav_compatibility_parser_rejects_malformed_chunks():
+    assert tts._audio_needs_compatibility_transcode(TRUNCATED_CHUNK_WAV_BYTES) is True
+    assert tts._audio_needs_compatibility_transcode(SHORT_FORMAT_WAV_BYTES) is True
 
 
 @pytest.mark.asyncio
