@@ -7,6 +7,24 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Bug fixes
 - None
 
+## v1.2.2 - 2026-05-30
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- Fixed MP3 TTS playback on HomePod and Apple TV targets by converting MP3 output with a HomePod-tested 44.1 kHz mono 128 kbps profile. (#17)
+
+### 🔧 Improvements
+- None
+
+### 🔄 Other changes
+- Added regression coverage for the HomePod-safe MP3 ffmpeg conversion profile. (#17)
+- Bumped the integration manifest version to `1.2.2`.
+
 ## v1.2.1 - 2026-05-30
 
 ### 🚧 Breaking changes
