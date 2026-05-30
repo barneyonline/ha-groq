@@ -56,7 +56,7 @@ PARALLEL_UPDATES = 1
 ORPHEUS_RESPONSE_FORMAT = "wav"
 FFMPEG_OUTPUT_ARGS = {
     "wav": ["-ac", "1", "-ar", "24000", "-f", "wav"],
-    "mp3": ["-ac", "1", "-ar", "24000", "-b:a", "128k", "-f", "mp3"],
+    "mp3": ["-ac", "1", "-ar", "44100", "-b:a", "128k", "-f", "mp3"],
     "flac": ["-ac", "1", "-ar", "24000", "-compression_level", "5", "-f", "flac"],
 }
 FFMPEG_LOUDNORM_FILTER = "loudnorm=I=-16:TP=-1:LRA=5"

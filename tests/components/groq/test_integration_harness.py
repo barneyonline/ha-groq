@@ -393,6 +393,19 @@ def test_tts_supported_formats_match_conversion_formats():
     assert set(RESPONSE_FORMATS) == set(FFMPEG_OUTPUT_ARGS)
 
 
+def test_tts_mp3_conversion_uses_homepod_safe_profile():
+    assert FFMPEG_OUTPUT_ARGS["mp3"] == [
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-b:a",
+        "128k",
+        "-f",
+        "mp3",
+    ]
+
+
 class DummyProc:
     def __init__(self, returncode: int):
         self.returncode = returncode
