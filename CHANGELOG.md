@@ -7,6 +7,25 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Bug fixes
 - None
 
+## v1.2.1 - 2026-05-30
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- Fixed HomePod and Apple TV TTS playback by validating Groq WAV output before serving it directly and rewriting malformed, non-WAV, or non-16-bit PCM WAV payloads through the ffmpeg WAV compatibility profile. (#15)
+
+### 🔧 Improvements
+- Optimized prompt cache expiry handling with heap-backed expiry bookkeeping and stale-entry compaction, avoiding full-cache scans on cache hits. (#14)
+- Deferred Home Assistant camera and media-source helper imports until service paths need them, reducing import-time overhead during service registration. (#14)
+
+### 🔄 Other changes
+- Expanded tests for prompt-cache stale expiry compaction and TTS WAV compatibility handling. (#14, #15)
+- Bumped the integration manifest version to `1.2.1`.
+
 ## v1.2.0 - 2026-05-17
 
 ### 🚧 Breaking changes
