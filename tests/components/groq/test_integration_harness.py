@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import OrderedDict
 import json
+import struct
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -29,6 +30,15 @@ ORPHEUS_ENGLISH_MODEL = "canopylabs/orpheus-v1-english"
 ORPHEUS_ENGLISH_VOICE = "troy"
 ORPHEUS_ARABIC_MODEL = "canopylabs/orpheus-arabic-saudi"
 ORPHEUS_ARABIC_VOICE = "aisha"
+PCM_WAV_BYTES = (
+    b"RIFF"
+    + struct.pack("<I", 40)
+    + b"WAVEfmt "
+    + struct.pack("<IHHIIHH", 16, 1, 1, 24000, 48000, 2, 16)
+    + b"data"
+    + struct.pack("<I", 4)
+    + b"\0\0\0\0"
+)
 
 
 class DummyHass:
@@ -96,7 +106,7 @@ class DummyClient:
                 "protect_free_tier": request.protect_free_tier,
             }
         )
-        return b"audio-bytes"
+        return PCM_WAV_BYTES
 
 
 def _selector_config(schema, field):
@@ -589,7 +599,7 @@ async def test_tts_normalizes_false_string_normalize_option_without_ffmpeg(monke
 
     assert await entity.async_get_tts_audio(
         "Hello", "en", options={"normalize_audio": "false"}
-    ) == ("wav", b"audio-bytes")
+    ) == ("wav", PCM_WAV_BYTES)
     assert ffmpeg_calls == []
 
 
@@ -613,7 +623,7 @@ async def test_tts_empty_normalize_option_skips_ffmpeg(monkeypatch):
 
     assert await entity.async_get_tts_audio(
         "Hello", "en", options={"normalize_audio": ""}
-    ) == ("wav", b"audio-bytes")
+    ) == ("wav", PCM_WAV_BYTES)
     assert ffmpeg_calls == []
 
 
@@ -694,7 +704,7 @@ async def test_tts_raw_wav_override_does_not_clear_configured_ffmpeg_issue(
 
     assert await entity.async_get_tts_audio(
         "Hello", "en", options={"response_format": "wav"}
-    ) == ("wav", b"audio-bytes")
+    ) == ("wav", PCM_WAV_BYTES)
     assert deleted_issues == []
 
 
@@ -719,7 +729,7 @@ async def test_tts_raw_wav_override_keeps_issue_for_invalid_configured_format(
 
     assert await entity.async_get_tts_audio(
         "Hello", "en", options={"response_format": "wav"}
-    ) == ("wav", b"audio-bytes")
+    ) == ("wav", PCM_WAV_BYTES)
     assert deleted_issues == []
 
 
@@ -744,7 +754,7 @@ async def test_tts_raw_wav_override_keeps_issue_for_invalid_configured_normalize
 
     assert await entity.async_get_tts_audio(
         "Hello", "en", options={"response_format": "wav", "normalize_audio": False}
-    ) == ("wav", b"audio-bytes")
+    ) == ("wav", PCM_WAV_BYTES)
     assert deleted_issues == []
 
 
@@ -784,7 +794,7 @@ async def test_tts_raw_wav_default_clears_ffmpeg_issue(monkeypatch):
         lambda hass, entry, service_data: deleted_issues.append(entry.entry_id),
     )
 
-    assert await entity.async_get_tts_audio("Hello", "en") == ("wav", b"audio-bytes")
+    assert await entity.async_get_tts_audio("Hello", "en") == ("wav", PCM_WAV_BYTES)
     assert deleted_issues == ["entry-id"]
 
 
@@ -1167,7 +1177,7 @@ async def test_tts_long_batch_guard_blocks_eviction_misses_before_api(monkeypatc
             **kwargs,
         ):
             self.calls.append(kwargs)
-            return b"audio-bytes"
+            return PCM_WAV_BYTES
 
     client = RecordingClient()
     monkeypatch.setattr(
@@ -1273,7 +1283,7 @@ async def test_tts_service_options_override_groq_speech_payload():
     )
 
     assert ext == "wav"
-    assert payload == b"audio-bytes"
+    assert payload == PCM_WAV_BYTES
     assert client.calls == [
         {
             "text": "[cheerful] override input",
@@ -1303,7 +1313,7 @@ async def test_tts_uses_account_level_protect_free_tier_option():
 
     assert await entity.async_get_tts_audio("Hello", "en") == (
         "wav",
-        b"audio-bytes",
+        PCM_WAV_BYTES,
     )
     assert client.calls[0]["protect_free_tier"] is False
 
@@ -1325,7 +1335,7 @@ async def test_tts_normalizes_protect_free_tier_option_strings():
 
     assert await entity.async_get_tts_audio("Hello", "en") == (
         "wav",
-        b"audio-bytes",
+        PCM_WAV_BYTES,
     )
     assert client.calls[0]["protect_free_tier"] is False
 
@@ -1347,7 +1357,7 @@ async def test_tts_invalid_protect_free_tier_defaults_to_enabled():
 
     assert await entity.async_get_tts_audio("Hello", "en") == (
         "wav",
-        b"audio-bytes",
+        PCM_WAV_BYTES,
     )
     assert client.calls[0]["protect_free_tier"] is True
 

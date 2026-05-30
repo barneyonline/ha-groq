@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 import re
 import shutil
+import struct
 import tempfile
 import time
 import asyncio
@@ -60,6 +61,37 @@ FFMPEG_OUTPUT_ARGS = {
 }
 FFMPEG_LOUDNORM_FILTER = "loudnorm=I=-16:TP=-1:LRA=5"
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+_WAV_FORMAT_PCM = 1
+_WAV_BITS_PER_SAMPLE = 16
+
+
+def _audio_needs_compatibility_transcode(audio: bytes) -> bool:
+    """Return whether audio bytes should be rewritten for WAV playback."""
+    if not audio.startswith(b"RIFF") or audio[8:12] != b"WAVE":
+        return True
+
+    offset = 12
+    has_compatible_format = False
+    while offset + 8 <= len(audio):
+        chunk_id = audio[offset : offset + 4]
+        chunk_size = struct.unpack_from("<I", audio, offset + 4)[0]
+        chunk_start = offset + 8
+        chunk_end = chunk_start + chunk_size
+        if chunk_end > len(audio):
+            return True
+        if chunk_id == b"fmt ":
+            if chunk_size < 16:
+                return True
+            audio_format, _channels, _sample_rate, _byte_rate, _block_align, bits = (
+                struct.unpack_from("<HHIIHH", audio, chunk_start)
+            )
+            if audio_format != _WAV_FORMAT_PCM or bits != _WAV_BITS_PER_SAMPLE:
+                return True
+            has_compatible_format = True
+        elif chunk_id == b"data" and has_compatible_format:
+            return chunk_size == 0
+        offset = chunk_end + (chunk_size % 2)
+    return True
 
 
 def _split_overlong_tts_segment(segment: str, max_chars: int) -> list[str]:
@@ -610,6 +642,16 @@ class GroqTTSEntity(TextToSpeechEntity):
                 api_duration,
             )
             audio_content = audio_chunks[0]
+            if (
+                not needs_ffmpeg
+                and output_format == ORPHEUS_RESPONSE_FORMAT
+                and _audio_needs_compatibility_transcode(audio_content)
+            ):
+                _LOGGER.debug(
+                    "Rewriting Groq WAV audio for media player compatibility"
+                )
+                needs_ffmpeg = True
+                await self._async_check_ffmpeg(output_format, normalize_audio)
 
             async def convert_audio_chunk(input_bytes: bytes) -> bytes:
                 """Convert one Orpheus WAV chunk to the requested playback profile."""

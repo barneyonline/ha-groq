@@ -1,10 +1,11 @@
 import asyncio
 from collections import OrderedDict
 import logging
-import pytest
+import struct
 from types import SimpleNamespace
 
 import aiohttp
+import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from custom_components.groq import api, config_flow, tts
@@ -23,6 +24,34 @@ get_model_options = config_flow.get_model_options
 
 ORPHEUS_ENGLISH_MODEL = "canopylabs/orpheus-v1-english"
 ORPHEUS_ENGLISH_VOICE = "troy"
+PCM_WAV_BYTES = (
+    b"RIFF"
+    + struct.pack("<I", 40)
+    + b"WAVEfmt "
+    + struct.pack("<IHHIIHH", 16, 1, 1, 24000, 48000, 2, 16)
+    + b"data"
+    + struct.pack("<I", 4)
+    + b"\0\0\0\0"
+)
+FLOAT_WAV_BYTES = (
+    b"RIFF"
+    + struct.pack("<I", 40)
+    + b"WAVEfmt "
+    + struct.pack("<IHHIIHH", 16, 3, 1, 24000, 96000, 4, 32)
+    + b"data"
+    + struct.pack("<I", 4)
+    + b"\0\0\0\0"
+)
+FORMAT_ONLY_WAV_BYTES = (
+    b"RIFF"
+    + struct.pack("<I", 36)
+    + b"WAVEfmt "
+    + struct.pack("<IHHIIHH", 16, 1, 1, 24000, 48000, 2, 16)
+)
+
+
+async def _async_return(value):
+    return value
 
 
 @pytest.mark.asyncio
@@ -842,7 +871,7 @@ class DummyClient:
                 "protect_free_tier": request.protect_free_tier,
             }
         )
-        return b"audio-bytes"
+        return PCM_WAV_BYTES
 
 
 class DummyBatchGuardClient(DummyClient):
@@ -879,7 +908,99 @@ async def test_tts_returns_raw_wav_without_processing():
     ext, payload = await entity.async_get_tts_audio("Hello", "en", options=None)
 
     assert ext == "wav"
-    assert payload == b"audio-bytes"
+    assert payload == PCM_WAV_BYTES
+
+
+@pytest.mark.asyncio
+async def test_tts_rewrites_non_pcm_wav_for_playback_compatibility():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    client.async_synthesize_speech = lambda request: _async_return(FLOAT_WAV_BYTES)
+    ffmpeg_inputs = []
+
+    async def skip_ffmpeg_check(_output_format, _normalize_audio):
+        return None
+
+    async def rewrite_wav(_cmd, input_bytes=None, *, create_repair=True):
+        ffmpeg_inputs.append((input_bytes, create_repair))
+        return b"RIFF-compatible-wav"
+
+    entity._async_check_ffmpeg = skip_ffmpeg_check
+    entity._async_run_ffmpeg = rewrite_wav
+
+    assert await entity.async_get_tts_audio("Hello", "en") == (
+        "wav",
+        b"RIFF-compatible-wav",
+    )
+    assert ffmpeg_inputs == [(FLOAT_WAV_BYTES, False)]
+
+
+@pytest.mark.asyncio
+async def test_tts_rewrites_non_wav_payload_served_as_wav():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    client.async_synthesize_speech = lambda request: _async_return(b"audio-bytes")
+    ffmpeg_inputs = []
+
+    async def skip_ffmpeg_check(_output_format, _normalize_audio):
+        return None
+
+    async def rewrite_wav(_cmd, input_bytes=None, *, create_repair=True):
+        ffmpeg_inputs.append((input_bytes, create_repair))
+        return b"RIFF-compatible-wav"
+
+    entity._async_check_ffmpeg = skip_ffmpeg_check
+    entity._async_run_ffmpeg = rewrite_wav
+
+    assert await entity.async_get_tts_audio("Hello", "en") == (
+        "wav",
+        b"RIFF-compatible-wav",
+    )
+    assert ffmpeg_inputs == [(b"audio-bytes", False)]
+
+
+@pytest.mark.asyncio
+async def test_tts_rewrites_wav_without_data_chunk():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+    client.async_synthesize_speech = lambda request: _async_return(
+        FORMAT_ONLY_WAV_BYTES
+    )
+    ffmpeg_inputs = []
+
+    async def skip_ffmpeg_check(_output_format, _normalize_audio):
+        return None
+
+    async def rewrite_wav(_cmd, input_bytes=None, *, create_repair=True):
+        ffmpeg_inputs.append((input_bytes, create_repair))
+        return b"RIFF-compatible-wav"
+
+    entity._async_check_ffmpeg = skip_ffmpeg_check
+    entity._async_run_ffmpeg = rewrite_wav
+
+    assert await entity.async_get_tts_audio("Hello", "en") == (
+        "wav",
+        b"RIFF-compatible-wav",
+    )
+    assert ffmpeg_inputs == [(FORMAT_ONLY_WAV_BYTES, False)]
 
 
 @pytest.mark.asyncio

@@ -182,6 +182,22 @@ from custom_components.groq.text_generation import (
 )
 from custom_components.groq.tts import GroqTTSEntity
 
+PCM_WAV_BYTES = (
+    b"RIFF"
+    + (40).to_bytes(4, "little")
+    + b"WAVEfmt "
+    + (16).to_bytes(4, "little")
+    + (1).to_bytes(2, "little")
+    + (1).to_bytes(2, "little")
+    + (24000).to_bytes(4, "little")
+    + (48000).to_bytes(4, "little")
+    + (2).to_bytes(2, "little")
+    + (16).to_bytes(2, "little")
+    + b"data"
+    + (4).to_bytes(4, "little")
+    + b"\0\0\0\0"
+)
+
 
 class DummyEntry:
     def __init__(self, entry_id: str = "entry-id", *, state=ConfigEntryState.LOADED):
@@ -3639,7 +3655,7 @@ async def test_tts_entity_and_api_remaining_paths(monkeypatch):
 
     async def async_synthesize_speech(request):
         client.calls.append(request)
-        return b"audio"
+        return PCM_WAV_BYTES
 
     client.async_synthesize_speech = async_synthesize_speech
     entity = GroqTTSEntity(
@@ -3657,7 +3673,7 @@ async def test_tts_entity_and_api_remaining_paths(monkeypatch):
         {"vocal_directions": "warm", "normalize_audio": False},
     )
     assert fmt == "wav"
-    assert audio == b"audio"
+    assert audio == PCM_WAV_BYTES
     assert client.calls[0].text == "[warm] hello"
     assert await entity.async_get_tts_audio("x" * 201, "en") == (None, None)
 
