@@ -48,6 +48,7 @@
             "invalid_url": "Μη έγκυρο URL. Εισαγάγετε ένα έγκυρο URL.",
             "invalid_enabled_features": "Μία ή περισσότερες επιλεγμένες λειτουργίες δεν υποστηρίζονται.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Το επιλεγμένο μοντέλο δεν υποστηρίζει επιλογές συλλογισμού.",
             "unsupported_prompt_caching_model": "Το επιλεγμένο μοντέλο δεν υποστηρίζει τοπική προσωρινή αποθήκευση απόκρισης.",
             "unsupported_structured_outputs_model": "Το επιλεγμένο μοντέλο δεν υποστηρίζει δομημένες εξόδους.",

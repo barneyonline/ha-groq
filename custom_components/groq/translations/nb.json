@@ -48,6 +48,7 @@
             "invalid_url": "Ugyldig URL. Vennligst skriv inn en gyldig URL.",
             "invalid_enabled_features": "En eller flere valgte funksjoner støttes ikke.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Den valgte modellen støtter ikke resonnementalternativer.",
             "unsupported_prompt_caching_model": "Den valgte modellen støtter ikke lokal responsbufring.",
             "unsupported_structured_outputs_model": "Den valgte modellen støtter ikke strukturerte utdata.",

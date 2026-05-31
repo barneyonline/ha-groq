@@ -48,6 +48,7 @@
             "invalid_url": "Ogiltig URL. Ange en giltig URL.",
             "invalid_enabled_features": "En eller flera valda funktioner stöds inte.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Den valda modellen stöder inte resonemangsalternativ.",
             "unsupported_prompt_caching_model": "Den valda modellen stöder inte lokal svarscache.",
             "unsupported_structured_outputs_model": "Den valda modellen stöder inte strukturerade utdata.",

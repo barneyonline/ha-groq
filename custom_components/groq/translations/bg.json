@@ -48,6 +48,7 @@
             "invalid_url": "Невалиден URL. Моля, въведете валиден URL.",
             "invalid_enabled_features": "Една или повече избрани функции не се поддържат.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Избраният модел не поддържа опции за разсъждение.",
             "unsupported_prompt_caching_model": "Избраният модел не поддържа локално кеширане на отговорите.",
             "unsupported_structured_outputs_model": "Избраният модел не поддържа структурирани изходи.",

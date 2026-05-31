@@ -33,6 +33,7 @@ from .const import (
     CONF_NORMALIZE_AUDIO,
     CONF_RESPONSE_FORMAT,
     CONF_SERVICE_TYPE,
+    CONF_VOCAL_DIRECTIONS,
     CONF_VOICE,
     DEFAULT_MODEL,
     DOMAIN,
@@ -69,6 +70,7 @@ from .flow_schemas import (
     validate_text_generation_input,
     validate_user_input,
 )
+from .vocal_directions import vocal_directions_validation_error
 from .model_registry import (
     GroqModel,
     GroqModelRegistry,
@@ -800,6 +802,20 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
         selected_model = schema_data.get(CONF_MODEL) or baseline_model
         voice_options = voice_options_for_model(selected_model)
         if user_input is not None:
+            user_input.setdefault(CONF_VOCAL_DIRECTIONS, "")
+            if error := vocal_directions_validation_error(
+                user_input.get(CONF_VOCAL_DIRECTIONS)
+            ):
+                return self.async_show_form(
+                    step_id=FEATURE_TEXT_TO_SPEECH,
+                    data_schema=text_to_speech_schema(
+                        user_input,
+                        model_options,
+                        voice_options,
+                        ffmpeg_available=ffmpeg_available,
+                    ),
+                    errors={CONF_VOCAL_DIRECTIONS: error},
+                )
             user_input = clean_service_input(user_input)
             selected_model = user_input.get(CONF_MODEL) or baseline_model
             voice_options = voice_options_for_model(selected_model)

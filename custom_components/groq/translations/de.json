@@ -48,6 +48,7 @@
             "invalid_url": "Ungültiges URL. Bitte geben Sie ein gültiges URL ein.",
             "invalid_enabled_features": "Eine oder mehrere ausgewählte Funktionen werden nicht unterstützt.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Das ausgewählte Modell unterstützt keine Begründungsoptionen.",
             "unsupported_prompt_caching_model": "Das ausgewählte Modell unterstützt kein lokales Antwort-Caching.",
             "unsupported_structured_outputs_model": "Das ausgewählte Modell unterstützt keine strukturierten Ausgaben.",

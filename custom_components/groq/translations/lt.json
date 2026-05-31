@@ -48,6 +48,7 @@
             "invalid_url": "Netinkamas URL. Įveskite tinkamą URL.",
             "invalid_enabled_features": "Viena ar daugiau pasirinktų funkcijų nepalaikomos.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Pasirinktas modelis nepalaiko samprotavimo parinkčių.",
             "unsupported_prompt_caching_model": "Pasirinktas modelis nepalaiko vietinio atsakymų kaupimo talpykloje.",
             "unsupported_structured_outputs_model": "Pasirinktas modelis nepalaiko struktūrinių išėjimų.",

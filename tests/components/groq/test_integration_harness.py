@@ -16,15 +16,21 @@ import custom_components.groq as integration
 from custom_components.groq import config_flow, tts
 from custom_components.groq.api import GroqApiClient, SpeechRequest
 from custom_components.groq.const import (
+    CONF_VOCAL_DIRECTIONS,
     FEATURE_IMAGE_RECOGNITION,
     FEATURE_SPEECH_TO_TEXT,
     FEATURE_TEXT_GENERATION,
     FEATURE_TEXT_TO_SPEECH,
     RESPONSE_FORMATS,
+    VOCAL_DIRECTION_NONE,
 )
 from custom_components.groq.errors import GroqApiError
 from custom_components.groq.model_registry import model_from_api
 from custom_components.groq.tts import FFMPEG_OUTPUT_ARGS, GroqTTSEntity
+from custom_components.groq.vocal_directions import (
+    normalize_vocal_directions,
+    vocal_directions_validation_error,
+)
 
 ORPHEUS_ENGLISH_MODEL = "canopylabs/orpheus-v1-english"
 ORPHEUS_ENGLISH_VOICE = "troy"
@@ -382,11 +388,18 @@ def test_tts_entity_default_options_fall_back_from_invalid_stored_values():
         "voice": ORPHEUS_ENGLISH_VOICE,
         "normalize_audio": ["true"],
         "response_format": ["mp3"],
+        "vocal_directions": "very warm",
     }
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
 
     assert entity.default_options["normalize_audio"] is False
     assert entity.default_options["response_format"] == "wav"
+    assert entity.default_options["vocal_directions"] == ""
+
+
+def test_vocal_directions_helpers_reject_non_string_values():
+    assert normalize_vocal_directions(["warm"]) == ""
+    assert vocal_directions_validation_error(["warm"]) == "invalid_vocal_directions"
 
 
 def test_tts_supported_formats_match_conversion_formats():
@@ -1310,6 +1323,66 @@ async def test_tts_service_options_override_groq_speech_payload():
 
 
 @pytest.mark.asyncio
+async def test_tts_ignores_invalid_stored_vocal_directions():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+        "vocal_directions": "very warm",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    ext, payload = await entity.async_get_tts_audio("service message", "en")
+
+    assert ext == "wav"
+    assert payload == PCM_WAV_BYTES
+    assert client.calls[0]["text"] == "service message"
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_invalid_service_vocal_directions_option():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    assert await entity.async_get_tts_audio(
+        "service message",
+        "en",
+        options={"vocal_directions": "very warm"},
+    ) == (None, None)
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_whitespace_service_vocal_directions_option_clears():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    ext, payload = await entity.async_get_tts_audio(
+        "service message",
+        "en",
+        options={"vocal_directions": "   "},
+    )
+
+    assert ext == "wav"
+    assert payload == PCM_WAV_BYTES
+    assert client.calls[0]["text"] == "service message"
+
+
+@pytest.mark.asyncio
 async def test_tts_uses_account_level_protect_free_tier_option():
     data = {
         "url": "http://example.com",
@@ -1913,6 +1986,79 @@ async def test_text_to_speech_subentry_flow_rejects_invalid_response_format(
     )
 
 
+@pytest.mark.parametrize(
+    "vocal_directions", ["very warm", "warm.", "warm2", "very_warm", "[warm]"]
+)
+@pytest.mark.asyncio
+async def test_text_to_speech_subentry_flow_rejects_invalid_vocal_directions(
+    monkeypatch,
+    vocal_directions,
+):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(config_flow.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+
+    result = await flow.async_step_user(
+        {
+            "name": "Kitchen TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "vocal_directions": vocal_directions,
+        }
+    )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == FEATURE_TEXT_TO_SPEECH
+    assert result["errors"] == {"vocal_directions": "invalid_vocal_directions"}
+
+
+@pytest.mark.parametrize("vocal_directions", ["storybook-style", "calmé"])
+@pytest.mark.asyncio
+async def test_text_to_speech_subentry_flow_accepts_single_word_vocal_directions(
+    monkeypatch,
+    vocal_directions,
+):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(config_flow.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+
+    result = await flow.async_step_user(
+        {
+            "name": "Kitchen TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "vocal_directions": vocal_directions,
+        }
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["data"]["vocal_directions"] == vocal_directions
+
+
+@pytest.mark.asyncio
+async def test_text_to_speech_subentry_flow_whitespace_vocal_directions_clears(
+    monkeypatch,
+):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(config_flow.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+
+    result = await flow.async_step_user(
+        {
+            "name": "Kitchen TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "vocal_directions": "   ",
+        }
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["data"]["vocal_directions"] == ""
+
+
 @pytest.mark.asyncio
 async def test_text_to_speech_subentry_reconfigure_replaces_service_data(monkeypatch):
     flow = config_flow.GroqServiceSubentryFlow()
@@ -1961,6 +2107,124 @@ async def test_text_to_speech_subentry_reconfigure_replaces_service_data(monkeyp
     assert result["data"]["normalize_audio"] is False
     assert result["data"]["enable_long_tts"] is False
     assert result["data"]["service_type"] == FEATURE_TEXT_TO_SPEECH
+
+
+@pytest.mark.asyncio
+async def test_text_to_speech_subentry_reconfigure_clears_vocal_directions(
+    monkeypatch,
+):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
+    flow.context = {"source": "reconfigure", "subentry_id": "subentry-id"}
+    entry = SimpleNamespace(entry_id="entry-id")
+    subentry = SimpleNamespace(
+        data={
+            "name": "Old TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "vocal_directions": "warm",
+            "service_type": FEATURE_TEXT_TO_SPEECH,
+        }
+    )
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(flow, "_get_entry", lambda: entry)
+    monkeypatch.setattr(flow, "_get_reconfigure_subentry", lambda: subentry)
+    monkeypatch.setattr(config_flow.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+
+    form = await flow.async_step_reconfigure()
+    assert form["type"] == "form"
+    assert (
+        form["data_schema"](
+            {
+                "name": "Updated TTS",
+                "model": ORPHEUS_ENGLISH_MODEL,
+                "voice": ORPHEUS_ENGLISH_VOICE,
+                "vocal_directions": VOCAL_DIRECTION_NONE,
+            }
+        )[CONF_VOCAL_DIRECTIONS]
+        == VOCAL_DIRECTION_NONE
+    )
+
+    result = await flow.async_step_reconfigure(
+        {
+            "name": "Updated TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "vocal_directions": VOCAL_DIRECTION_NONE,
+        }
+    )
+
+    assert result["type"] == "abort"
+    assert result["data"]["vocal_directions"] == ""
+
+
+@pytest.mark.asyncio
+async def test_text_to_speech_subentry_reconfigure_invalid_vocal_direction_defaults_none(
+    monkeypatch,
+):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
+    flow.context = {"source": "reconfigure", "subentry_id": "subentry-id"}
+    subentry = SimpleNamespace(
+        data={
+            "name": "Old TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "vocal_directions": "very warm",
+            "service_type": FEATURE_TEXT_TO_SPEECH,
+        }
+    )
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(flow, "_get_reconfigure_subentry", lambda: subentry)
+    monkeypatch.setattr(config_flow.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+
+    form = await flow.async_step_reconfigure()
+
+    assert form["type"] == "form"
+    assert (
+        form["data_schema"](
+            {
+                "name": "Updated TTS",
+                "model": ORPHEUS_ENGLISH_MODEL,
+                "voice": ORPHEUS_ENGLISH_VOICE,
+            }
+        )[CONF_VOCAL_DIRECTIONS]
+        == VOCAL_DIRECTION_NONE
+    )
+
+
+@pytest.mark.asyncio
+async def test_text_to_speech_subentry_reconfigure_missing_vocal_directions_clears(
+    monkeypatch,
+):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
+    flow.context = {"source": "reconfigure", "subentry_id": "subentry-id"}
+    entry = SimpleNamespace(entry_id="entry-id")
+    subentry = SimpleNamespace(
+        data={
+            "name": "Old TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "vocal_directions": "warm",
+            "service_type": FEATURE_TEXT_TO_SPEECH,
+        }
+    )
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(flow, "_get_entry", lambda: entry)
+    monkeypatch.setattr(flow, "_get_reconfigure_subentry", lambda: subentry)
+    monkeypatch.setattr(config_flow.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+
+    result = await flow.async_step_reconfigure(
+        {
+            "name": "Updated TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+        }
+    )
+
+    assert result["type"] == "abort"
+    assert result["data"]["vocal_directions"] == ""
 
 
 @pytest.mark.asyncio

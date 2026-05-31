@@ -66,12 +66,14 @@ from .const import (
     TEXT_MODELS,
     VISION_MODELS,
     VOCAL_DIRECTION_OPTIONS,
+    VOCAL_DIRECTION_NONE,
     voice_options_for_model,
 )
 from .compound_tools import compound_builtin_tools_are_valid
 from .feature_registry import GroqFeature
 from .model_registry import GroqCapability, GroqModelRegistry
 from .text_generation import request_body_options_validation_error
+from .vocal_directions import normalize_vocal_directions
 
 
 def _model_default(
@@ -99,6 +101,14 @@ def _response_format_default(values: dict[str, Any]) -> str:
         if configured in RESPONSE_FORMATS:
             return configured
     return DEFAULT_RESPONSE_FORMAT
+
+
+def _vocal_directions_default(values: dict[str, Any]) -> str:
+    """Return a selector-safe TTS vocal directions default."""
+    configured = normalize_vocal_directions(values.get(CONF_VOCAL_DIRECTIONS))
+    if not configured:
+        return VOCAL_DIRECTION_NONE
+    return configured
 
 
 def _supports_model_option(
@@ -428,7 +438,7 @@ def text_to_speech_schema(
             ): selector({"select": {"options": response_formats}}),
             vol.Optional(
                 CONF_VOCAL_DIRECTIONS,
-                default=values.get(CONF_VOCAL_DIRECTIONS, ""),
+                default=_vocal_directions_default(values),
             ): selector(
                 {
                     "select": {
@@ -691,6 +701,10 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
         data[CONF_RESPONSE_FORMAT] = data[CONF_RESPONSE_FORMAT].strip().lower()
         if not data[CONF_RESPONSE_FORMAT]:
             data.pop(CONF_RESPONSE_FORMAT, None)
+    if CONF_VOCAL_DIRECTIONS in data:
+        data[CONF_VOCAL_DIRECTIONS] = normalize_vocal_directions(
+            data.get(CONF_VOCAL_DIRECTIONS)
+        )
     if not data.get(CONF_LLM_HASS_API):
         data.pop(CONF_LLM_HASS_API, None)
     if not data.get(CONF_REQUEST_BODY_OPTIONS):
