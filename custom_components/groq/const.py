@@ -226,8 +226,9 @@ VISION_MODELS = [
 ]
 DEFAULT_VISION_MODEL = VISION_MODELS[0]
 
+VOCAL_DIRECTION_NONE = "__none__"
 VOCAL_DIRECTION_OPTIONS = [
-    {"value": "", "label": "None"},
+    {"value": VOCAL_DIRECTION_NONE, "label": "None"},
     {"value": "cheerful", "label": "Cheerful"},
     {"value": "friendly", "label": "Friendly"},
     {"value": "warm", "label": "Warm"},

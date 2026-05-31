@@ -48,6 +48,7 @@
             "invalid_url": "Nieprawidłowy URL. Proszę wprowadzić prawidłowy kod URL.",
             "invalid_enabled_features": "Jedna lub więcej wybranych funkcji nie jest obsługiwanych.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Wybrany model nie obsługuje opcji wnioskowania.",
             "unsupported_prompt_caching_model": "Wybrany model nie obsługuje lokalnego buforowania odpowiedzi.",
             "unsupported_structured_outputs_model": "Wybrany model nie obsługuje wyjść strukturalnych.",

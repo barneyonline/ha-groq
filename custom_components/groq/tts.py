@@ -47,6 +47,10 @@ from .repairs import (
     async_delete_ffmpeg_missing_issue,
 )
 from .runtime import async_get_runtime
+from .vocal_directions import (
+    normalize_vocal_directions,
+    vocal_directions_validation_error,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -469,11 +473,13 @@ class GroqTTSEntity(TextToSpeechEntity):
                 self._config, CONF_VOICE, service_data=self._service_data
             ),
             CONF_RESPONSE_FORMAT: response_format,
-            CONF_VOCAL_DIRECTIONS: _entry_value(
-                self._config,
-                CONF_VOCAL_DIRECTIONS,
-                "",
-                service_data=self._service_data,
+            CONF_VOCAL_DIRECTIONS: normalize_vocal_directions(
+                _entry_value(
+                    self._config,
+                    CONF_VOCAL_DIRECTIONS,
+                    "",
+                    service_data=self._service_data,
+                )
             ),
         }
 
@@ -507,24 +513,22 @@ class GroqTTSEntity(TextToSpeechEntity):
             effective_input = str(options.get(CONF_INPUT, message))
             if not effective_input.strip():
                 raise ValueError("TTS input cannot be empty")
-            vocal_directions = options.get(
-                CONF_VOCAL_DIRECTIONS,
-                _entry_value(
+            if CONF_VOCAL_DIRECTIONS in options:
+                vocal_directions = options[CONF_VOCAL_DIRECTIONS]
+                if vocal_directions_validation_error(vocal_directions):
+                    raise ValueError("TTS vocal directions must be a single word")
+            else:
+                vocal_directions = _entry_value(
                     self._config,
                     CONF_VOCAL_DIRECTIONS,
                     "",
                     service_data=self._service_data,
-                ),
-            )
+                )
+            vocal_directions = normalize_vocal_directions(vocal_directions)
             if vocal_directions:
                 direction_text = str(vocal_directions).strip()
                 if direction_text:
-                    # Orpheus-style vocal directions are bracketed in the input
-                    # text. Let users enter either "warm" or "[warm]".
-                    if not (
-                        direction_text.startswith("[") and direction_text.endswith("]")
-                    ):
-                        direction_text = f"[{direction_text}]"
+                    direction_text = f"[{direction_text}]"
             else:
                 direction_text = ""
 

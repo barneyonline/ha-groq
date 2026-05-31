@@ -48,6 +48,7 @@
             "invalid_url": "Neplatné URL. Zadejte prosím platné URL.",
             "invalid_enabled_features": "Jedna nebo více vybraných funkcí není podporováno.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Vybraný model nepodporuje možnosti uvažování.",
             "unsupported_prompt_caching_model": "Vybraný model nepodporuje místní ukládání odpovědí do mezipaměti.",
             "unsupported_structured_outputs_model": "Vybraný model nepodporuje strukturované výstupy.",

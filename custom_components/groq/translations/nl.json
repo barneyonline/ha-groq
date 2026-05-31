@@ -48,6 +48,7 @@
             "invalid_url": "Ongeldige URL. Voer een geldige URL in.",
             "invalid_enabled_features": "Een of meer geselecteerde functies worden niet ondersteund.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Het geselecteerde model ondersteunt geen redeneeropties.",
             "unsupported_prompt_caching_model": "Het geselecteerde model ondersteunt geen lokale responscaching.",
             "unsupported_structured_outputs_model": "Het geselecteerde model ondersteunt geen gestructureerde uitvoer.",

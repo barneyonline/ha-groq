@@ -48,6 +48,7 @@
             "invalid_url": "Virheellinen URL. Anna kelvollinen URL.",
             "invalid_enabled_features": "Yhtä tai useampaa valittua ominaisuutta ei tueta.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Valittu malli ei tue päättelyvaihtoehtoja.",
             "unsupported_prompt_caching_model": "Valittu malli ei tue paikallista vastausten välimuistia.",
             "unsupported_structured_outputs_model": "Valittu malli ei tue strukturoituja lähtöjä.",

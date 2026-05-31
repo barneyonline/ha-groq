@@ -48,6 +48,7 @@
             "invalid_url": "URL non valido. Inserisci un URL valido.",
             "invalid_enabled_features": "Una o più funzionalità selezionate non sono supportate.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Il modello selezionato non supporta le opzioni di ragionamento.",
             "unsupported_prompt_caching_model": "Il modello selezionato non supporta la memorizzazione nella cache della risposta locale.",
             "unsupported_structured_outputs_model": "Il modello selezionato non supporta output strutturati.",

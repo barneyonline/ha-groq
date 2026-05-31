@@ -48,6 +48,7 @@
             "invalid_url": "URL nevalid. Vă rugăm să introduceți un URL valid.",
             "invalid_enabled_features": "Una sau mai multe caracteristici selectate nu sunt acceptate.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Modelul selectat nu acceptă opțiuni de raționament.",
             "unsupported_prompt_caching_model": "Modelul selectat nu acceptă stocarea în cache a răspunsurilor locale.",
             "unsupported_structured_outputs_model": "Modelul selectat nu acceptă ieșiri structurate.",

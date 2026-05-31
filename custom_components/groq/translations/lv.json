@@ -48,6 +48,7 @@
             "invalid_url": "Nederīgs URL. Lūdzu, ievadiet derīgu URL.",
             "invalid_enabled_features": "Viena vai vairākas atlasītās funkcijas netiek atbalstītas.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Atlasītais modelis neatbalsta argumentācijas opcijas.",
             "unsupported_prompt_caching_model": "Atlasītais modelis neatbalsta vietējo atbilžu saglabāšanu kešatmiņā.",
             "unsupported_structured_outputs_model": "Atlasītais modelis neatbalsta strukturētus izvadus.",

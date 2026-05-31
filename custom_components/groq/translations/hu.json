@@ -48,6 +48,7 @@
             "invalid_url": "Érvénytelen URL. Kérjük, adjon meg egy érvényes URL kódot.",
             "invalid_enabled_features": "Egy vagy több kiválasztott szolgáltatás nem támogatott.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "A kiválasztott modell nem támogatja az érvelési beállításokat.",
             "unsupported_prompt_caching_model": "A kiválasztott modell nem támogatja a helyi válaszok gyorsítótárazását.",
             "unsupported_structured_outputs_model": "A kiválasztott modell nem támogatja a strukturált kimeneteket.",

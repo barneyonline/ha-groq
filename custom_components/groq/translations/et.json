@@ -48,6 +48,7 @@
             "invalid_url": "Kehtetu URL. Sisestage kehtiv URL.",
             "invalid_enabled_features": "Ühte või mitut valitud funktsiooni ei toetata.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Valitud mudel ei toeta arutlusvõimalusi.",
             "unsupported_prompt_caching_model": "Valitud mudel ei toeta kohalikku vastuste vahemällu salvestamist.",
             "unsupported_structured_outputs_model": "Valitud mudel ei toeta struktureeritud väljundeid.",
