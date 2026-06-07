@@ -1570,14 +1570,10 @@ async def test_integration_setup_unload_update_and_migration():
     )
 
     assert await integration.async_setup_entry(hass, entry) is True
-    assert entry.unsub == "unsub"
     assert config_entries.forwarded == [(entry, [Platform.TTS])]
 
     assert await integration.async_unload_entry(hass, entry) is True
     assert config_entries.unloaded == [(entry, [Platform.TTS])]
-
-    await integration._async_update_listener(hass, entry)
-    assert config_entries.reloaded == ["entry-id"]
 
     assert await integration.async_migrate_entry(hass, entry) is True
     assert config_entries.updated == [
@@ -2499,10 +2495,24 @@ async def test_config_flow_reauth_confirm(monkeypatch):
     flow.hass = SimpleNamespace(config_entries=config_entries)
     flow.context = {"entry_id": "entry-id"}
     _patch_flow_common(monkeypatch, flow, flow.hass)
+
+    update_reload_calls = []
+
+    def update_reload_and_abort(entry, **kwargs):
+        update_reload_calls.append((entry, kwargs))
+        return {"type": "abort", "entry": entry, **kwargs}
+
     monkeypatch.setattr(
         flow,
         "async_update_reload_and_abort",
-        lambda entry, **kwargs: {"type": "abort", "entry": entry, **kwargs},
+        update_reload_and_abort,
+    )
+    monkeypatch.setattr(
+        flow,
+        "async_update_and_abort",
+        lambda *args, **kwargs: pytest.fail(
+            "reauth should reload entries without a config entry update listener"
+        ),
     )
 
     missing = await flow.async_step_reauth_confirm({})
@@ -2516,6 +2526,17 @@ async def test_config_flow_reauth_confirm(monkeypatch):
     assert result["data"]["api_key"] == "new"
     assert result["options"] == {}
     assert result["unique_id"] == reauth_entry.unique_id
+    assert update_reload_calls == [
+        (
+            reauth_entry,
+            {
+                "unique_id": reauth_entry.unique_id,
+                "data": {"api_key": "new", "model": "model"},
+                "options": {},
+                "reason": "reauth_successful",
+            },
+        )
+    ]
 
     async def invalid_api_key(_hass, _api_key):
         return "invalid_auth"
@@ -2610,11 +2631,17 @@ async def test_options_flow_shows_schema_and_saves(monkeypatch):
         return func()
 
     updated = []
+    reloaded = []
+
+    async def async_reload(entry_id):
+        reloaded.append(entry_id)
+
     flow.hass = SimpleNamespace(
         async_add_executor_job=async_add_executor_job,
         config_entries=SimpleNamespace(
             async_get_known_entry=lambda entry_id: entry,
             async_update_entry=lambda entry, **kwargs: updated.append((entry, kwargs)),
+            async_reload=async_reload,
         ),
     )
     _patch_flow_common(monkeypatch, flow, flow.hass)
@@ -2633,6 +2660,19 @@ async def test_options_flow_shows_schema_and_saves(monkeypatch):
     assert updated[0][1]["data"]["api_key"] == "new-key"
     assert updated[0][1]["options"] == {}
     assert updated[0][1]["unique_id"] == entry.unique_id
+    assert reloaded == [entry.entry_id]
+
+    saved_options = await flow.async_step_init({"api_key": ""})
+    assert saved_options == {
+        "type": "create_entry",
+        "title": "",
+        "data": {},
+    }
+    assert updated[1][0] is entry
+    assert updated[1][1]["data"] == entry.data
+    assert updated[1][1]["options"] == {}
+    assert updated[1][1]["unique_id"] == entry.unique_id
+    assert reloaded == [entry.entry_id, entry.entry_id]
 
     async def cannot_connect(_hass, _api_key):
         return "cannot_connect"

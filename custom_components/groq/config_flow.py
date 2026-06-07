@@ -430,7 +430,6 @@ class GroqConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
                     new_options = dict(reauth_entry.options)
                     new_options.pop(CONF_API_KEY, None)
                     unique_id = _entry_unique_id(reauth_entry)
-                    # Abort current flow, update & reload the entry with new credentials
                     return self.async_update_reload_and_abort(
                         reauth_entry,
                         unique_id=unique_id,
@@ -495,17 +494,21 @@ class GroqOptionsFlow(OptionsFlow):
                     errors["base"] = duplicate_error
             if not errors:
                 current_entry = self._current_entry()
-                if current_entry is not None and user_input.get(CONF_API_KEY):
+                if current_entry is not None:
                     new_data = dict(current_entry.data)
-                    new_data[CONF_API_KEY] = user_input[CONF_API_KEY]
                     new_options = dict(current_entry.options)
-                    new_options.pop(CONF_API_KEY, None)
+                    if user_input.get(CONF_API_KEY):
+                        new_data[CONF_API_KEY] = user_input[CONF_API_KEY]
+                        new_options.pop(CONF_API_KEY, None)
+                    else:
+                        new_options = user_input
                     self.hass.config_entries.async_update_entry(
                         current_entry,
                         data=new_data,
                         options=new_options,
                         unique_id=_entry_unique_id(current_entry),
                     )
+                    await self.hass.config_entries.async_reload(current_entry.entry_id)
                     user_input = new_options
                 return self.async_create_entry(title="", data=user_input)
         options_schema = vol.Schema(

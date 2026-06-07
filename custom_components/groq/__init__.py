@@ -37,9 +37,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool
     await async_hydrate_runtime_model_registry(entry, runtime, raise_not_ready=True)
     entry.runtime_data = runtime
 
-    # Reload the entry when options change so updates (like cache size)
-    # take effect immediately without requiring a restart.
-    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     if hasattr(hass, "services"):
         from .services import async_update_service_descriptions
 
@@ -82,11 +79,6 @@ def _has_other_loaded_entries(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ):
             return True
     return False
-
-
-async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle options update by reloading the entry."""
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
