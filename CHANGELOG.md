@@ -4,8 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
 ### 🐛 Bug fixes
 - None
+
+### 🔧 Improvements
+- None
+
+### 🔄 Other changes
+- None
+
+## v1.2.3 - 2026-06-08
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- Fixed TTS vocal direction option handling so users can clear defaults, select explicit None, and avoid storing or speaking invalid sentence-length directions. (#19)
+- Fixed the Home Assistant 2026.6 config-entry reload deprecation by replacing update-listener reload behavior with explicit reload paths from config and options flows. (#20)
+
+### 🔧 Improvements
+- None
+
+### 🔄 Other changes
+- Expanded regression coverage for TTS vocal direction validation and Home Assistant config-entry reload behavior. (#19, #20)
+- Bumped the integration manifest version to `1.2.3`.
 
 ## v1.2.2 - 2026-05-30
 
