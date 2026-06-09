@@ -6,6 +6,8 @@ from contextlib import suppress
 from hashlib import sha1
 from typing import Any
 
+from homeassistant import data_entry_flow
+from homeassistant.components.repairs.models import RepairsFlow
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
@@ -15,6 +17,26 @@ from .const import CONF_NAME, DOMAIN, UNIQUE_ID
 ISSUE_FFMPEG_MISSING = "ffmpeg_missing"
 ISSUE_MODEL_ACCESS = "model_access"
 ISSUE_MODEL_CONFIGURATION = "model_configuration"
+
+
+class GroqRepairsFlow(RepairsFlow):
+    """Repairs flow for Groq issues."""
+
+    async def async_step_init(
+        self,
+        user_input: dict[str, str] | None = None,
+    ) -> data_entry_flow.FlowResult:
+        """Abort repair flows because Groq currently creates non-fixable issues."""
+        return self.async_abort(reason="not_fixable")
+
+
+async def async_create_fix_flow(
+    _hass: HomeAssistant,
+    _issue_id: str,
+    _data: dict[str, str | int | float | None] | None,
+) -> RepairsFlow:
+    """Create a repair flow for a Groq issue."""
+    return GroqRepairsFlow()
 
 
 def _safe(value: Any, fallback: str = "unknown") -> str:

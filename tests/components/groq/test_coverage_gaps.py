@@ -1249,6 +1249,19 @@ def test_repair_issue_helpers_create_sanitized_issues(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_repairs_platform_creates_abort_flow():
+    flow = await repairs_module.async_create_fix_flow(DummyHass(), "issue-id", None)
+
+    assert await flow.async_step_init() == {
+        "description_placeholders": None,
+        "flow_id": None,
+        "handler": None,
+        "reason": "not_fixable",
+        "type": "abort",
+    }
+
+
+@pytest.mark.asyncio
 async def test_config_flow_fetch_models_uses_lightweight_list(monkeypatch):
     session = DummySession(
         [
