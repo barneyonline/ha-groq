@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file.
 - None
 
 ### 🔄 Other changes
-- None
+- Updated installation documentation now that Groq is available as a default HACS repository.
 
 ## v1.2.3 - 2026-06-08
 

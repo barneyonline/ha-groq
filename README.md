@@ -9,7 +9,7 @@
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/hassfest.yml?branch=main&label=hassfest)](https://github.com/barneyonline/ha-groq/actions/workflows/hassfest.yml)
 [![Quality Scale](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbarneyonline%2Fha-groq%2Fmain%2Fcustom_components%2Fgroq%2Fmanifest.json&query=%24.quality_scale&label=quality%20scale&cacheSeconds=3600)](https://developers.home-assistant.io/docs/integration_quality_scale_index)
 
-[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+[![HACS](https://img.shields.io/badge/HACS-default-orange.svg)](https://hacs.xyz)
 [![Open Issues](https://img.shields.io/github/issues/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/issues)
 ![Development Status](https://img.shields.io/badge/development-active-success?style=flat-square)
 
@@ -48,11 +48,12 @@ Each configured Groq service creates its own Home Assistant device and the relev
 ### HACS
 
 1. Open HACS.
-2. Go to Integrations, then Custom repositories.
-3. Add `https://github.com/barneyonline/ha-groq` as an Integration repository.
-4. Install Groq.
-5. Restart Home Assistant.
-6. Go to Settings -> Devices & services -> Add integration -> Groq.
+2. Search for Groq in Integrations.
+3. Download Groq.
+4. Restart Home Assistant.
+5. Go to Settings -> Devices & services -> Add integration -> Groq.
+
+[![Open your Home Assistant instance and open the Groq repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=barneyonline&repository=ha-groq&category=integration)
 
 ### Manual
 
