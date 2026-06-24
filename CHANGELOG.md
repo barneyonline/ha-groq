@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### 🚧 Breaking changes
-- None
+- Raised the minimum supported Home Assistant version to `2026.6.0` to match the patched floor for CVE-2026-54317 / GHSA-x84v-g949-293w. (#23)
 
 ### ✨ New features
 - None

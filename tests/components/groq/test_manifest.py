@@ -36,7 +36,7 @@ def test_hacs_minimum_homeassistant_version_is_declared() -> None:
 
     assert hacs["name"] == "Groq"
     assert hacs["render_readme"] is True
-    assert hacs["homeassistant"] == "2026.3.0"
+    assert hacs["homeassistant"] == "2026.6.0"
     assert hacs["content_in_root"] is False
 
 

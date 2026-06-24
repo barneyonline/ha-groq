@@ -62,7 +62,7 @@ Each configured Groq service creates its own Home Assistant device and the relev
 
 ## Requirements
 
-- A recent Home Assistant version with config subentry support. Local development is tested with Home Assistant `2026.4.1`.
+- Home Assistant `2026.6.0` or newer. Local development is tested against the minimum supported version.
 - A Groq API key from [Groq Console](https://console.groq.com/).
 - Network access from Home Assistant to `https://api.groq.com`.
 - Optional: `ffmpeg` on the Home Assistant host if you enable TTS audio normalization, Long TTS, or MP3/FLAC playback output.
