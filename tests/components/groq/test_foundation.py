@@ -52,6 +52,7 @@ from custom_components.groq.const import (
     CONF_STRUCTURED_OUTPUTS,
     DEFAULT_SYSTEM_PROMPT,
     TEXT_MODELS,
+    VISION_MODELS,
 )
 from custom_components.groq.feature_registry import (
     CONF_ENABLED_FEATURES,
@@ -989,12 +990,14 @@ def test_runtime_ignores_prompt_caching_for_unsupported_text_models():
 
 def test_model_registry_infers_capabilities():
     assert set(COMPOUND_MODELS) <= set(TEXT_MODELS)
+    assert "qwen/qwen3.6-27b" in VISION_MODELS
     assert infer_capabilities("whisper-large-v3") == frozenset(
         {GroqCapability.SPEECH_TO_TEXT}
     )
     assert GroqCapability.VISION in infer_capabilities(
         "meta-llama/llama-4-scout-17b-16e-instruct"
     )
+    assert GroqCapability.VISION in infer_capabilities("qwen/qwen3.6-27b")
     assert GroqCapability.TEXT_TO_SPEECH in infer_capabilities(
         "canopylabs/orpheus-custom"
     )
@@ -1029,6 +1032,7 @@ def test_model_registry_infers_capabilities():
         "custom/text-model", GroqFeature.STRUCTURED_OUTPUTS
     )
     assert GroqModelRegistry().supports("qwen/qwen3-32b", GroqFeature.REASONING)
+    assert GroqModelRegistry().supports("qwen/qwen3.6-27b", GroqFeature.VISION)
     assert not GroqModelRegistry().supports(
         "llama-3.1-8b-instant", GroqFeature.REASONING
     )

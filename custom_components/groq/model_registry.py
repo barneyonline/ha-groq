@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
+import re
 from typing import Any, Iterable
 
 from .const import PROMPT_CACHING_MODELS, REASONING_MODELS, STRUCTURED_OUTPUTS_MODELS
@@ -63,6 +64,92 @@ class GroqModel:
 
 DEFAULT_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 DEFAULT_STRUCTURED_MODEL = "openai/gpt-oss-20b"
+
+CAPABILITY_METADATA_KEYS = frozenset(
+    {
+        "capabilities",
+        "capability",
+        "endpoints",
+        "endpoint",
+        "features",
+        "feature",
+        "modalities",
+        "modality",
+        "supportedcapabilities",
+        "supported_capabilities",
+        "supportedinputs",
+        "supported_inputs",
+        "tasks",
+        "task",
+    }
+)
+INPUT_CAPABILITY_METADATA_KEYS = frozenset(
+    {
+        "inputmodalities",
+        "input_modality",
+        "input_modalities",
+        "inputs",
+        "inputtypes",
+        "input_type",
+        "input_types",
+        "supportedinputs",
+        "supported_inputs",
+    }
+)
+OUTPUT_CAPABILITY_METADATA_KEYS = frozenset(
+    {
+        "outputmodalities",
+        "output_modality",
+        "output_modalities",
+        "outputs",
+        "outputtypes",
+        "output_type",
+        "output_types",
+        "supportedoutputs",
+        "supported_outputs",
+    }
+)
+CAPABILITY_ALIASES: dict[str, GroqCapability] = {
+    "audio_transcription": GroqCapability.SPEECH_TO_TEXT,
+    "chat": GroqCapability.TEXT_GENERATION,
+    "chat_completion": GroqCapability.TEXT_GENERATION,
+    "chat_completions": GroqCapability.TEXT_GENERATION,
+    "completion": GroqCapability.TEXT_GENERATION,
+    "completions": GroqCapability.TEXT_GENERATION,
+    "compound": GroqCapability.COMPOUND,
+    "function_calling": GroqCapability.TOOL_CALLING,
+    "image": GroqCapability.VISION,
+    "image_input": GroqCapability.VISION,
+    "image_understanding": GroqCapability.VISION,
+    "json_schema": GroqCapability.STRUCTURED_OUTPUTS,
+    "multimodal": GroqCapability.VISION,
+    "ocr": GroqCapability.VISION,
+    "prompt_caching": GroqCapability.PROMPT_CACHING,
+    "reasoning": GroqCapability.REASONING,
+    "speech": GroqCapability.TEXT_TO_SPEECH,
+    "speech_to_text": GroqCapability.SPEECH_TO_TEXT,
+    "stt": GroqCapability.SPEECH_TO_TEXT,
+    "structured_output": GroqCapability.STRUCTURED_OUTPUTS,
+    "structured_outputs": GroqCapability.STRUCTURED_OUTPUTS,
+    "text": GroqCapability.TEXT_GENERATION,
+    "text_generation": GroqCapability.TEXT_GENERATION,
+    "text_to_speech": GroqCapability.TEXT_TO_SPEECH,
+    "tool_calling": GroqCapability.TOOL_CALLING,
+    "tools": GroqCapability.TOOL_CALLING,
+    "transcription": GroqCapability.SPEECH_TO_TEXT,
+    "tts": GroqCapability.TEXT_TO_SPEECH,
+    "vision": GroqCapability.VISION,
+}
+VISION_MODEL_MARKERS = frozenset(
+    {
+        "image",
+        "multimodal",
+        "omni",
+        "vision",
+        "vl",
+    }
+)
+VISION_MODEL_PREFIXES = ("qwen/qwen3.6-",)
 
 BUILT_IN_MODELS: dict[str, GroqModel] = {
     "llama-3.1-8b-instant": GroqModel(
@@ -174,6 +261,19 @@ BUILT_IN_MODELS: dict[str, GroqModel] = {
             }
         ),
     ),
+    "qwen/qwen3.6-27b": GroqModel(
+        model_id="qwen/qwen3.6-27b",
+        context_window=131072,
+        max_completion_tokens=8192,
+        capabilities=frozenset(
+            {
+                GroqCapability.TEXT_GENERATION,
+                GroqCapability.VISION,
+                GroqCapability.STRUCTURED_OUTPUTS,
+                GroqCapability.TOOL_CALLING,
+            }
+        ),
+    ),
     "meta-llama/llama-4-maverick-17b-128e-instruct": GroqModel(
         model_id="meta-llama/llama-4-maverick-17b-128e-instruct",
         context_window=131072,
@@ -220,6 +320,141 @@ FEATURE_CAPABILITIES: dict[GroqFeature, frozenset[GroqCapability]] = {
 }
 
 
+def _normalized_capability_token(value: str) -> str:
+    """Return a normalized token for capability matching."""
+    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+
+
+def _capability_from_token(value: str) -> GroqCapability | None:
+    """Return a capability represented by an API metadata token."""
+    token = _normalized_capability_token(value)
+    if capability := CAPABILITY_ALIASES.get(token):
+        return capability
+    if "image" in token or "vision" in token:
+        return GroqCapability.VISION
+    return None
+
+
+def _capability_from_metadata_key(value: str) -> GroqCapability | None:
+    """Return a capability represented by an API metadata object key."""
+    token = _normalized_capability_token(value)
+    if capability := CAPABILITY_ALIASES.get(token):
+        return capability
+    return None
+
+
+def _metadata_value_is_enabled(value: Any) -> bool:
+    """Return whether a metadata value indicates support."""
+    if value is False or value is None:
+        return False
+    if isinstance(value, str):
+        return _normalized_capability_token(value) not in {
+            "false",
+            "no",
+            "none",
+            "unsupported",
+        }
+    if isinstance(value, dict):
+        for key in ("supported", "available", "enabled", "active"):
+            if key in value:
+                return _metadata_value_is_enabled(value[key])
+        return any(_metadata_value_is_enabled(item) for item in value.values())
+    if isinstance(value, list | tuple | set):
+        return any(_metadata_value_is_enabled(item) for item in value)
+    return bool(value)
+
+
+def _capabilities_from_metadata_value(
+    value: Any,
+    *,
+    allow_vision: bool = True,
+) -> set[GroqCapability]:
+    """Return capabilities parsed from a model metadata value."""
+    capabilities: set[GroqCapability] = set()
+    if isinstance(value, str):
+        capability = _capability_from_token(value)
+        if capability and (allow_vision or capability != GroqCapability.VISION):
+            capabilities.add(capability)
+        for token in re.split(r"[^a-zA-Z0-9]+", value):
+            capability = _capability_from_token(token)
+            if capability and (allow_vision or capability != GroqCapability.VISION):
+                capabilities.add(capability)
+        return capabilities
+    if isinstance(value, list | tuple | set):
+        for item in value:
+            capabilities.update(
+                _capabilities_from_metadata_value(item, allow_vision=allow_vision)
+            )
+        return capabilities
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not _metadata_value_is_enabled(item):
+                continue
+            token = _normalized_capability_token(str(key))
+            if token in OUTPUT_CAPABILITY_METADATA_KEYS:
+                capabilities.update(
+                    _capabilities_from_metadata_value(item, allow_vision=False)
+                )
+                continue
+            if token in INPUT_CAPABILITY_METADATA_KEYS:
+                capabilities.update(_capabilities_from_metadata_value(item))
+                continue
+            key_capability = _capability_from_metadata_key(str(key))
+            if key_capability and (
+                allow_vision or key_capability != GroqCapability.VISION
+            ):
+                capabilities.add(key_capability)
+            if item is True:
+                capabilities.update(
+                    _capabilities_from_metadata_value(
+                        str(key),
+                        allow_vision=allow_vision,
+                    )
+                )
+                continue
+            capabilities.update(
+                _capabilities_from_metadata_value(item, allow_vision=allow_vision)
+            )
+        return capabilities
+    return capabilities
+
+
+def capabilities_from_api_metadata(data: dict[str, Any]) -> frozenset[GroqCapability]:
+    """Return capabilities explicitly advertised by a Groq model payload."""
+    capabilities: set[GroqCapability] = set()
+    for key, value in data.items():
+        token = _normalized_capability_token(key)
+        if token in OUTPUT_CAPABILITY_METADATA_KEYS:
+            capabilities.update(
+                _capabilities_from_metadata_value(value, allow_vision=False)
+            )
+        elif token in CAPABILITY_METADATA_KEYS | INPUT_CAPABILITY_METADATA_KEYS:
+            capabilities.update(_capabilities_from_metadata_value(value))
+    return frozenset(capabilities)
+
+
+def _model_id_tokens(model_id: str) -> set[str]:
+    """Return normalized model id tokens."""
+    return {
+        token
+        for token in (
+            _normalized_capability_token(part)
+            for part in re.split(r"[/_.:-]+", model_id)
+        )
+        if token
+    }
+
+
+def _is_known_vision_model_id(model_id: str) -> bool:
+    """Return whether a sparse model id is known to represent vision input."""
+    model = model_id.lower()
+    return (
+        "llama-4" in model
+        or model.startswith(VISION_MODEL_PREFIXES)
+        or bool(VISION_MODEL_MARKERS & _model_id_tokens(model))
+    )
+
+
 @lru_cache(maxsize=512)
 def infer_capabilities(model_id: str) -> frozenset[GroqCapability]:
     """Infer capabilities for discovered models when Groq metadata is sparse."""
@@ -239,7 +474,7 @@ def infer_capabilities(model_id: str) -> frozenset[GroqCapability]:
     else:
         capabilities.add(GroqCapability.TEXT_GENERATION)
 
-    if "llama-4" in model or "vision" in model or "vl" in model:
+    if _is_known_vision_model_id(model_id):
         capabilities.add(GroqCapability.VISION)
     if model_id in REASONING_MODELS:
         capabilities.add(GroqCapability.REASONING)
@@ -256,6 +491,7 @@ def model_from_api(data: dict[str, Any]) -> GroqModel:
     """Build GroqModel metadata from the OpenAI-compatible /models response."""
     model_id = str(data.get("id") or data.get("name") or "")
     built_in = BUILT_IN_MODELS.get(model_id)
+    capabilities = infer_capabilities(model_id) | capabilities_from_api_metadata(data)
     return GroqModel(
         model_id=model_id,
         active=bool(data.get("active", True)),
@@ -268,7 +504,7 @@ def model_from_api(data: dict[str, Any]) -> GroqModel:
             "max_completion_tokens",
             built_in.max_completion_tokens if built_in else None,
         ),
-        capabilities=infer_capabilities(model_id),
+        capabilities=capabilities,
     )
 
 
@@ -281,6 +517,7 @@ class GroqModelRegistry:
         *,
         include_built_ins: bool = True,
     ) -> None:
+        self._allow_missing_inference = include_built_ins
         self._models = dict(BUILT_IN_MODELS) if include_built_ins else {}
         if models:
             self.update(models)
@@ -342,5 +579,7 @@ class GroqModelRegistry:
             return True
         model = self._models.get(model_id)
         if model is None:
+            if not self._allow_missing_inference:
+                return False
             return required.issubset(infer_capabilities(model_id))
         return required.issubset(model.capabilities)

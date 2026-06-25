@@ -1333,7 +1333,10 @@ def _handle_list_models(hass: HomeAssistant) -> ServiceHandler:
     async def handler(call: ServiceCall) -> ServiceResponse:
         _entry, runtime = await _runtime_from_call(hass, call)
         if call.data.get(ATTR_REFRESH):
-            runtime.model_registry.update(await runtime.client.async_list_models())
+            runtime.model_registry = GroqModelRegistry(
+                await runtime.client.async_list_models(),
+                include_built_ins=False,
+            )
         return {
             "models": [
                 model.as_dict()
