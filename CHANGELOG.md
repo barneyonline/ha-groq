@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### 🚧 Breaking changes
-- Raised the minimum supported Home Assistant version to `2026.6.0` to match the patched floor for CVE-2026-54317 / GHSA-x84v-g949-293w. (#23)
+- None
 
 ### ✨ New features
 - None
@@ -17,7 +17,26 @@ All notable changes to this project will be documented in this file.
 - None
 
 ### 🔄 Other changes
-- Updated installation documentation now that Groq is available as a default HACS repository.
+- None
+
+## v1.3.0 - 2026-06-25
+
+### 🚧 Breaking changes
+- Raised the minimum supported Home Assistant version to `2026.6.0` to match the patched floor for CVE-2026-54317 / GHSA-x84v-g949-293w. (#23)
+
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- Fixed repairs platform registration by adding an aborting repair flow for non-fixable Groq issues. (#22)
+
+### 🔧 Improvements
+- None
+
+### 🔄 Other changes
+- Updated installation documentation now that Groq is available as a default HACS repository. (#24)
+- Expanded regression coverage for repairs platform fix-flow registration. (#22)
+- Bumped the integration manifest version to `1.3.0`.
 
 ## v1.2.3 - 2026-06-08
 
