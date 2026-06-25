@@ -453,6 +453,8 @@ analyze_image:
           options:
             - label: Llama 4 Scout 17B
               value: meta-llama/llama-4-scout-17b-16e-instruct
+            - label: Qwen 3.6 27B
+              value: qwen/qwen3.6-27b
             - label: Llama 4 Maverick 17B
               value: meta-llama/llama-4-maverick-17b-128e-instruct
 
@@ -526,6 +528,8 @@ extract_text_from_image:
           options:
             - label: Llama 4 Scout 17B
               value: meta-llama/llama-4-scout-17b-16e-instruct
+            - label: Qwen 3.6 27B
+              value: qwen/qwen3.6-27b
             - label: Llama 4 Maverick 17B
               value: meta-llama/llama-4-maverick-17b-128e-instruct
 

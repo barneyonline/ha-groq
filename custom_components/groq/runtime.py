@@ -155,8 +155,9 @@ async def async_hydrate_runtime_model_registry(
     if not entry_value(entry, CONF_API_KEY):
         return
     try:
-        runtime.model_registry.update(
-            await runtime.client.async_list_models(hydrate=hydrate_details)
+        runtime.model_registry = GroqModelRegistry(
+            await runtime.client.async_list_models(hydrate=hydrate_details),
+            include_built_ins=False,
         )
     except ConfigEntryAuthFailed:
         raise

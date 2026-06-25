@@ -1977,7 +1977,71 @@ def test_model_registry_branches():
     )
     assert infer_capabilities("custom-tts") == frozenset()
     assert GroqCapability.VISION in infer_capabilities("custom-vision-model")
+    assert GroqCapability.VISION in infer_capabilities("qwen/qwen3.6-27b")
+    assert GroqCapability.VISION in infer_capabilities("vendor/model-vl-7b")
     assert GroqCapability.COMPOUND in infer_capabilities("groq/compound-custom")
+    explicit_capabilities = model_registry_module.capabilities_from_api_metadata(
+        {
+            "capabilities": {
+                "image_input": True,
+                "prompt_caching": False,
+                "text_generation": {"supported": "chat"},
+                "tool_calling": None,
+            },
+            "input_modalities": ["text", "image"],
+            "output_modalities": ["image"],
+            "supportedInputs": ["image"],
+            "supported_inputs": "audio transcription",
+            "ignored": "vision",
+        }
+    )
+    assert GroqCapability.VISION in explicit_capabilities
+    assert GroqCapability.TEXT_GENERATION in explicit_capabilities
+    assert GroqCapability.SPEECH_TO_TEXT in explicit_capabilities
+    assert GroqCapability.PROMPT_CACHING not in explicit_capabilities
+    output_only_capabilities = model_registry_module.capabilities_from_api_metadata(
+        {"output_modalities": ["image"]}
+    )
+    assert GroqCapability.VISION not in output_only_capabilities
+    nested_output_only_capabilities = (
+        model_registry_module.capabilities_from_api_metadata(
+            {"capabilities": {"output_modalities": ["image"]}}
+        )
+    )
+    assert GroqCapability.VISION not in nested_output_only_capabilities
+    assert GroqCapability.VISION in (
+        model_registry_module.capabilities_from_api_metadata(
+            {"capabilities": ["camera-image-input"]}
+        )
+    )
+    assert GroqCapability.VISION in (
+        model_registry_module.capabilities_from_api_metadata(
+            {"capabilities": {"vision": {"nested": True}}}
+        )
+    )
+    assert GroqCapability.VISION in (
+        model_registry_module.capabilities_from_api_metadata(
+            {"capabilities": {"input_modalities": ["image"]}}
+        )
+    )
+    assert (
+        model_registry_module.capabilities_from_api_metadata({"capabilities": 1})
+        == frozenset()
+    )
+    metadata_model = model_from_api(
+        {
+            "id": "custom/sparse-model",
+            "capabilities": {
+                "chat": True,
+                "image_understanding": {"supported": True},
+                "json_schema": {"supported": True},
+                "prompt_caching": {"supported": False},
+            },
+        }
+    )
+    assert GroqCapability.VISION in metadata_model.capabilities
+    assert GroqCapability.STRUCTURED_OUTPUTS in metadata_model.capabilities
+    assert GroqCapability.PROMPT_CACHING not in metadata_model.capabilities
     with (
         patch.object(model_registry_module, "REASONING_MODELS", {"custom-reason"}),
         patch.object(model_registry_module, "PROMPT_CACHING_MODELS", {"custom-cache"}),
@@ -2014,6 +2078,10 @@ def test_model_registry_branches():
         == 40960
     )
     assert (
+        model_registry_module.BUILT_IN_MODELS["qwen/qwen3.6-27b"].completion_token_limit
+        == 8192
+    )
+    assert (
         model_registry_module.BUILT_IN_MODELS[
             "meta-llama/llama-4-maverick-17b-128e-instruct"
         ].as_dict()["completion_token_limit"]
@@ -2023,6 +2091,7 @@ def test_model_registry_branches():
     assert registry.models_for_feature(GroqFeature.TEXT_GENERATION)
     discovered_only = GroqModelRegistry([model], include_built_ins=False)
     assert discovered_only.models_for_feature(GroqFeature.TEXT_GENERATION) == []
+    assert not discovered_only.supports("qwen/qwen3.6-27b", GroqFeature.VISION)
     with patch.dict(
         model_registry_module.FEATURE_CAPABILITIES,
         {GroqFeature.TEXT_GENERATION: frozenset()},
@@ -2132,6 +2201,10 @@ async def test_runtime_model_registry_hydration_branches():
     runtime.client.async_list_models = dynamic_models
     await async_hydrate_runtime_model_registry(entry, runtime)
     assert runtime.model_registry.context_window("custom/dynamic") == 2048
+    assert not runtime.model_registry.supports(
+        "qwen/qwen3.6-27b",
+        GroqFeature.VISION,
+    )
 
     no_key_entry = DummyEntry()
     no_key_entry.data = {}
@@ -2867,6 +2940,8 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
         service_call({ATTR_CONFIG_ENTRY_ID: "entry-id", ATTR_REFRESH: True})
     )
     assert any(model["id"] == "new-model" for model in listed["models"])
+    assert not any(model["id"] == "qwen/qwen3.6-27b" for model in listed["models"])
+    assert not runtime.model_registry.supports("qwen/qwen3.6-27b", GroqFeature.VISION)
 
     await async_register_services(hass)
     await async_register_services(hass)
