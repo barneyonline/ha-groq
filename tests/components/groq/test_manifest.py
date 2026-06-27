@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import re
 
+import yaml
+
 from custom_components.groq.const import DOMAIN
 
 
@@ -51,6 +53,20 @@ def test_translation_domain_matches_component_domain() -> None:
     assert manifest["domain"].islower()
     assert (component_dir / "strings.json").is_file()
     assert (component_dir / "translations" / "en.json").is_file()
+
+
+def test_service_icons_cover_all_actions() -> None:
+    """Ensure every service action has a UI icon translation."""
+    root = Path(__file__).resolve().parents[3]
+    component_dir = root / "custom_components" / DOMAIN
+    icons = json.loads((component_dir / "icons.json").read_text(encoding="utf-8"))
+    services = yaml.safe_load(
+        (component_dir / "services.yaml").read_text(encoding="utf-8")
+    )
+
+    assert set(icons["services"]) == set(services)
+    for service_id, icon in icons["services"].items():
+        assert icon["service"].startswith("mdi:"), service_id
 
 
 def _leaf_paths(value: object, prefix: str = "") -> set[str]:
