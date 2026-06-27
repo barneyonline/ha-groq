@@ -346,16 +346,18 @@ class DummyPostSession:
 
 def test_services_yaml_guides_action_inputs():
     """Ensure service action metadata uses constrained selectors where possible."""
-    services = yaml.safe_load(
-        (Path(__file__).parents[3] / "custom_components/groq/services.yaml").read_text()
-    )
+    component_path = Path(__file__).parents[3] / "custom_components/groq"
+    services = yaml.safe_load((component_path / "services.yaml").read_text())
+    translations = json.loads((component_path / "strings.json").read_text())
 
     for service_id, service in services.items():
-        assert service["name"] and "_" not in service["name"], service_id
-        assert service["description"], service_id
+        service_translation = translations["services"][service_id]
+        assert service_translation["name"] and "_" not in service_translation["name"]
+        assert service_translation["description"], service_id
         for field_id, field in service["fields"].items():
-            assert field["name"], (service_id, field_id)
-            assert field["description"], (service_id, field_id)
+            field_translation = service_translation["fields"][field_id]
+            assert field_translation["name"], (service_id, field_id)
+            assert field_translation["description"], (service_id, field_id)
             assert field["selector"], (service_id, field_id)
 
     for service_id in ("generate_text", "generate_structured"):
@@ -363,27 +365,47 @@ def test_services_yaml_guides_action_inputs():
         assert fields["config_entry_id"]["selector"] == {
             "config_entry": {"integration": "groq"}
         }
-        assert "fills this dropdown" in fields["service_id"]["description"]
+        assert (
+            "fills this dropdown"
+            in translations["services"][service_id]["fields"]["service_id"][
+                "description"
+            ]
+        )
         assert fields["service_id"]["selector"] == {
             "select": {"custom_value": True, "options": []}
         }
         assert "select" in fields["model"]["selector"]
         assert fields["model"]["selector"]["select"]["custom_value"] is True
-        assert "newer Groq model ID" in fields["model"]["description"]
-        assert "YAML automations" in fields["stop"]["description"]
+        assert (
+            "newer Groq model ID"
+            in translations["services"][service_id]["fields"]["model"]["description"]
+        )
+        assert (
+            "YAML automations"
+            in translations["services"][service_id]["fields"]["stop"]["description"]
+        )
         assert fields["service_tier"]["selector"]["select"]["options"] == [
             {"label": "Auto", "value": "auto"},
             {"label": "On Demand", "value": "on_demand"},
             {"label": "Flex", "value": "flex"},
             {"label": "Performance", "value": "performance"},
         ]
-        assert "Free-form" in fields["request_body_options"]["description"]
+        assert (
+            "Free-form"
+            in translations["services"][service_id]["fields"]["request_body_options"][
+                "description"
+            ]
+        )
         assert fields["request_body_options"]["selector"] == {"object": None}
-    assert services["generate_structured"]["name"] == "Generate Text Output"
+    assert translations["services"]["generate_structured"]["name"] == (
+        "Generate Text Output"
+    )
     assert services["generate_structured"]["fields"]["schema"]["required"] is False
     assert (
         "Leave empty for plain text"
-        in services["generate_structured"]["fields"]["schema"]["description"]
+        in translations["services"]["generate_structured"]["fields"]["schema"][
+            "description"
+        ]
     )
     assert any(
         option["value"] == "llama-3.1-8b-instant"
@@ -395,7 +417,12 @@ def test_services_yaml_guides_action_inputs():
     for service_id in ("analyze_image", "extract_text_from_image"):
         fields = services[service_id]["fields"]
         assert "target" not in services[service_id]
-        assert "fills this dropdown" in fields["service_id"]["description"]
+        assert (
+            "fills this dropdown"
+            in translations["services"][service_id]["fields"]["service_id"][
+                "description"
+            ]
+        )
         assert fields["service_id"]["selector"] == {
             "select": {"custom_value": True, "options": []}
         }
@@ -403,7 +430,12 @@ def test_services_yaml_guides_action_inputs():
             "entity": {"domain": "camera"}
         }
         assert fields["image_file"]["selector"] == {"media": {"accept": ["image/*"]}}
-        assert "allowlist_external_dirs" in fields["image_path"]["description"]
+        assert (
+            "allowlist_external_dirs"
+            in translations["services"][service_id]["fields"]["image_path"][
+                "description"
+            ]
+        )
         assert fields["image_url"]["selector"] == {"text": {"type": "url"}}
         assert fields["model"]["selector"]["select"]["custom_value"] is True
 
@@ -412,7 +444,12 @@ def test_services_yaml_guides_action_inputs():
         "select": {"custom_value": True, "options": []}
     }
     assert stt_fields["audio_file"]["selector"] == {"media": {"accept": ["audio/*"]}}
-    assert "allowlist_external_dirs" in stt_fields["audio_path"]["description"]
+    assert (
+        "allowlist_external_dirs"
+        in translations["services"]["transcribe_audio"]["fields"]["audio_path"][
+            "description"
+        ]
+    )
     assert stt_fields["model"]["selector"]["select"]["custom_value"] is True
     assert stt_fields["language"]["selector"]["select"]["custom_value"] is True
 

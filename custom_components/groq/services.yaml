@@ -1,17 +1,11 @@
 generate_text:
-  name: Generate Text
-  description: Generate a text response with a configured Groq Text Generation service.
   fields:
     config_entry_id:
-      name: Groq Account
-      description: Groq account to use. Leave empty when only one Groq account is configured.
       required: false
       selector:
         config_entry:
           integration: groq
     service_id:
-      name: Groq Service
-      description: Configured Text Generation service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Text Generation service.
       required: false
       example: Text Generation
       selector:
@@ -19,16 +13,12 @@ generate_text:
           custom_value: true
           options: []
     prompt:
-      name: Prompt
-      description: User prompt to send to Groq.
       required: true
       example: Summarize the current home status for a notification.
       selector:
         text:
           multiline: true
     model:
-      name: Model
-      description: Optional Groq chat model override. Choose a known compatible model from the dropdown, or enter a newer Groq model ID manually if Groq adds one before this integration is updated. Leave empty to use the selected service model.
       required: false
       selector:
         select:
@@ -53,15 +43,11 @@ generate_text:
             - label: Groq Compound Mini
               value: groq/compound-mini
     system_prompt:
-      name: System Prompt
-      description: Optional system instructions. Leave empty to use the selected service prompt.
       required: false
       selector:
         text:
           multiline: true
     temperature:
-      name: Temperature
-      description: Controls response variation. Lower values are more predictable; higher values are more creative.
       required: false
       selector:
         number:
@@ -70,8 +56,6 @@ generate_text:
           step: 0.1
           mode: slider
     max_tokens:
-      name: Max Completion Tokens
-      description: Maximum number of tokens Groq may generate.
       required: false
       advanced: true
       selector:
@@ -79,8 +63,6 @@ generate_text:
           min: 1
           mode: box
     top_p:
-      name: Top P
-      description: Alternative sampling control that limits generation to likely tokens.
       required: false
       advanced: true
       selector:
@@ -90,16 +72,12 @@ generate_text:
           step: 0.01
           mode: box
     stop:
-      name: Stop Sequences
-      description: Stop sequence that ends generation. In YAML automations this also accepts a list of stop sequences.
       required: false
       advanced: true
       selector:
         text:
           multiline: true
     seed:
-      name: Seed
-      description: Best-effort deterministic sampling seed for repeatable responses.
       required: false
       advanced: true
       selector:
@@ -107,8 +85,6 @@ generate_text:
           min: 0
           mode: box
     service_tier:
-      name: Service Tier
-      description: Optional Groq processing tier for this request.
       required: false
       advanced: true
       selector:
@@ -123,8 +99,6 @@ generate_text:
             - label: Performance
               value: performance
     reasoning_effort:
-      name: Reasoning Effort
-      description: Reasoning budget for models that support reasoning.
       required: false
       advanced: true
       selector:
@@ -141,8 +115,6 @@ generate_text:
             - label: High
               value: high
     reasoning_format:
-      name: Reasoning Format
-      description: How supported reasoning models expose reasoning content.
       required: false
       advanced: true
       selector:
@@ -155,56 +127,40 @@ generate_text:
             - label: Parsed
               value: parsed
     include_reasoning:
-      name: Include Reasoning
-      description: Include reasoning content when the selected model supports it.
       required: false
       advanced: true
       selector:
         boolean:
     request_body_options:
-      name: Additional Request Body Options
-      description: Free-form Groq chat-create request options not exposed above, such as metadata, tools, tool_choice, parallel_tool_calls, or citation_options. This is an object because Groq accepts nested option data.
       required: false
       advanced: true
       selector:
         object:
     schema:
-      name: JSON Schema
-      description: Optional JSON Schema object for structured output. Only use with models that support structured outputs.
       required: false
       advanced: true
       selector:
         object:
     schema_name:
-      name: Schema Name
-      description: Name sent to Groq with the JSON schema. Use letters, numbers, underscores, or hyphens.
       required: false
       advanced: true
       example: response
       selector:
         text:
     strict:
-      name: Strict Schema Mode
-      description: Use Groq constrained decoding when the selected model supports strict structured outputs.
       required: false
       advanced: true
       selector:
         boolean:
 
 generate_structured:
-  name: Generate Text Output
-  description: Generate text with a configured Groq Text Generation service. Optionally provide a JSON schema to request structured output from models that support structured outputs.
   fields:
     config_entry_id:
-      name: Groq Account
-      description: Groq account to use. Leave empty when only one Groq account is configured.
       required: false
       selector:
         config_entry:
           integration: groq
     service_id:
-      name: Groq Service
-      description: Configured Text Generation service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Text Generation service.
       required: false
       example: Text Generation
       selector:
@@ -212,37 +168,27 @@ generate_structured:
           custom_value: true
           options: []
     prompt:
-      name: Prompt
-      description: User prompt to send to Groq.
       required: true
       example: Summarize the current home status for a notification.
       selector:
         text:
           multiline: true
     schema:
-      name: JSON Schema
-      description: Optional JSON Schema object for structured output. Leave empty for plain text. When set, the selected model must support structured outputs.
       required: false
       example: '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"],"additionalProperties":false}'
       selector:
         object:
     schema_name:
-      name: Schema Name
-      description: Name sent to Groq with the JSON schema. Use letters, numbers, underscores, or hyphens.
       required: false
       example: response
       selector:
         text:
     strict:
-      name: Strict Schema Mode
-      description: Use Groq constrained decoding when the selected model supports strict structured outputs.
       required: false
       default: false
       selector:
         boolean:
     model:
-      name: Model
-      description: Optional Groq chat model override. Choose a known compatible model from the dropdown, or enter a newer Groq model ID manually if Groq adds one before this integration is updated. Leave empty to use the selected service model. Structured output only works when the selected model supports structured outputs.
       required: false
       selector:
         select:
@@ -267,15 +213,11 @@ generate_structured:
             - label: Groq Compound Mini
               value: groq/compound-mini
     system_prompt:
-      name: System Prompt
-      description: Optional system instructions. Leave empty to use the selected service prompt.
       required: false
       selector:
         text:
           multiline: true
     temperature:
-      name: Temperature
-      description: Controls response variation. Lower values are more predictable; higher values are more creative.
       required: false
       selector:
         number:
@@ -284,8 +226,6 @@ generate_structured:
           step: 0.1
           mode: slider
     max_tokens:
-      name: Max Completion Tokens
-      description: Maximum number of tokens Groq may generate.
       required: false
       advanced: true
       selector:
@@ -293,8 +233,6 @@ generate_structured:
           min: 1
           mode: box
     top_p:
-      name: Top P
-      description: Alternative sampling control that limits generation to likely tokens.
       required: false
       advanced: true
       selector:
@@ -304,16 +242,12 @@ generate_structured:
           step: 0.01
           mode: box
     stop:
-      name: Stop Sequences
-      description: Stop sequence that ends generation. In YAML automations this also accepts a list of stop sequences.
       required: false
       advanced: true
       selector:
         text:
           multiline: true
     seed:
-      name: Seed
-      description: Best-effort deterministic sampling seed for repeatable responses.
       required: false
       advanced: true
       selector:
@@ -321,8 +255,6 @@ generate_structured:
           min: 0
           mode: box
     service_tier:
-      name: Service Tier
-      description: Optional Groq processing tier for this request.
       required: false
       advanced: true
       selector:
@@ -337,8 +269,6 @@ generate_structured:
             - label: Performance
               value: performance
     reasoning_effort:
-      name: Reasoning Effort
-      description: Reasoning budget for models that support reasoning.
       required: false
       advanced: true
       selector:
@@ -355,8 +285,6 @@ generate_structured:
             - label: High
               value: high
     reasoning_format:
-      name: Reasoning Format
-      description: How supported reasoning models expose reasoning content.
       required: false
       advanced: true
       selector:
@@ -369,34 +297,24 @@ generate_structured:
             - label: Parsed
               value: parsed
     include_reasoning:
-      name: Include Reasoning
-      description: Include reasoning content when the selected model supports it.
       required: false
       advanced: true
       selector:
         boolean:
     request_body_options:
-      name: Additional Request Body Options
-      description: Free-form Groq chat-create request options not exposed above, such as metadata, tools, tool_choice, parallel_tool_calls, or citation_options. This is an object because Groq accepts nested option data.
       required: false
       advanced: true
       selector:
         object:
 
 analyze_image:
-  name: Analyze Image
-  description: Ask a Groq Image Recognition service to describe or answer questions about an image.
   fields:
     config_entry_id:
-      name: Groq Account
-      description: Groq account to use. Leave empty when only one Groq account is configured.
       required: false
       selector:
         config_entry:
           integration: groq
     service_id:
-      name: Groq Service
-      description: Configured Image Recognition service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Image Recognition service.
       required: false
       example: Image Recognition
       selector:
@@ -404,39 +322,29 @@ analyze_image:
           custom_value: true
           options: []
     prompt:
-      name: Prompt
-      description: Question or instruction for the image.
       required: true
       example: Describe anything unusual in this camera image.
       selector:
         text:
           multiline: true
     camera_entity_id:
-      name: Camera Entity
-      description: Optional camera entity to capture. Leave empty when using an image file, local path, or image URL.
       required: false
       selector:
         entity:
           domain: camera
     image_file:
-      name: Image File
-      description: Choose an image from Home Assistant media. Leave empty when using a camera entity.
       required: false
       selector:
         media:
           accept:
             - image/*
     image_path:
-      name: Local Image Path
-      description: Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image.
       required: false
       advanced: true
       example: /config/www/snapshot.jpg
       selector:
         text:
     image_url:
-      name: Image URL
-      description: Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path.
       required: false
       advanced: true
       example: https://example.com/snapshot.jpg
@@ -444,8 +352,6 @@ analyze_image:
         text:
           type: url
     model:
-      name: Model
-      description: Optional Groq vision model override. Choose a known compatible model from the dropdown, or enter a newer Groq vision model ID manually if Groq adds one before this integration is updated. Leave empty to use the selected service model.
       required: false
       selector:
         select:
@@ -459,19 +365,13 @@ analyze_image:
               value: meta-llama/llama-4-maverick-17b-128e-instruct
 
 extract_text_from_image:
-  name: Extract Text From Image
-  description: Extract visible text from an image with a Groq Image Recognition service.
   fields:
     config_entry_id:
-      name: Groq Account
-      description: Groq account to use. Leave empty when only one Groq account is configured.
       required: false
       selector:
         config_entry:
           integration: groq
     service_id:
-      name: Groq Service
-      description: Configured Image Recognition service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Image Recognition service.
       required: false
       example: Image Recognition
       selector:
@@ -479,31 +379,23 @@ extract_text_from_image:
           custom_value: true
           options: []
     camera_entity_id:
-      name: Camera Entity
-      description: Optional camera entity to capture. Leave empty when using an image file, local path, or image URL.
       required: false
       selector:
         entity:
           domain: camera
     image_file:
-      name: Image File
-      description: Choose an image from Home Assistant media. Leave empty when using a camera entity.
       required: false
       selector:
         media:
           accept:
             - image/*
     image_path:
-      name: Local Image Path
-      description: Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image.
       required: false
       advanced: true
       example: /config/www/snapshot.jpg
       selector:
         text:
     image_url:
-      name: Image URL
-      description: Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path.
       required: false
       advanced: true
       example: https://example.com/snapshot.jpg
@@ -511,16 +403,12 @@ extract_text_from_image:
         text:
           type: url
     prompt:
-      name: Prompt
-      description: Optional OCR instruction. Leave empty to extract all visible text.
       required: false
       example: Extract all visible text from this image. Return only the text.
       selector:
         text:
           multiline: true
     model:
-      name: Model
-      description: Optional Groq vision model override. Choose a known compatible model from the dropdown, or enter a newer Groq vision model ID manually if Groq adds one before this integration is updated. Leave empty to use the selected service model.
       required: false
       selector:
         select:
@@ -534,19 +422,13 @@ extract_text_from_image:
               value: meta-llama/llama-4-maverick-17b-128e-instruct
 
 transcribe_audio:
-  name: Transcribe Audio
-  description: Transcribe an audio file with a configured Groq Speech-to-Text service.
   fields:
     config_entry_id:
-      name: Groq Account
-      description: Groq account to use. Leave empty when only one Groq account is configured.
       required: false
       selector:
         config_entry:
           integration: groq
     service_id:
-      name: Groq Service
-      description: Configured Speech-to-Text service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Speech-to-Text service.
       required: false
       example: Speech-to-Text
       selector:
@@ -554,24 +436,18 @@ transcribe_audio:
           custom_value: true
           options: []
     audio_file:
-      name: Audio File
-      description: Choose an audio file from Home Assistant media. Leave empty when using a local audio path.
       required: false
       selector:
         media:
           accept:
             - audio/*
     audio_path:
-      name: Local Audio Path
-      description: Advanced local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file.
       required: false
       advanced: true
       example: /config/www/recording.wav
       selector:
         text:
     model:
-      name: Model
-      description: Optional Groq speech-to-text model override. Leave empty to use the selected service model.
       required: false
       selector:
         select:
@@ -582,8 +458,6 @@ transcribe_audio:
             - label: Whisper Large V3
               value: whisper-large-v3
     language:
-      name: Language
-      description: Optional transcription language hint. Leave empty to use the selected service language.
       required: false
       selector:
         select:
@@ -614,8 +488,6 @@ transcribe_audio:
             - label: Chinese
               value: zh-CN
     prompt:
-      name: Prompt
-      description: Optional context or spelling hints for the transcription.
       required: false
       advanced: true
       selector:
@@ -623,31 +495,21 @@ transcribe_audio:
           multiline: true
 
 clear_cache:
-  name: Clear Cache
-  description: Clear cached Groq text generation responses for a Groq account.
   fields:
     config_entry_id:
-      name: Groq Account
-      description: Groq account cache to clear. Leave empty when only one Groq account is configured.
       required: false
       selector:
         config_entry:
           integration: groq
 
 list_models:
-  name: List Models
-  description: List Groq models available to a Groq account.
   fields:
     config_entry_id:
-      name: Groq Account
-      description: Groq account to inspect. Leave empty when only one Groq account is configured.
       required: false
       selector:
         config_entry:
           integration: groq
     refresh:
-      name: Refresh From Groq
-      description: Query Groq before returning the model list.
       required: false
       default: false
       selector:

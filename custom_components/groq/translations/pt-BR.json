@@ -360,5 +360,297 @@
         "request_invalid": {
             "message": "{message}"
         }
+    },
+    "services": {
+        "generate_text": {
+            "name": "Generate Text",
+            "description": "Generate a text response with a configured Groq Text Generation service.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Groq Account",
+                    "description": "Groq account to use. Leave empty when only one Groq account is configured."
+                },
+                "service_id": {
+                    "name": "Groq Service",
+                    "description": "Configured Text Generation service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Text Generation service."
+                },
+                "prompt": {
+                    "name": "Prompt",
+                    "description": "User prompt to send to Groq."
+                },
+                "model": {
+                    "name": "Model",
+                    "description": "Optional Groq chat model override. Choose a known compatible model from the dropdown, or enter a newer Groq model ID manually if Groq adds one before this integration is updated. Leave empty to use the selected service model."
+                },
+                "system_prompt": {
+                    "name": "System Prompt",
+                    "description": "Optional system instructions. Leave empty to use the selected service prompt."
+                },
+                "temperature": {
+                    "name": "Temperature",
+                    "description": "Controls response variation. Lower values are more predictable; higher values are more creative."
+                },
+                "max_tokens": {
+                    "name": "Max Completion Tokens",
+                    "description": "Maximum number of tokens Groq may generate."
+                },
+                "top_p": {
+                    "name": "Top P",
+                    "description": "Alternative sampling control that limits generation to likely tokens."
+                },
+                "stop": {
+                    "name": "Stop Sequences",
+                    "description": "Stop sequence that ends generation. In YAML automations this also accepts a list of stop sequences."
+                },
+                "seed": {
+                    "name": "Seed",
+                    "description": "Best-effort deterministic sampling seed for repeatable responses."
+                },
+                "service_tier": {
+                    "name": "Service Tier",
+                    "description": "Optional Groq processing tier for this request."
+                },
+                "reasoning_effort": {
+                    "name": "Reasoning Effort",
+                    "description": "Reasoning budget for models that support reasoning."
+                },
+                "reasoning_format": {
+                    "name": "Reasoning Format",
+                    "description": "How supported reasoning models expose reasoning content."
+                },
+                "include_reasoning": {
+                    "name": "Include Reasoning",
+                    "description": "Include reasoning content when the selected model supports it."
+                },
+                "request_body_options": {
+                    "name": "Additional Request Body Options",
+                    "description": "Free-form Groq chat-create request options not exposed above, such as metadata, tools, tool_choice, parallel_tool_calls, or citation_options. This is an object because Groq accepts nested option data."
+                },
+                "schema": {
+                    "name": "JSON Schema",
+                    "description": "Optional JSON Schema object for structured output. Only use with models that support structured outputs."
+                },
+                "schema_name": {
+                    "name": "Schema Name",
+                    "description": "Name sent to Groq with the JSON schema. Use letters, numbers, underscores, or hyphens."
+                },
+                "strict": {
+                    "name": "Strict Schema Mode",
+                    "description": "Use Groq constrained decoding when the selected model supports strict structured outputs."
+                }
+            }
+        },
+        "generate_structured": {
+            "name": "Generate Text Output",
+            "description": "Generate text with a configured Groq Text Generation service. Optionally provide a JSON schema to request structured output from models that support structured outputs.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Groq Account",
+                    "description": "Groq account to use. Leave empty when only one Groq account is configured."
+                },
+                "service_id": {
+                    "name": "Groq Service",
+                    "description": "Configured Text Generation service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Text Generation service."
+                },
+                "prompt": {
+                    "name": "Prompt",
+                    "description": "User prompt to send to Groq."
+                },
+                "schema": {
+                    "name": "JSON Schema",
+                    "description": "Optional JSON Schema object for structured output. Leave empty for plain text. When set, the selected model must support structured outputs."
+                },
+                "schema_name": {
+                    "name": "Schema Name",
+                    "description": "Name sent to Groq with the JSON schema. Use letters, numbers, underscores, or hyphens."
+                },
+                "strict": {
+                    "name": "Strict Schema Mode",
+                    "description": "Use Groq constrained decoding when the selected model supports strict structured outputs."
+                },
+                "model": {
+                    "name": "Model",
+                    "description": "Optional Groq chat model override. Choose a known compatible model from the dropdown, or enter a newer Groq model ID manually if Groq adds one before this integration is updated. Leave empty to use the selected service model. Structured output only works when the selected model supports structured outputs."
+                },
+                "system_prompt": {
+                    "name": "System Prompt",
+                    "description": "Optional system instructions. Leave empty to use the selected service prompt."
+                },
+                "temperature": {
+                    "name": "Temperature",
+                    "description": "Controls response variation. Lower values are more predictable; higher values are more creative."
+                },
+                "max_tokens": {
+                    "name": "Max Completion Tokens",
+                    "description": "Maximum number of tokens Groq may generate."
+                },
+                "top_p": {
+                    "name": "Top P",
+                    "description": "Alternative sampling control that limits generation to likely tokens."
+                },
+                "stop": {
+                    "name": "Stop Sequences",
+                    "description": "Stop sequence that ends generation. In YAML automations this also accepts a list of stop sequences."
+                },
+                "seed": {
+                    "name": "Seed",
+                    "description": "Best-effort deterministic sampling seed for repeatable responses."
+                },
+                "service_tier": {
+                    "name": "Service Tier",
+                    "description": "Optional Groq processing tier for this request."
+                },
+                "reasoning_effort": {
+                    "name": "Reasoning Effort",
+                    "description": "Reasoning budget for models that support reasoning."
+                },
+                "reasoning_format": {
+                    "name": "Reasoning Format",
+                    "description": "How supported reasoning models expose reasoning content."
+                },
+                "include_reasoning": {
+                    "name": "Include Reasoning",
+                    "description": "Include reasoning content when the selected model supports it."
+                },
+                "request_body_options": {
+                    "name": "Additional Request Body Options",
+                    "description": "Free-form Groq chat-create request options not exposed above, such as metadata, tools, tool_choice, parallel_tool_calls, or citation_options. This is an object because Groq accepts nested option data."
+                }
+            }
+        },
+        "analyze_image": {
+            "name": "Analyze Image",
+            "description": "Ask a Groq Image Recognition service to describe or answer questions about an image.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Groq Account",
+                    "description": "Groq account to use. Leave empty when only one Groq account is configured."
+                },
+                "service_id": {
+                    "name": "Groq Service",
+                    "description": "Configured Image Recognition service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Image Recognition service."
+                },
+                "prompt": {
+                    "name": "Prompt",
+                    "description": "Question or instruction for the image."
+                },
+                "camera_entity_id": {
+                    "name": "Camera Entity",
+                    "description": "Optional camera entity to capture. Leave empty when using an image file, local path, or image URL."
+                },
+                "image_file": {
+                    "name": "Image File",
+                    "description": "Choose an image from Home Assistant media. Leave empty when using a camera entity."
+                },
+                "image_path": {
+                    "name": "Local Image Path",
+                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                },
+                "image_url": {
+                    "name": "Image URL",
+                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                },
+                "model": {
+                    "name": "Model",
+                    "description": "Optional Groq vision model override. Choose a known compatible model from the dropdown, or enter a newer Groq vision model ID manually if Groq adds one before this integration is updated. Leave empty to use the selected service model."
+                }
+            }
+        },
+        "extract_text_from_image": {
+            "name": "Extract Text From Image",
+            "description": "Extract visible text from an image with a Groq Image Recognition service.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Groq Account",
+                    "description": "Groq account to use. Leave empty when only one Groq account is configured."
+                },
+                "service_id": {
+                    "name": "Groq Service",
+                    "description": "Configured Image Recognition service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Image Recognition service."
+                },
+                "camera_entity_id": {
+                    "name": "Camera Entity",
+                    "description": "Optional camera entity to capture. Leave empty when using an image file, local path, or image URL."
+                },
+                "image_file": {
+                    "name": "Image File",
+                    "description": "Choose an image from Home Assistant media. Leave empty when using a camera entity."
+                },
+                "image_path": {
+                    "name": "Local Image Path",
+                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                },
+                "image_url": {
+                    "name": "Image URL",
+                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                },
+                "prompt": {
+                    "name": "Prompt",
+                    "description": "Optional OCR instruction. Leave empty to extract all visible text."
+                },
+                "model": {
+                    "name": "Model",
+                    "description": "Optional Groq vision model override. Choose a known compatible model from the dropdown, or enter a newer Groq vision model ID manually if Groq adds one before this integration is updated. Leave empty to use the selected service model."
+                }
+            }
+        },
+        "transcribe_audio": {
+            "name": "Transcribe Audio",
+            "description": "Transcribe an audio file with a configured Groq Speech-to-Text service.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Groq Account",
+                    "description": "Groq account to use. Leave empty when only one Groq account is configured."
+                },
+                "service_id": {
+                    "name": "Groq Service",
+                    "description": "Configured Speech-to-Text service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Speech-to-Text service."
+                },
+                "audio_file": {
+                    "name": "Audio File",
+                    "description": "Choose an audio file from Home Assistant media. Leave empty when using a local audio path."
+                },
+                "audio_path": {
+                    "name": "Local Audio Path",
+                    "description": "Advanced local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
+                },
+                "model": {
+                    "name": "Model",
+                    "description": "Optional Groq speech-to-text model override. Leave empty to use the selected service model."
+                },
+                "language": {
+                    "name": "Language",
+                    "description": "Optional transcription language hint. Leave empty to use the selected service language."
+                },
+                "prompt": {
+                    "name": "Prompt",
+                    "description": "Optional context or spelling hints for the transcription."
+                }
+            }
+        },
+        "clear_cache": {
+            "name": "Clear Cache",
+            "description": "Clear cached Groq text generation responses for a Groq account.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Groq Account",
+                    "description": "Groq account cache to clear. Leave empty when only one Groq account is configured."
+                }
+            }
+        },
+        "list_models": {
+            "name": "List Models",
+            "description": "List Groq models available to a Groq account.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Groq Account",
+                    "description": "Groq account to inspect. Leave empty when only one Groq account is configured."
+                },
+                "refresh": {
+                    "name": "Refresh From Groq",
+                    "description": "Query Groq before returning the model list."
+                }
+            }
+        }
     }
 }
