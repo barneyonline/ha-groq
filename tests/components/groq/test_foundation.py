@@ -406,6 +406,26 @@ def service_call(data):
     return SimpleNamespace(data=data)
 
 
+def add_text_service(
+    entry: DummyEntry,
+    *,
+    service_id: str = "text-service",
+    model: str = "llama-3.1-8b-instant",
+) -> str:
+    """Add a text generation service subentry to a dummy entry."""
+    entry.subentries = {
+        service_id: SimpleNamespace(
+            subentry_id=service_id,
+            data={
+                "service_type": "text_generation",
+                "name": "Text service",
+                "model": model,
+            },
+        )
+    }
+    return service_id
+
+
 @pytest.mark.asyncio
 async def test_attachment_helpers_handle_dicts_and_guardrails(tmp_path):
     image_path = tmp_path / "snapshot.png"
@@ -1200,6 +1220,7 @@ def test_prompt_cache_compacts_stale_expiry_entries():
 async def test_generate_text_service_uses_cache():
     entry = DummyEntry()
     entry.options = {CONF_ENABLED_FEATURES: ["text_generation", "prompt_caching"]}
+    service_id = add_text_service(entry)
     hass = DummyHass([entry])
     session = DummySession(
         DummyResponse(
@@ -1222,6 +1243,7 @@ async def test_generate_text_service_uses_cache():
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Hi",
                     "model": "openai/gpt-oss-20b",
                     "top_p": 0.8,
@@ -1239,6 +1261,7 @@ async def test_generate_text_service_uses_cache():
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Hi",
                     "model": "openai/gpt-oss-20b",
                     "top_p": 0.8,
@@ -1272,6 +1295,7 @@ async def test_generate_text_service_uses_cache():
 async def test_generate_text_service_rejects_excessive_completion_tokens():
     entry = DummyEntry()
     entry.options = {CONF_ENABLED_FEATURES: ["text_generation"]}
+    service_id = add_text_service(entry)
     hass = DummyHass([entry])
     handler = _handle_generate_text(hass)
 
@@ -1280,6 +1304,7 @@ async def test_generate_text_service_rejects_excessive_completion_tokens():
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Hi",
                     "model": "openai/gpt-oss-20b",
                     "max_tokens": 65537,
@@ -1292,6 +1317,7 @@ async def test_generate_text_service_rejects_excessive_completion_tokens():
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Hi",
                     "model": "groq/compound",
                     "request_body_options": {"max_completion_tokens": "8193"},
@@ -1356,7 +1382,7 @@ async def test_generate_text_service_uses_selected_subentry_defaults():
 
 
 @pytest.mark.asyncio
-async def test_generate_text_service_requires_service_id_for_multiple_subentries():
+async def test_generate_text_service_requires_service_id():
     entry = DummyEntry()
     entry.subentries = {
         "text-one": SimpleNamespace(
@@ -1389,11 +1415,33 @@ async def test_generate_text_service_requires_service_id_for_multiple_subentries
             )
         )
 
+    entry.subentries = {
+        "text-one": SimpleNamespace(
+            subentry_id="text-one",
+            data={
+                "service_type": "text_generation",
+                "name": "Text one",
+                "model": "llama-3.1-8b-instant",
+            },
+        )
+    }
+
+    with pytest.raises(ServiceValidationError, match="service_id"):
+        await handler(
+            service_call(
+                {
+                    ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    "prompt": "Hi",
+                }
+            )
+        )
+
 
 @pytest.mark.asyncio
 async def test_generate_text_service_does_not_cache_unsupported_models():
     entry = DummyEntry()
     entry.options = {CONF_ENABLED_FEATURES: ["text_generation", "prompt_caching"]}
+    service_id = add_text_service(entry)
     hass = DummyHass([entry])
     session = DummySession(
         DummyResponse(
@@ -1416,6 +1464,7 @@ async def test_generate_text_service_does_not_cache_unsupported_models():
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Hi",
                     "model": "llama-3.1-8b-instant",
                 }
@@ -1425,6 +1474,7 @@ async def test_generate_text_service_does_not_cache_unsupported_models():
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Hi",
                     "model": "llama-3.1-8b-instant",
                 }
@@ -1440,13 +1490,14 @@ async def test_generate_text_service_does_not_cache_unsupported_models():
 async def test_generate_text_service_supports_structured_outputs():
     entry = DummyEntry()
     entry.options = {CONF_ENABLED_FEATURES: ["text_generation"]}
+    service_id = add_text_service(entry, model="openai/gpt-oss-20b")
     hass = DummyHass([entry])
     session = DummySession(
         DummyResponse(
             200,
             {"content-type": "application/json"},
             {
-                "model": "llama-3.1-8b-instant",
+                "model": "openai/gpt-oss-20b",
                 "choices": [{"message": {"content": '{"summary": "Done"}'}}],
                 "usage": {"total_tokens": 6},
             },
@@ -1462,6 +1513,7 @@ async def test_generate_text_service_supports_structured_outputs():
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Summarize the home",
                     ATTR_SCHEMA: {
                         "type": "object",
@@ -1494,6 +1546,7 @@ async def test_generate_text_service_supports_structured_outputs():
 async def test_generate_text_service_rejects_structured_outputs_for_unsupported_model():
     entry = DummyEntry()
     entry.options = {CONF_ENABLED_FEATURES: ["text_generation"]}
+    service_id = add_text_service(entry)
     hass = DummyHass([entry])
     handler = _handle_generate_text(hass)
 
@@ -1502,6 +1555,7 @@ async def test_generate_text_service_rejects_structured_outputs_for_unsupported_
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Summarize the home",
                     "model": "custom/text-model",
                     ATTR_SCHEMA: {
@@ -1517,6 +1571,7 @@ async def test_generate_text_service_rejects_structured_outputs_for_unsupported_
 async def test_generate_text_service_rejects_reasoning_for_unsupported_model():
     entry = DummyEntry()
     entry.options = {CONF_ENABLED_FEATURES: ["text_generation"]}
+    service_id = add_text_service(entry)
     hass = DummyHass([entry])
     handler = _handle_generate_text(hass)
 
@@ -1525,6 +1580,7 @@ async def test_generate_text_service_rejects_reasoning_for_unsupported_model():
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Think carefully",
                     "model": "llama-3.1-8b-instant",
                     "reasoning_effort": "low",
@@ -1537,6 +1593,7 @@ async def test_generate_text_service_rejects_reasoning_for_unsupported_model():
 async def test_generate_text_service_sends_reasoning_for_supported_model():
     entry = DummyEntry()
     entry.options = {CONF_ENABLED_FEATURES: ["text_generation"]}
+    service_id = add_text_service(entry)
     hass = DummyHass([entry])
     session = DummySession(
         DummyResponse(
@@ -1566,6 +1623,7 @@ async def test_generate_text_service_sends_reasoning_for_supported_model():
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Think carefully",
                     "model": "openai/gpt-oss-20b",
                     "reasoning_effort": "medium",
@@ -1585,6 +1643,7 @@ async def test_generate_text_service_sends_reasoning_for_supported_model():
 async def test_generate_text_service_supports_compound_models():
     entry = DummyEntry()
     entry.options = {CONF_ENABLED_FEATURES: ["text_generation"]}
+    service_id = add_text_service(entry)
     hass = DummyHass([entry])
     session = DummySession(
         DummyResponse(
@@ -1624,6 +1683,7 @@ async def test_generate_text_service_supports_compound_models():
             service_call(
                 {
                     ATTR_CONFIG_ENTRY_ID: "entry-id",
+                    ATTR_SERVICE_ID: service_id,
                     "prompt": "Use Compound",
                     "model": "groq/compound-mini",
                     "request_body_options": {
@@ -2984,9 +3044,10 @@ async def test_list_models_service_returns_registry_without_refresh():
 
 
 @pytest.mark.asyncio
-async def test_service_requires_entry_id_when_multiple_entries():
+async def test_account_service_requires_entry_id():
     hass = DummyHass([DummyEntry("one"), DummyEntry("two")])
     handler = _handle_list_models(hass)
 
-    with pytest.raises(ServiceValidationError):
+    with pytest.raises(ServiceValidationError) as err:
         await handler(service_call({"refresh": False}))
+    assert err.value.translation_key == "config_entry_required"
