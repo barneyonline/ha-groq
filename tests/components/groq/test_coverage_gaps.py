@@ -371,6 +371,13 @@ def test_services_yaml_guides_action_inputs():
                 "description"
             ]
         )
+        assert fields["service_id"]["required"] is True
+        assert (
+            "Leave empty"
+            not in translations["services"][service_id]["fields"]["service_id"][
+                "description"
+            ]
+        )
         assert fields["service_id"]["selector"] == {
             "select": {"custom_value": True, "options": []}
         }
@@ -423,6 +430,13 @@ def test_services_yaml_guides_action_inputs():
                 "description"
             ]
         )
+        assert fields["service_id"]["required"] is True
+        assert (
+            "Leave empty"
+            not in translations["services"][service_id]["fields"]["service_id"][
+                "description"
+            ]
+        )
         assert fields["service_id"]["selector"] == {
             "select": {"custom_value": True, "options": []}
         }
@@ -440,6 +454,13 @@ def test_services_yaml_guides_action_inputs():
         assert fields["model"]["selector"]["select"]["custom_value"] is True
 
     stt_fields = services["transcribe_audio"]["fields"]
+    assert stt_fields["service_id"]["required"] is True
+    assert (
+        "Leave empty"
+        not in translations["services"]["transcribe_audio"]["fields"]["service_id"][
+            "description"
+        ]
+    )
     assert stt_fields["service_id"]["selector"] == {
         "select": {"custom_value": True, "options": []}
     }
@@ -453,9 +474,23 @@ def test_services_yaml_guides_action_inputs():
     assert stt_fields["model"]["selector"]["select"]["custom_value"] is True
     assert stt_fields["language"]["selector"]["select"]["custom_value"] is True
 
+    assert services["clear_cache"]["fields"]["config_entry_id"]["required"] is True
+    assert (
+        "Leave empty"
+        not in translations["services"]["clear_cache"]["fields"]["config_entry_id"][
+            "description"
+        ]
+    )
     assert services["clear_cache"]["fields"]["config_entry_id"]["selector"] == {
         "config_entry": {"integration": "groq"}
     }
+    assert services["list_models"]["fields"]["config_entry_id"]["required"] is True
+    assert (
+        "Leave empty"
+        not in translations["services"]["list_models"]["fields"]["config_entry_id"][
+            "description"
+        ]
+    )
     assert services["list_models"]["fields"]["refresh"]["selector"] == {"boolean": None}
 
 
@@ -2673,12 +2708,9 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
         hass, service_call({ATTR_CONFIG_ENTRY_ID: "entry-id"})
     )
     assert _service_subentries(entry, None, "text_generation") == []
-    assert (
-        _service_from_call(entry, runtime, service_call({}), "text_generation")[
-            "unique_id"
-        ]
-        == "text-id"
-    )
+    with pytest.raises(ServiceValidationError, match="service_id") as err:
+        _service_from_call(entry, runtime, service_call({}), "text_generation")
+    assert err.value.translation_key == "service_id_required"
     assert (
         _service_from_call(
             entry,

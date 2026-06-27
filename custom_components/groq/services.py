@@ -145,7 +145,8 @@ def is_media_source_id(value: str) -> bool:
 
 
 _ENTRY_SELECTOR = vol.Optional(ATTR_CONFIG_ENTRY_ID)
-_SERVICE_SELECTOR = vol.Optional(ATTR_SERVICE_ID)
+_REQUIRED_ENTRY_SELECTOR = vol.Required(ATTR_CONFIG_ENTRY_ID)
+_SERVICE_SELECTOR = vol.Required(ATTR_SERVICE_ID)
 _MODEL_SELECTOR = vol.Optional(ATTR_MODEL)
 _TEXT_OPTIONS = {
     _ENTRY_SELECTOR: cv.string,
@@ -223,10 +224,10 @@ TRANSCRIBE_AUDIO_SCHEMA = vol.Schema(
         vol.Optional(ATTR_PROMPT): cv.string,
     }
 )
-CLEAR_CACHE_SCHEMA = vol.Schema({_ENTRY_SELECTOR: cv.string})
+CLEAR_CACHE_SCHEMA = vol.Schema({_REQUIRED_ENTRY_SELECTOR: cv.string})
 LIST_MODELS_SCHEMA = vol.Schema(
     {
-        _ENTRY_SELECTOR: cv.string,
+        _REQUIRED_ENTRY_SELECTOR: cv.string,
         vol.Optional(ATTR_REFRESH, default=False): cv.boolean,
     }
 )
@@ -405,15 +406,21 @@ def _service_from_call(
             service_type=service_type,
             service_id=requested,
         )
-    if len(services) == 1:
-        return services[0]
-    if len(services) > 1:
-        raise _service_error(
-            "multiple_services_configured",
-            f"Multiple Groq {service_type} services are configured; provide service_id",
-            service_type=service_type,
-        )
-    return {}
+    raise _service_error(
+        "service_id_required",
+        f"Select a Groq {service_type} service with service_id",
+        service_type=service_type,
+    )
+
+
+def _ensure_config_entry_id(call: ServiceCall) -> None:
+    """Raise if an account-level service action has no explicit account."""
+    if call.data.get(ATTR_CONFIG_ENTRY_ID):
+        return
+    raise _service_error(
+        "config_entry_required",
+        "Select a Groq account with config_entry_id",
+    )
 
 
 def _service_value(
@@ -1315,6 +1322,7 @@ def _handle_clear_cache(hass: HomeAssistant) -> ServiceHandler:
     """Build the clear_cache service handler."""
 
     async def handler(call: ServiceCall) -> ServiceResponse:
+        _ensure_config_entry_id(call)
         _entry, runtime = await _runtime_from_call(hass, call)
         _ensure_feature(runtime, GroqFeature.PROMPT_CACHING)
         return {"cleared": runtime.prompt_cache.clear()}
@@ -1326,6 +1334,7 @@ def _handle_list_models(hass: HomeAssistant) -> ServiceHandler:
     """Build the list_models service handler."""
 
     async def handler(call: ServiceCall) -> ServiceResponse:
+        _ensure_config_entry_id(call)
         _entry, runtime = await _runtime_from_call(hass, call)
         if call.data.get(ATTR_REFRESH):
             runtime.model_registry = GroqModelRegistry(

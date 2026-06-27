@@ -297,6 +297,12 @@
         "multiple_services_configured": {
             "message": "Flere Groq {service_type}-tjenester er konfigureret; give service_id"
         },
+        "service_id_required": {
+            "message": "Select a Groq {service_type} service with service_id"
+        },
+        "config_entry_required": {
+            "message": "Select a Groq account with config_entry_id"
+        },
         "unsupported_model": {
             "message": "Groq model {model} er ikke kendt for at understøtte {feature}"
         },
@@ -372,7 +378,7 @@
                 },
                 "service_id": {
                     "name": "Groq Service",
-                    "description": "Configured Text Generation service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Text Generation service."
+                    "description": "Configured Text Generation service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running."
                 },
                 "prompt": {
                     "name": "Prompt",
@@ -450,7 +456,7 @@
                 },
                 "service_id": {
                     "name": "Groq Service",
-                    "description": "Configured Text Generation service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Text Generation service."
+                    "description": "Configured Text Generation service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running."
                 },
                 "prompt": {
                     "name": "Prompt",
@@ -528,7 +534,7 @@
                 },
                 "service_id": {
                     "name": "Groq Service",
-                    "description": "Configured Image Recognition service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Image Recognition service."
+                    "description": "Configured Image Recognition service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running."
                 },
                 "prompt": {
                     "name": "Prompt",
@@ -566,7 +572,7 @@
                 },
                 "service_id": {
                     "name": "Groq Service",
-                    "description": "Configured Image Recognition service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Image Recognition service."
+                    "description": "Configured Image Recognition service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running."
                 },
                 "camera_entity_id": {
                     "name": "Camera Entity",
@@ -604,7 +610,7 @@
                 },
                 "service_id": {
                     "name": "Groq Service",
-                    "description": "Configured Speech-to-Text service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running. Leave empty when the selected account has only one Speech-to-Text service."
+                    "description": "Configured Speech-to-Text service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running."
                 },
                 "audio_file": {
                     "name": "Audio File",
@@ -634,7 +640,7 @@
             "fields": {
                 "config_entry_id": {
                     "name": "Groq Account",
-                    "description": "Groq account cache to clear. Leave empty when only one Groq account is configured."
+                    "description": "Groq account cache to clear."
                 }
             }
         },
@@ -644,7 +650,7 @@
             "fields": {
                 "config_entry_id": {
                     "name": "Groq Account",
-                    "description": "Groq account to inspect. Leave empty when only one Groq account is configured."
+                    "description": "Groq account to inspect."
                 },
                 "refresh": {
                     "name": "Refresh From Groq",

@@ -6,7 +6,7 @@ generate_text:
         config_entry:
           integration: groq
     service_id:
-      required: false
+      required: true
       example: Text Generation
       selector:
         select:
@@ -161,7 +161,7 @@ generate_structured:
         config_entry:
           integration: groq
     service_id:
-      required: false
+      required: true
       example: Text Generation
       selector:
         select:
@@ -315,7 +315,7 @@ analyze_image:
         config_entry:
           integration: groq
     service_id:
-      required: false
+      required: true
       example: Image Recognition
       selector:
         select:
@@ -372,7 +372,7 @@ extract_text_from_image:
         config_entry:
           integration: groq
     service_id:
-      required: false
+      required: true
       example: Image Recognition
       selector:
         select:
@@ -429,7 +429,7 @@ transcribe_audio:
         config_entry:
           integration: groq
     service_id:
-      required: false
+      required: true
       example: Speech-to-Text
       selector:
         select:
@@ -497,7 +497,7 @@ transcribe_audio:
 clear_cache:
   fields:
     config_entry_id:
-      required: false
+      required: true
       selector:
         config_entry:
           integration: groq
@@ -505,7 +505,7 @@ clear_cache:
 list_models:
   fields:
     config_entry_id:
-      required: false
+      required: true
       selector:
         config_entry:
           integration: groq

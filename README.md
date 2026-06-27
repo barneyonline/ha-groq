@@ -105,7 +105,7 @@ You can add more than one Groq account. The integration prevents adding the same
 - Invalid API key: create or copy a fresh key from Groq Console, then reauthenticate the Groq integration entry.
 - Cannot connect: check Home Assistant network/DNS access to `api.groq.com` and the [Groq status page](https://groqstatus.com/).
 - Model missing: use `groq.list_models` to see models visible to the selected account, or choose a known compatible model.
-- Multiple accounts or services: provide `config_entry_id` or `service_id` in the action data so Home Assistant can select the intended Groq account or service.
+- Service actions: provide `service_id` for Text Generation, Image Recognition, and Speech-to-Text actions so automations keep using the intended configured Groq service. Provide `config_entry_id` for account-level actions such as clearing the cache or listing models.
 - Rate-limit errors: wait for Groq's reset window, lower automation frequency, choose a smaller model, or use separate Groq projects/keys where appropriate.
 - TTS audio processing fails: install `ffmpeg` on the Home Assistant host, choose WAV playback output when conversion is enabled, or disable audio normalization and Long TTS.
 - Local image or audio file fails: make sure the path is allowed by Home Assistant `allowlist_external_dirs`, or use a media-source file.
