@@ -20,5 +20,28 @@
                 "default": "mdi:speaker-message"
             }
         }
+    },
+    "services": {
+        "analyze_image": {
+            "service": "mdi:image-search-outline"
+        },
+        "clear_cache": {
+            "service": "mdi:cached"
+        },
+        "extract_text_from_image": {
+            "service": "mdi:text-recognition"
+        },
+        "generate_structured": {
+            "service": "mdi:code-json"
+        },
+        "generate_text": {
+            "service": "mdi:text-box-edit-outline"
+        },
+        "list_models": {
+            "service": "mdi:format-list-bulleted"
+        },
+        "transcribe_audio": {
+            "service": "mdi:file-music-outline"
+        }
     }
 }
