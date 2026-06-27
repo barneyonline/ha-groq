@@ -1269,11 +1269,6 @@ def _apply_service_options(
     field = updated.get("fields", {}).get(ATTR_SERVICE_ID)
     if not field:
         return updated
-    field["description"] = (
-        "Configured Groq service to use. Choose from the loaded Groq services, "
-        "or enter a service ID manually for YAML/backward compatibility. Leave "
-        "empty when the selected account has only one matching service."
-    )
     field["selector"] = {
         "select": {
             "custom_value": True,
