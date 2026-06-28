@@ -2,22 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v1.3.1 - 2026-06-28
 
 ### 🚧 Breaking changes
-- None
+- Groq response actions now require explicit target selection: service-level actions require `service_id`, and account-level actions require `config_entry_id`, preventing automations from silently changing behavior as accounts or configured services are added. (#29)
 
 ### ✨ New features
-- None
+- Added support for the Groq `qwen/qwen3.6-27b` vision model and improved dynamic vision model discovery from Groq model metadata. (#26)
 
 ### 🐛 Bug fixes
-- None
+- Replaced implicit single-account or single-service action fallback behavior with explicit action validation so service calls fail clearly when the required target is missing. (#29)
 
 ### 🔧 Improvements
-- None
+- Refreshed discovered model handling so successful Groq `/models` refreshes replace stale built-ins, allowing newly visible models to appear and removed models to stop passing runtime validation. (#26)
+- Moved Groq service action names and descriptions from `services.yaml` into integration translations in line with current Home Assistant guidance. (#27)
+- Added Material Design Icons for every Groq service action so Home Assistant can show action-specific icons in the UI. (#28)
 
 ### 🔄 Other changes
-- None
+- Updated README guidance for explicit Groq service and account action selection. (#29)
+- Expanded regression coverage for dynamic model registry behavior, service translation metadata, service icons, and explicit action target validation. (#26, #27, #28, #29)
+- Bumped the integration manifest version to `1.3.1`.
 
 ## v1.3.0 - 2026-06-25
 
