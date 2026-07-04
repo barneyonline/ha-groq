@@ -131,6 +131,8 @@ class SpeechRequest:
     model: str
     voice: str
     response_format: str = "wav"
+    sample_rate: int | None = None
+    speed: float | None = None
     api_key: str | None = None
     service_id: str | None = None
     protect_free_tier: bool = True
@@ -415,7 +417,11 @@ class GroqApiClient:
         self._available = True
         self._unavailable_reason: str | None = None
         self._speech_caches: dict[
-            str, OrderedDict[tuple[str, str, str, str], bytes]
+            str,
+            OrderedDict[
+                tuple[str, str, str, int | None, float | None, str],
+                bytes,
+            ],
         ] = {}
         self._tts_usage: dict[str, _TTSUsageState] = {}
 
@@ -626,6 +632,8 @@ class GroqApiClient:
             request.model,
             request.voice,
             request.response_format,
+            request.sample_rate,
+            request.speed,
             request.text,
         )
         cache = self._speech_cache(request)
@@ -645,12 +653,16 @@ class GroqApiClient:
         self._rate_limiter.raise_if_blocked(guard_key)
         token_estimate = self._check_local_tts_free_tier_limit(request)
         self._record_local_tts_usage(request, token_estimate)
-        payload = {
+        payload: dict[str, Any] = {
             "model": request.model,
             "input": request.text,
             "voice": request.voice,
             "response_format": request.response_format,
         }
+        if request.sample_rate is not None:
+            payload["sample_rate"] = request.sample_rate
+        if request.speed is not None:
+            payload["speed"] = request.speed
         audio = await self._request_audio(
             "POST",
             AUDIO_SPEECH_PATH,
@@ -963,7 +975,13 @@ class GroqApiClient:
     def _speech_cache(
         self,
         request: SpeechRequest,
-    ) -> OrderedDict[tuple[str, str, str, str], bytes] | None:
+    ) -> (
+        OrderedDict[
+            tuple[str, str, str, int | None, float | None, str],
+            bytes,
+        ]
+        | None
+    ):
         """Return the per-service speech cache, if caching is enabled."""
         if request.cache_max <= 0:
             return None
@@ -1074,7 +1092,13 @@ class GroqApiClient:
             self._estimate_tts_token_usage(request.text) for request in requests
         ]
         now = now if now is not None else asyncio.get_running_loop().time()
-        simulated_caches: dict[str, OrderedDict[tuple[str, str, str, str], None]] = {}
+        simulated_caches: dict[
+            str,
+            OrderedDict[
+                tuple[str, str, str, int | None, float | None, str],
+                None,
+            ],
+        ] = {}
         simulated_usage: dict[str, list[int]] = {}
 
         for request, token_estimate in zip(requests, token_estimates, strict=True):
@@ -1090,6 +1114,8 @@ class GroqApiClient:
                     request.model,
                     request.voice,
                     request.response_format,
+                    request.sample_rate,
+                    request.speed,
                     request.text,
                 )
                 if cache_key in cache:
