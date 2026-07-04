@@ -110,7 +110,7 @@ def _response_format_default(values: dict[str, Any]) -> str:
 def _sample_rate_default(values: dict[str, Any]) -> int | None:
     """Return a selector-safe TTS sample-rate default."""
     configured = values.get(CONF_SAMPLE_RATE)
-    if configured in (None, ""):
+    if configured is None or configured == "":
         return None
     try:
         sample_rate = int(configured)

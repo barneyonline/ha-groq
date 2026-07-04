@@ -663,7 +663,9 @@ def test_tts_batch_free_tier_guard_ignores_cached_chunks(monkeypatch):
     namespace = f"{ORPHEUS_ENGLISH_MODEL}:{ORPHEUS_ENGLISH_VOICE}"
     cache = client._speech_caches.setdefault(namespace, OrderedDict())
     for text in cached_texts:
-        cache[(ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", text)] = b"cached"
+        cache[
+            (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", None, None, text)
+        ] = b"cached"
     request = SpeechRequest(
         text="existing",
         model=ORPHEUS_ENGLISH_MODEL,
@@ -722,7 +724,9 @@ def test_tts_batch_free_tier_guard_simulates_cache_evictions(monkeypatch):
     namespace = f"{ORPHEUS_ENGLISH_MODEL}:{ORPHEUS_ENGLISH_VOICE}"
     cache = client._speech_caches.setdefault(namespace, OrderedDict())
     for text in (first_text, third_text):
-        cache[(ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", text)] = b"cached"
+        cache[
+            (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", None, None, text)
+        ] = b"cached"
     request = SpeechRequest(
         text="existing",
         model=ORPHEUS_ENGLISH_MODEL,
@@ -756,8 +760,8 @@ def test_tts_batch_free_tier_guard_simulates_cache_evictions(monkeypatch):
         )
 
     assert list(client._speech_caches[namespace]) == [
-        (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", first_text),
-        (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", third_text),
+        (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", None, None, first_text),
+        (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", None, None, third_text),
     ]
 
 

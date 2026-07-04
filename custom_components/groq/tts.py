@@ -270,6 +270,12 @@ def _ffmpeg_output_args(output_format: str, sample_rate: int | None) -> list[str
     return args
 
 
+FFMPEG_OUTPUT_ARGS = {
+    output_format: _ffmpeg_output_args(output_format, None)
+    for output_format in FFMPEG_DEFAULT_SAMPLE_RATES
+}
+
+
 def _tts_service_data(config_entry: ConfigEntry) -> list[dict[str, Any] | None]:
     """Return TTS service subentry data for an entry."""
     subentries = getattr(config_entry, "subentries", None) or {}
@@ -347,7 +353,7 @@ class GroqTTSEntity(TextToSpeechEntity):
             _entry_value(config, CONF_MODEL, "", service_data=self._service_data),
             service_data=self._service_data,
         )
-        self._ffmpeg_capabilities: set[tuple[str, bool]] = set()
+        self._ffmpeg_capabilities: set[tuple[str, bool, int | None]] = set()
 
     async def _async_run_ffmpeg(
         self,

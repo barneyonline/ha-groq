@@ -13,9 +13,11 @@ from homeassistant import data_entry_flow
 from homeassistant.const import CONF_LLM_HASS_API, Platform
 
 import custom_components.groq as integration
-from custom_components.groq import config_flow, tts
+from custom_components.groq import config_flow, flow_schemas, tts
 from custom_components.groq.api import GroqApiClient, SpeechRequest
 from custom_components.groq.const import (
+    CONF_SAMPLE_RATE,
+    CONF_SPEED,
     CONF_VOCAL_DIRECTIONS,
     FEATURE_IMAGE_RECOGNITION,
     FEATURE_SPEECH_TO_TEXT,
@@ -108,6 +110,8 @@ class DummyClient:
                 "voice": request.voice,
                 "model": request.model,
                 "response_format": request.response_format,
+                "sample_rate": request.sample_rate,
+                "speed": request.speed,
                 "cache_max": request.cache_max,
                 "protect_free_tier": request.protect_free_tier,
             }
@@ -320,7 +324,9 @@ async def test_async_get_tts_uses_cache_and_evicts_lru():
     assert first == cached == second
     assert len(session.calls) == 2
     cache = client._speech_caches[f"{ORPHEUS_ENGLISH_MODEL}:{ORPHEUS_ENGLISH_VOICE}"]
-    assert list(cache) == [(ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", "new")]
+    assert list(cache) == [
+        (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", None, None, "new")
+    ]
 
 
 class Dummy500JsonSession:
@@ -365,6 +371,8 @@ def test_tts_entity_properties_use_options_over_data():
         "model",
         "normalize_audio",
         "response_format",
+        "sample_rate",
+        "speed",
         "voice",
         "vocal_directions",
     ]
@@ -388,13 +396,33 @@ def test_tts_entity_default_options_fall_back_from_invalid_stored_values():
         "voice": ORPHEUS_ENGLISH_VOICE,
         "normalize_audio": ["true"],
         "response_format": ["mp3"],
+        "sample_rate": "invalid",
+        "speed": "invalid",
         "vocal_directions": "very warm",
     }
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
 
     assert entity.default_options["normalize_audio"] is False
     assert entity.default_options["response_format"] == "wav"
+    assert entity.default_options["sample_rate"] is None
+    assert entity.default_options["speed"] == 1
     assert entity.default_options["vocal_directions"] == ""
+
+
+def test_tts_flow_defaults_fall_back_from_invalid_sample_rate_and_speed():
+    assert flow_schemas._sample_rate_default({CONF_SAMPLE_RATE: "invalid"}) is None
+    assert flow_schemas._sample_rate_default({CONF_SAMPLE_RATE: 123}) is None
+    assert flow_schemas._speed_default({CONF_SPEED: "invalid"}) == 1
+    assert flow_schemas._speed_default({CONF_SPEED: 6}) == 1
+
+
+def test_clean_service_input_normalizes_tts_sample_rate_and_speed():
+    assert flow_schemas.clean_service_input(
+        {CONF_SAMPLE_RATE: "48000", CONF_SPEED: "1.25"}
+    ) == {CONF_SAMPLE_RATE: 48000, CONF_SPEED: 1.25}
+    assert flow_schemas.clean_service_input(
+        {CONF_SAMPLE_RATE: "invalid", CONF_SPEED: "invalid"}
+    ) == {CONF_SAMPLE_RATE: "invalid", CONF_SPEED: "invalid"}
 
 
 def test_vocal_directions_helpers_reject_non_string_values():
@@ -502,7 +530,7 @@ async def test_tts_cancelled_ffmpeg_process_is_stopped(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_tts_converts_to_selected_playback_format(monkeypatch):
+async def test_tts_normalizes_to_selected_playback_format(monkeypatch):
     data = {
         "url": "http://example.com",
         "model": ORPHEUS_ENGLISH_MODEL,
@@ -520,7 +548,7 @@ async def test_tts_converts_to_selected_playback_format(monkeypatch):
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     ext, payload = await entity.async_get_tts_audio(
-        "Hello", "en", options={"response_format": "flac"}
+        "Hello", "en", options={"response_format": "flac", "normalize_audio": True}
     )
 
     assert ext == "flac"
@@ -529,7 +557,7 @@ async def test_tts_converts_to_selected_playback_format(monkeypatch):
     assert commands[0] == ("ffmpeg", "-version")
     assert "-f" in commands[1]
     assert commands[1][commands[1].index("-f") + 1] == "lavfi"
-    assert "-af" not in commands[2]
+    assert "-af" in commands[2]
     assert commands[2][commands[2].index("-f") + 1] == "flac"
 
 
@@ -551,7 +579,8 @@ async def test_tts_normalizes_service_response_format_text(monkeypatch):
 
     assert await entity.async_get_tts_audio(
         "Hello", "en", options={"response_format": " MP3 "}
-    ) == ("mp3", b"processed-audio")
+    ) == ("mp3", PCM_WAV_BYTES)
+    assert client.calls[0]["response_format"] == "mp3"
 
 
 @pytest.mark.asyncio
@@ -600,8 +629,49 @@ async def test_tts_rejects_unsupported_service_response_format_without_groq_call
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
 
     assert await entity.async_get_tts_audio(
-        "Hello", "en", options={"response_format": "ogg"}
+        "Hello", "en", options={"response_format": "aac"}
     ) == (None, None)
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_invalid_service_sample_rate_without_groq_call():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"sample_rate": "invalid"}
+    ) == (None, None)
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"sample_rate": 123}
+    ) == (None, None)
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_rejects_invalid_service_speed_without_groq_call():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", options={"speed": "invalid"}
+    ) == (None, None)
+    assert await entity.async_get_tts_audio("Hello", "en", options={"speed": 6}) == (
+        None,
+        None,
+    )
     assert client.calls == []
 
 
@@ -710,7 +780,7 @@ async def test_tts_unknown_error_returns_none():
 
 
 @pytest.mark.asyncio
-async def test_tts_raw_wav_override_does_not_clear_configured_ffmpeg_issue(
+async def test_tts_raw_wav_override_clears_configured_direct_format_ffmpeg_issue(
     monkeypatch,
 ):
     data = {
@@ -731,11 +801,11 @@ async def test_tts_raw_wav_override_does_not_clear_configured_ffmpeg_issue(
     assert await entity.async_get_tts_audio(
         "Hello", "en", options={"response_format": "wav"}
     ) == ("wav", PCM_WAV_BYTES)
-    assert deleted_issues == []
+    assert deleted_issues == ["entry-id"]
 
 
 @pytest.mark.asyncio
-async def test_tts_raw_wav_override_keeps_issue_for_invalid_configured_format(
+async def test_tts_raw_wav_override_clears_invalid_configured_format_ffmpeg_issue(
     monkeypatch,
 ):
     data = {
@@ -756,7 +826,7 @@ async def test_tts_raw_wav_override_keeps_issue_for_invalid_configured_format(
     assert await entity.async_get_tts_audio(
         "Hello", "en", options={"response_format": "wav"}
     ) == ("wav", PCM_WAV_BYTES)
-    assert deleted_issues == []
+    assert deleted_issues == ["entry-id"]
 
 
 @pytest.mark.asyncio
@@ -843,10 +913,10 @@ async def test_tts_ffmpeg_preflight_is_cached_for_conversion(monkeypatch):
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     assert await entity.async_get_tts_audio(
-        "First", "en", options={"response_format": "mp3"}
+        "First", "en", options={"response_format": "mp3", "normalize_audio": True}
     ) == ("mp3", b"processed-audio")
     assert await entity.async_get_tts_audio(
-        "Second", "en", options={"response_format": "mp3"}
+        "Second", "en", options={"response_format": "mp3", "normalize_audio": True}
     ) == ("mp3", b"processed-audio")
 
     assert commands.count(("ffmpeg", "-version")) == 1
@@ -876,14 +946,14 @@ async def test_tts_normalized_preflight_is_separate_from_conversion_cache(
 
     assert await entity.async_get_tts_audio(
         "Plain", "en", options={"response_format": "mp3"}
-    ) == ("mp3", b"processed-audio")
+    ) == ("mp3", PCM_WAV_BYTES)
     assert await entity.async_get_tts_audio(
         "Normalized",
         "en",
         options={"response_format": "mp3", "normalize_audio": True},
     ) == (None, None)
 
-    assert commands.count(("ffmpeg", "-version")) == 2
+    assert commands.count(("ffmpeg", "-version")) == 1
     assert len(client.calls) == 1
 
 
@@ -914,7 +984,7 @@ async def test_tts_conversion_unsupported_output_skips_groq_call(monkeypatch):
     )
 
     ext, payload = await entity.async_get_tts_audio(
-        "Hello", "en", options={"response_format": "mp3"}
+        "Hello", "en", options={"response_format": "mp3", "normalize_audio": True}
     )
 
     assert ext is None
@@ -951,7 +1021,7 @@ async def test_tts_conversion_missing_ffmpeg_skips_groq_call(monkeypatch):
     )
 
     ext, payload = await entity.async_get_tts_audio(
-        "Hello", "en", options={"response_format": "mp3"}
+        "Hello", "en", options={"response_format": "mp3", "normalize_audio": True}
     )
 
     assert ext is None
@@ -985,7 +1055,7 @@ async def test_tts_conversion_ffmpeg_start_error_skips_groq_call(monkeypatch):
     )
 
     assert await entity.async_get_tts_audio(
-        "Hello", "en", options={"response_format": "mp3"}
+        "Hello", "en", options={"response_format": "mp3", "normalize_audio": True}
     ) == (None, None)
     assert client.calls == []
     assert ffmpeg_issues == [("entry-id", None)]
@@ -1021,11 +1091,11 @@ async def test_tts_conversion_failure_invalidates_ffmpeg_cache(monkeypatch):
     )
 
     assert await entity.async_get_tts_audio(
-        "Hello", "en", options={"response_format": "mp3"}
+        "Hello", "en", options={"response_format": "mp3", "normalize_audio": True}
     ) == (None, None)
 
     assert len(client.calls) == 1
-    assert ("mp3", False) not in entity._ffmpeg_capabilities
+    assert ("mp3", True, None) not in entity._ffmpeg_capabilities
     assert commands.count(("ffmpeg", "-version")) == 1
     assert ffmpeg_issues == [("entry-id", None)]
 
@@ -1144,12 +1214,26 @@ async def test_tts_long_cached_chunks_bypass_batch_free_tier_guard(monkeypatch):
     )
     namespace = f"{ORPHEUS_ENGLISH_MODEL}:{ORPHEUS_ENGLISH_VOICE}"
     cache = client._speech_caches.setdefault(namespace, OrderedDict())
-    cache[(ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", first_sentence)] = (
-        b"chunk-one"
-    )
-    cache[(ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", second_sentence)] = (
-        b"chunk-two"
-    )
+    cache[
+        (
+            ORPHEUS_ENGLISH_MODEL,
+            ORPHEUS_ENGLISH_VOICE,
+            "wav",
+            None,
+            None,
+            first_sentence,
+        )
+    ] = b"chunk-one"
+    cache[
+        (
+            ORPHEUS_ENGLISH_MODEL,
+            ORPHEUS_ENGLISH_VOICE,
+            "wav",
+            None,
+            None,
+            second_sentence,
+        )
+    ] = b"chunk-two"
     client._record_local_tts_usage(
         SpeechRequest(
             text="existing",
@@ -1219,7 +1303,9 @@ async def test_tts_long_batch_guard_blocks_eviction_misses_before_api(monkeypatc
     namespace = f"{ORPHEUS_ENGLISH_MODEL}:{ORPHEUS_ENGLISH_VOICE}"
     cache = client._speech_caches.setdefault(namespace, OrderedDict())
     for text in (first_sentence, third_sentence):
-        cache[(ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", text)] = b"cached"
+        cache[
+            (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", None, None, text)
+        ] = b"cached"
     client._record_local_tts_usage(
         SpeechRequest(
             text="existing",
@@ -1316,6 +1402,8 @@ async def test_tts_service_options_override_groq_speech_payload():
             "voice": ORPHEUS_ENGLISH_VOICE,
             "model": ORPHEUS_ENGLISH_MODEL,
             "response_format": "wav",
+            "sample_rate": None,
+            "speed": None,
             "cache_max": 256,
             "protect_free_tier": True,
         }
@@ -1878,7 +1966,7 @@ async def test_text_to_speech_subentry_flow_disables_ffmpeg_options_when_missing
 
 
 @pytest.mark.asyncio
-async def test_text_to_speech_subentry_flow_disables_converted_format_when_ffmpeg_missing(
+async def test_text_to_speech_subentry_flow_allows_direct_format_when_ffmpeg_missing(
     monkeypatch,
 ):
     flow = config_flow.GroqServiceSubentryFlow()
@@ -1895,18 +1983,8 @@ async def test_text_to_speech_subentry_flow_disables_converted_format_when_ffmpe
         }
     )
 
-    assert result["type"] == "form"
-    assert result["errors"] == {"response_format": "ffmpeg_required"}
-    assert (
-        result["data_schema"](
-            {
-                "name": "Kitchen TTS",
-                "model": ORPHEUS_ENGLISH_MODEL,
-                "voice": ORPHEUS_ENGLISH_VOICE,
-            }
-        )["response_format"]
-        == "wav"
-    )
+    assert result["type"] == "create_entry"
+    assert result["data"]["response_format"] == "mp3"
 
 
 @pytest.mark.asyncio
@@ -1963,7 +2041,7 @@ async def test_text_to_speech_subentry_flow_rejects_invalid_response_format(
             "name": "Kitchen TTS",
             "model": ORPHEUS_ENGLISH_MODEL,
             "voice": ORPHEUS_ENGLISH_VOICE,
-            "response_format": "ogg",
+            "response_format": "aac",
         }
     )
 
