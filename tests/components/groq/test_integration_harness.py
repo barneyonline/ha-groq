@@ -2060,6 +2060,68 @@ async def test_text_to_speech_subentry_flow_rejects_invalid_response_format(
     )
 
 
+@pytest.mark.asyncio
+async def test_text_to_speech_subentry_flow_rejects_invalid_sample_rate(monkeypatch):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(config_flow.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+
+    result = await flow.async_step_user(
+        {
+            "name": "Kitchen TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "sample_rate": 123,
+        }
+    )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == FEATURE_TEXT_TO_SPEECH
+    assert result["errors"] == {"sample_rate": "invalid_sample_rate"}
+    assert (
+        result["data_schema"](
+            {
+                "name": "Kitchen TTS",
+                "model": ORPHEUS_ENGLISH_MODEL,
+                "voice": ORPHEUS_ENGLISH_VOICE,
+            }
+        ).get("sample_rate")
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_text_to_speech_subentry_flow_rejects_invalid_speed(monkeypatch):
+    flow = config_flow.GroqServiceSubentryFlow()
+    flow.handler = ("entry-id", FEATURE_TEXT_TO_SPEECH)
+    _patch_flow_common(monkeypatch, flow)
+    monkeypatch.setattr(config_flow.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+
+    result = await flow.async_step_user(
+        {
+            "name": "Kitchen TTS",
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "speed": "invalid",
+        }
+    )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == FEATURE_TEXT_TO_SPEECH
+    assert result["errors"] == {"speed": "invalid_speed"}
+    assert (
+        result["data_schema"](
+            {
+                "name": "Kitchen TTS",
+                "model": ORPHEUS_ENGLISH_MODEL,
+                "voice": ORPHEUS_ENGLISH_VOICE,
+            }
+        )["speed"]
+        == 1
+    )
+
+
 @pytest.mark.parametrize(
     "vocal_directions", ["very warm", "warm.", "warm2", "very_warm", "[warm]"]
 )
