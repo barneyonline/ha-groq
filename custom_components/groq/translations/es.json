@@ -48,6 +48,8 @@
             "invalid_url": "URL no válido. Por favor ingrese un URL válido.",
             "invalid_enabled_features": "Una o más funciones seleccionadas no son compatibles.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_sample_rate": "Invalid sample rate.",
+            "invalid_speed": "Invalid speed.",
             "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "El modelo seleccionado no admite opciones de razonamiento.",
             "unsupported_prompt_caching_model": "El modelo seleccionado no admite el almacenamiento en caché de respuestas local.",
@@ -199,7 +201,9 @@
                         "normalize_audio": "Habilitar el volumen del audio generado (usa más CPU)",
                         "enable_long_tts": "Habilitar anuncios TTS largos (usa más CPU)",
                         "protect_free_tier": "Protección de nivel gratuito",
-                        "response_format": "Playback format"
+                        "response_format": "Playback format",
+                        "sample_rate": "Sample rate",
+                        "speed": "Speed"
                     },
                     "data_description": {
                         "name": "Un nombre descriptivo para esta instancia del servicio Texto a voz.",
@@ -209,7 +213,9 @@
                         "normalize_audio": "Normalizes generated audio with ffmpeg for more consistent loudness on small speakers. ffmpeg is also required when playback format is MP3 or FLAC.",
                         "enable_long_tts": "Divide anuncios más largos en varias solicitudes de Groq y los une con ffmpeg. Esto puede usar más CPU y más cuota de solicitudes de Groq. Requiere ffmpeg; se desactiva si ffmpeg no está instalado.",
                         "protect_free_tier": "Cuando Groq informa que este servicio ha alcanzado una solicitud, un token o un límite conocido de caracteres de texto a voz, Home Assistant pausa solo este servicio hasta el momento de reinicio antes de enviar más solicitudes.",
-                        "response_format": "Audio format served by Home Assistant after Groq generates WAV audio. WAV is the default; MP3 is the safest choice for most speakers, and FLAC is available for lossless playback on supported speakers."
+                        "response_format": "Audio format served by Home Assistant. WAV is the default; MP3 is the safest choice for most speakers, FLAC is available for lossless playback, OGG is useful for Opus playback, and MULAW is useful for telephony-style 8 kHz audio.",
+                        "sample_rate": "Optional Groq output sample rate. Leave unset to use the model default or the integration playback profile.",
+                        "speed": "Playback speed sent to Groq. Use 1.0 for normal speed; supported values are 0.5 through 5."
                     }
                 }
             }

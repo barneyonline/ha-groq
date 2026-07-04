@@ -1537,8 +1537,19 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
                 "voice": "troy",
             }
         )["response_format"]
-        == "wav"
+        == "ogg"
     )
+    advanced_tts_data = text_to_speech_schema(
+        {"sample_rate": "24000", "speed": "1.5"}
+    )(
+        {
+            "name": "TTS",
+            "model": "canopylabs/orpheus-v1-english",
+            "voice": "troy",
+        }
+    )
+    assert advanced_tts_data["sample_rate"] == 24000
+    assert advanced_tts_data["speed"] == 1.5
     assert image_recognition_schema()(
         {
             "name": "Vision",
@@ -3846,11 +3857,18 @@ async def test_tts_entity_and_api_remaining_paths(monkeypatch):
     fmt, audio = await entity.async_get_tts_audio(
         "hello",
         "en",
-        {"vocal_directions": "warm", "normalize_audio": False},
+        {
+            "vocal_directions": "warm",
+            "normalize_audio": False,
+            "sample_rate": 24000,
+            "speed": 1.1,
+        },
     )
     assert fmt == "wav"
     assert audio == PCM_WAV_BYTES
     assert client.calls[0].text == "[warm] hello"
+    assert client.calls[0].sample_rate == 24000
+    assert client.calls[0].speed == 1.1
     assert await entity.async_get_tts_audio("x" * 201, "en") == (None, None)
 
     async def cancelled_tts(request):

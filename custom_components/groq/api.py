@@ -131,6 +131,8 @@ class SpeechRequest:
     model: str
     voice: str
     response_format: str = "wav"
+    sample_rate: int | None = None
+    speed: float | None = None
     api_key: str | None = None
     service_id: str | None = None
     protect_free_tier: bool = True
@@ -626,6 +628,8 @@ class GroqApiClient:
             request.model,
             request.voice,
             request.response_format,
+            request.sample_rate,
+            request.speed,
             request.text,
         )
         cache = self._speech_cache(request)
@@ -651,6 +655,10 @@ class GroqApiClient:
             "voice": request.voice,
             "response_format": request.response_format,
         }
+        if request.sample_rate is not None:
+            payload["sample_rate"] = request.sample_rate
+        if request.speed is not None:
+            payload["speed"] = request.speed
         audio = await self._request_audio(
             "POST",
             AUDIO_SPEECH_PATH,

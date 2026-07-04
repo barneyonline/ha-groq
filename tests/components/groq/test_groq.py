@@ -416,6 +416,32 @@ async def test_synthesize_speech_accepts_model_voice_and_response_format():
 
 
 @pytest.mark.asyncio
+async def test_synthesize_speech_accepts_sample_rate_and_speed():
+    session = DummyCaptureSession()
+    client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+
+    await client.async_synthesize_speech(
+        SpeechRequest(
+            text="hello",
+            model=ORPHEUS_ENGLISH_MODEL,
+            voice=ORPHEUS_ENGLISH_VOICE,
+            response_format="ogg",
+            sample_rate=48000,
+            speed=1.3,
+        )
+    )
+
+    assert session.calls[0]["kwargs"]["json"] == {
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "input": "hello",
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "response_format": "ogg",
+        "sample_rate": 48000,
+        "speed": 1.3,
+    }
+
+
+@pytest.mark.asyncio
 async def test_synthesize_speech_local_free_tier_guard_blocks_eleventh_request():
     session = DummyCaptureSession()
     client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
@@ -876,6 +902,8 @@ class DummyClient:
                 "voice": request.voice,
                 "model": request.model,
                 "response_format": request.response_format,
+                "sample_rate": request.sample_rate,
+                "speed": request.speed,
                 "cache_max": request.cache_max,
                 "protect_free_tier": request.protect_free_tier,
             }
@@ -921,6 +949,39 @@ async def test_tts_returns_raw_wav_without_processing():
 
 
 @pytest.mark.asyncio
+async def test_tts_returns_native_format_without_ffmpeg():
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    client = DummyClient()
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
+
+    ext, payload = await entity.async_get_tts_audio(
+        "Hello",
+        "en",
+        options={"response_format": "ogg", "sample_rate": 48000, "speed": 1.2},
+    )
+
+    assert ext == "ogg"
+    assert payload == PCM_WAV_BYTES
+    assert client.calls == [
+        {
+            "text": "Hello",
+            "voice": ORPHEUS_ENGLISH_VOICE,
+            "model": ORPHEUS_ENGLISH_MODEL,
+            "response_format": "ogg",
+            "sample_rate": 48000,
+            "speed": 1.2,
+            "cache_max": 256,
+            "protect_free_tier": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_tts_rewrites_non_pcm_wav_for_playback_compatibility():
     data = {
         "url": "http://example.com",
@@ -933,7 +994,7 @@ async def test_tts_rewrites_non_pcm_wav_for_playback_compatibility():
     client.async_synthesize_speech = lambda request: _async_return(FLOAT_WAV_BYTES)
     ffmpeg_inputs = []
 
-    async def skip_ffmpeg_check(_output_format, _normalize_audio):
+    async def skip_ffmpeg_check(_output_format, _normalize_audio, _sample_rate=None):
         return None
 
     async def rewrite_wav(_cmd, input_bytes=None, *, create_repair=True):
@@ -963,7 +1024,7 @@ async def test_tts_rewrites_non_wav_payload_served_as_wav():
     client.async_synthesize_speech = lambda request: _async_return(b"audio-bytes")
     ffmpeg_inputs = []
 
-    async def skip_ffmpeg_check(_output_format, _normalize_audio):
+    async def skip_ffmpeg_check(_output_format, _normalize_audio, _sample_rate=None):
         return None
 
     async def rewrite_wav(_cmd, input_bytes=None, *, create_repair=True):
@@ -995,7 +1056,7 @@ async def test_tts_rewrites_wav_without_data_chunk():
     )
     ffmpeg_inputs = []
 
-    async def skip_ffmpeg_check(_output_format, _normalize_audio):
+    async def skip_ffmpeg_check(_output_format, _normalize_audio, _sample_rate=None):
         return None
 
     async def rewrite_wav(_cmd, input_bytes=None, *, create_repair=True):

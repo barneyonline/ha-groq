@@ -10,6 +10,8 @@ CONF_MODEL = "model"
 CONF_INPUT = "input"
 CONF_VOICE = "voice"
 CONF_RESPONSE_FORMAT = "response_format"
+CONF_SAMPLE_RATE = "sample_rate"
+CONF_SPEED = "speed"
 CONF_VOCAL_DIRECTIONS = "vocal_directions"
 CONF_URL = "url"
 UNIQUE_ID = "unique_id"
@@ -121,8 +123,14 @@ TTS_VOICES_BY_MODEL = {
 }
 DEFAULT_MODEL = MODELS[0]
 DEFAULT_VOICE = VOICES[0]
-RESPONSE_FORMATS = ["wav", "mp3", "flac"]
+RESPONSE_FORMATS = ["wav", "mp3", "flac", "ogg", "mulaw"]
 DEFAULT_RESPONSE_FORMAT = RESPONSE_FORMATS[0]
+TTS_SAMPLE_RATES = [8000, 16000, 22050, 24000, 32000, 44100, 48000]
+TTS_SAMPLE_RATE_OPTIONS = [
+    {"value": sample_rate, "label": f"{sample_rate} Hz"}
+    for sample_rate in TTS_SAMPLE_RATES
+]
+DEFAULT_TTS_SPEED = 1.0
 DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
 DEFAULT_TTS_URL = f"{DEFAULT_BASE_URL}/audio/speech"
 

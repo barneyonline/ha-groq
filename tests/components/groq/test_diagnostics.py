@@ -54,6 +54,8 @@ async def test_config_entry_diagnostics_redacts_api_keys() -> None:
                 "model": "canopylabs/orpheus-v1-english",
                 "voice": "troy",
                 "response_format": "wav",
+                "sample_rate": None,
+                "speed": None,
                 "vocal_directions_configured": True,
                 "normalize_audio": True,
                 "enable_long_tts": True,
@@ -123,6 +125,8 @@ async def test_config_entry_diagnostics_summarizes_service_subentries() -> None:
                     "service_type": "text_to_speech",
                     "model": "canopylabs/orpheus-v1-english",
                     "voice": "autumn",
+                    "sample_rate": 24000,
+                    "speed": 1.1,
                     "protect_free_tier": True,
                 },
             ),
@@ -148,6 +152,9 @@ async def test_config_entry_diagnostics_summarizes_service_subentries() -> None:
         "structured_outputs": True,
     }
     assert "system_prompt" not in text_service
+    tts_service = diagnostics["summary"]["services"]["text_to_speech"][0]
+    assert tts_service["sample_rate"] == 24000
+    assert tts_service["speed"] == 1.1
 
 
 @pytest.mark.asyncio

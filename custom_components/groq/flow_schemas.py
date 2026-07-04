@@ -28,11 +28,13 @@ from .const import (
     CONF_REASONING_FORMAT,
     CONF_REQUEST_BODY_OPTIONS,
     CONF_RESPONSE_FORMAT,
+    CONF_SAMPLE_RATE,
     CONF_SCHEMA,
     CONF_SCHEMA_NAME,
     CONF_SEED,
     CONF_SERVICE_TYPE,
     CONF_SERVICE_TIER,
+    CONF_SPEED,
     CONF_STOP,
     CONF_STREAM,
     CONF_STRICT,
@@ -50,6 +52,7 @@ from .const import (
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEXT_MODEL,
     DEFAULT_TEXT_TEMPERATURE,
+    DEFAULT_TTS_SPEED,
     DEFAULT_VISION_MODEL,
     DEFAULT_VOICE,
     FEATURE_LABELS,
@@ -64,6 +67,7 @@ from .const import (
     STT_MODELS,
     SUPPORTED_FEATURES,
     TEXT_MODELS,
+    TTS_SAMPLE_RATES,
     VISION_MODELS,
     VOCAL_DIRECTION_OPTIONS,
     VOCAL_DIRECTION_NONE,
@@ -101,6 +105,30 @@ def _response_format_default(values: dict[str, Any]) -> str:
         if configured in RESPONSE_FORMATS:
             return configured
     return DEFAULT_RESPONSE_FORMAT
+
+
+def _sample_rate_default(values: dict[str, Any]) -> int | None:
+    """Return a selector-safe TTS sample-rate default."""
+    configured = values.get(CONF_SAMPLE_RATE)
+    if configured in (None, ""):
+        return None
+    try:
+        sample_rate = int(configured)
+    except (TypeError, ValueError):
+        return None
+    return sample_rate if sample_rate in TTS_SAMPLE_RATES else None
+
+
+def _speed_default(values: dict[str, Any]) -> float:
+    """Return a selector-safe TTS speed default."""
+    configured = values.get(CONF_SPEED, DEFAULT_TTS_SPEED)
+    try:
+        speed = float(configured)
+    except (TypeError, ValueError):
+        return DEFAULT_TTS_SPEED
+    if speed < 0.5 or speed > 5:
+        return DEFAULT_TTS_SPEED
+    return speed
 
 
 def _vocal_directions_default(values: dict[str, Any]) -> str:
@@ -406,9 +434,13 @@ def text_to_speech_schema(
     selected_model = _model_default(values, CONF_MODEL, DEFAULT_MODEL, models)
     voices = voice_options or voice_options_for_model(selected_model)
     ffmpeg_option_selector = selector({"boolean": {"read_only": not ffmpeg_available}})
-    response_formats = (
-        RESPONSE_FORMATS if ffmpeg_available else [DEFAULT_RESPONSE_FORMAT]
+    sample_rate_default = _sample_rate_default(values)
+    sample_rate_field = (
+        vol.Optional(CONF_SAMPLE_RATE, default=sample_rate_default)
+        if sample_rate_default is not None
+        else vol.Optional(CONF_SAMPLE_RATE)
     )
+    response_formats = RESPONSE_FORMATS
     voice_field = (
         vol.Required(CONF_VOICE)
         if clear_voice
@@ -436,6 +468,29 @@ def text_to_speech_schema(
                     else DEFAULT_RESPONSE_FORMAT
                 ),
             ): selector({"select": {"options": response_formats}}),
+            sample_rate_field: selector(
+                {
+                    "number": {
+                        "min": min(TTS_SAMPLE_RATES),
+                        "max": max(TTS_SAMPLE_RATES),
+                        "step": 1,
+                        "mode": "box",
+                    }
+                }
+            ),
+            vol.Optional(
+                CONF_SPEED,
+                default=_speed_default(values),
+            ): selector(
+                {
+                    "number": {
+                        "min": 0.5,
+                        "max": 5,
+                        "step": 0.1,
+                        "mode": "slider",
+                    }
+                }
+            ),
             vol.Optional(
                 CONF_VOCAL_DIRECTIONS,
                 default=_vocal_directions_default(values),
@@ -691,6 +746,7 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_REASONING_EFFORT,
         CONF_REASONING_FORMAT,
         CONF_RESPONSE_FORMAT,
+        CONF_SAMPLE_RATE,
         CONF_SERVICE_TIER,
         CONF_STOP,
         CONF_COMPOUND_BUILTIN_TOOLS,
@@ -701,6 +757,20 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
         data[CONF_RESPONSE_FORMAT] = data[CONF_RESPONSE_FORMAT].strip().lower()
         if not data[CONF_RESPONSE_FORMAT]:
             data.pop(CONF_RESPONSE_FORMAT, None)
+    if data.get(CONF_SAMPLE_RATE) in ("", None):
+        data.pop(CONF_SAMPLE_RATE, None)
+    elif isinstance(data.get(CONF_SAMPLE_RATE), str):
+        try:
+            data[CONF_SAMPLE_RATE] = int(data[CONF_SAMPLE_RATE])
+        except ValueError:
+            pass
+    if data.get(CONF_SPEED) in ("", None):
+        data.pop(CONF_SPEED, None)
+    elif isinstance(data.get(CONF_SPEED), str):
+        try:
+            data[CONF_SPEED] = float(data[CONF_SPEED])
+        except ValueError:
+            pass
     if CONF_VOCAL_DIRECTIONS in data:
         data[CONF_VOCAL_DIRECTIONS] = normalize_vocal_directions(
             data.get(CONF_VOCAL_DIRECTIONS)

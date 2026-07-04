@@ -48,6 +48,8 @@
             "invalid_url": "Neplatné URL. Zadejte prosím platné URL.",
             "invalid_enabled_features": "Jedna nebo více vybraných funkcí není podporováno.",
             "invalid_response_format": "Invalid response format.",
+            "invalid_sample_rate": "Invalid sample rate.",
+            "invalid_speed": "Invalid speed.",
             "invalid_vocal_directions": "Default vocal directions must be a single word.",
             "unsupported_reasoning_model": "Vybraný model nepodporuje možnosti uvažování.",
             "unsupported_prompt_caching_model": "Vybraný model nepodporuje místní ukládání odpovědí do mezipaměti.",
@@ -199,7 +201,9 @@
                         "normalize_audio": "Povolit hlasitost generovaného zvuku (využívá více CPU)",
                         "enable_long_tts": "Povolit dlouhá oznámení TTS (využívá více CPU)",
                         "protect_free_tier": "Bezplatná ochrana",
-                        "response_format": "Playback format"
+                        "response_format": "Playback format",
+                        "sample_rate": "Sample rate",
+                        "speed": "Speed"
                     },
                     "data_description": {
                         "name": "Popisný název pro tuto instanci služby Text-to-Speech.",
@@ -209,7 +213,9 @@
                         "normalize_audio": "Normalizes generated audio with ffmpeg for more consistent loudness on small speakers. ffmpeg is also required when playback format is MP3 or FLAC.",
                         "enable_long_tts": "Rozdělí delší oznámení do více požadavků Groq a spojí je pomocí ffmpeg. Může to využívat více CPU a více kvóty požadavků Groq. Vyžaduje ffmpeg; pokud ffmpeg není nainstalován, je vypnuto.",
                         "protect_free_tier": "Když Groq ohlásí, že tato služba dosáhla požadavku, tokenu nebo známého limitu počtu znaků pro převod textu na řeč, Home Assistant pozastaví pouze tuto službu do doby resetování před odesláním dalších požadavků.",
-                        "response_format": "Audio format served by Home Assistant after Groq generates WAV audio. WAV is the default; MP3 is the safest choice for most speakers, and FLAC is available for lossless playback on supported speakers."
+                        "response_format": "Audio format served by Home Assistant. WAV is the default; MP3 is the safest choice for most speakers, FLAC is available for lossless playback, OGG is useful for Opus playback, and MULAW is useful for telephony-style 8 kHz audio.",
+                        "sample_rate": "Optional Groq output sample rate. Leave unset to use the model default or the integration playback profile.",
+                        "speed": "Playback speed sent to Groq. Use 1.0 for normal speed; supported values are 0.5 through 5."
                     }
                 }
             }

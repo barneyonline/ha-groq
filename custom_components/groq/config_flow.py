@@ -32,6 +32,8 @@ from .const import (
     CONF_NAME,
     CONF_NORMALIZE_AUDIO,
     CONF_RESPONSE_FORMAT,
+    CONF_SAMPLE_RATE,
+    CONF_SPEED,
     CONF_SERVICE_TYPE,
     CONF_VOCAL_DIRECTIONS,
     CONF_VOICE,
@@ -47,6 +49,7 @@ from .const import (
     SETUP_FEATURES,
     STT_MODELS,
     TEXT_MODELS,
+    TTS_SAMPLE_RATES,
     UNIQUE_ID,
     VISION_MODELS,
     VOICES,
@@ -834,20 +837,43 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
                     ),
                     errors={CONF_RESPONSE_FORMAT: "invalid_response_format"},
                 )
+            if user_input.get(CONF_SAMPLE_RATE) not in (None, *TTS_SAMPLE_RATES):
+                user_input.pop(CONF_SAMPLE_RATE, None)
+                return self.async_show_form(
+                    step_id=FEATURE_TEXT_TO_SPEECH,
+                    data_schema=text_to_speech_schema(
+                        user_input,
+                        model_options,
+                        voice_options,
+                        ffmpeg_available=ffmpeg_available,
+                    ),
+                    errors={CONF_SAMPLE_RATE: "invalid_sample_rate"},
+                )
+            speed = user_input.get(CONF_SPEED)
+            try:
+                invalid_speed = speed is not None and not 0.5 <= float(speed) <= 5
+            except (TypeError, ValueError):
+                invalid_speed = True
+            if invalid_speed:
+                user_input.pop(CONF_SPEED, None)
+                return self.async_show_form(
+                    step_id=FEATURE_TEXT_TO_SPEECH,
+                    data_schema=text_to_speech_schema(
+                        user_input,
+                        model_options,
+                        voice_options,
+                        ffmpeg_available=ffmpeg_available,
+                    ),
+                    errors={CONF_SPEED: "invalid_speed"},
+                )
             ffmpeg_errors: dict[str, str] = {}
             if not ffmpeg_available and user_input.get(CONF_NORMALIZE_AUDIO):
                 ffmpeg_errors[CONF_NORMALIZE_AUDIO] = "ffmpeg_required"
             if not ffmpeg_available and user_input.get(CONF_ENABLE_LONG_TTS):
                 ffmpeg_errors[CONF_ENABLE_LONG_TTS] = "ffmpeg_required"
-            if not ffmpeg_available and user_input.get(CONF_RESPONSE_FORMAT) not in (
-                None,
-                "wav",
-            ):
-                ffmpeg_errors[CONF_RESPONSE_FORMAT] = "ffmpeg_required"
             if ffmpeg_errors:
                 user_input[CONF_NORMALIZE_AUDIO] = False
                 user_input[CONF_ENABLE_LONG_TTS] = False
-                user_input[CONF_RESPONSE_FORMAT] = "wav"
                 return self.async_show_form(
                     step_id=FEATURE_TEXT_TO_SPEECH,
                     data_schema=text_to_speech_schema(

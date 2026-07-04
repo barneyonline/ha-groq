@@ -28,8 +28,10 @@ from .const import (
     CONF_REASONING_EFFORT,
     CONF_REASONING_FORMAT,
     CONF_RESPONSE_FORMAT,
+    CONF_SAMPLE_RATE,
     CONF_SERVICE_TIER,
     CONF_SERVICE_TYPE,
+    CONF_SPEED,
     CONF_STREAM,
     CONF_STRICT,
     CONF_STRUCTURED_OUTPUTS,
@@ -56,6 +58,8 @@ SERVICE_SUMMARY_KEYS = (
     CONF_LANGUAGE,
     CONF_VOICE,
     CONF_RESPONSE_FORMAT,
+    CONF_SAMPLE_RATE,
+    CONF_SPEED,
     CONF_NORMALIZE_AUDIO,
     CONF_ENABLE_LONG_TTS,
     CONF_CACHE_SIZE,
@@ -89,6 +93,8 @@ def _default_summary(entry: ConfigEntry) -> dict[str, Any]:
             "response_format": _entry_value(
                 entry, CONF_RESPONSE_FORMAT, DEFAULT_RESPONSE_FORMAT
             ),
+            "sample_rate": _entry_value(entry, CONF_SAMPLE_RATE),
+            "speed": _entry_value(entry, CONF_SPEED),
             "vocal_directions_configured": bool(
                 _entry_value(entry, CONF_VOCAL_DIRECTIONS, "")
             ),

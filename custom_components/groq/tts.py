@@ -27,6 +27,8 @@ from .const import (
     CONF_MODEL,
     CONF_NAME,
     CONF_RESPONSE_FORMAT,
+    CONF_SAMPLE_RATE,
+    CONF_SPEED,
     CONF_VOICE,
     CONF_VOCAL_DIRECTIONS,
     CONF_URL,
@@ -39,7 +41,9 @@ from .const import (
     DEFAULT_CACHE_SIZE,
     DEFAULT_PROTECT_FREE_TIER,
     DEFAULT_RESPONSE_FORMAT,
+    DEFAULT_TTS_SPEED,
     FEATURE_TEXT_TO_SPEECH,
+    TTS_SAMPLE_RATES,
 )
 from .api import GroqApiClient, SpeechRequest, async_preload_clientsession_helper
 from .repairs import (
@@ -58,10 +62,12 @@ MAX_TTS_INPUT_CHARS = 200
 MAX_LONG_TTS_CHUNKS = 10
 PARALLEL_UPDATES = 1
 ORPHEUS_RESPONSE_FORMAT = "wav"
-FFMPEG_OUTPUT_ARGS = {
-    "wav": ["-ac", "1", "-ar", "24000", "-f", "wav"],
-    "mp3": ["-ac", "1", "-ar", "44100", "-b:a", "128k", "-f", "mp3"],
-    "flac": ["-ac", "1", "-ar", "24000", "-compression_level", "5", "-f", "flac"],
+FFMPEG_DEFAULT_SAMPLE_RATES = {
+    "wav": 24000,
+    "mp3": 44100,
+    "flac": 24000,
+    "ogg": 48000,
+    "mulaw": 8000,
 }
 FFMPEG_LOUDNORM_FILTER = "loudnorm=I=-16:TP=-1:LRA=5"
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
@@ -217,9 +223,51 @@ def _normalize_response_format(value: Any) -> str:
     if not isinstance(output_format, str):
         raise ValueError("TTS output format must be a string")
     output_format = output_format.strip().lower()
-    if output_format not in FFMPEG_OUTPUT_ARGS:
+    if output_format not in FFMPEG_DEFAULT_SAMPLE_RATES:
         raise ValueError(f"Unsupported TTS output format: {output_format}")
     return output_format
+
+
+def _normalize_sample_rate(value: Any) -> int | None:
+    """Return a Groq-supported TTS sample rate."""
+    if value in (None, ""):
+        return None
+    try:
+        sample_rate = int(value)
+    except (TypeError, ValueError) as err:
+        raise ValueError("TTS sample rate must be an integer") from err
+    if sample_rate not in TTS_SAMPLE_RATES:
+        raise ValueError(f"Unsupported TTS sample rate: {sample_rate}")
+    return sample_rate
+
+
+def _normalize_speed(value: Any) -> float | None:
+    """Return a Groq-supported TTS speed."""
+    if value in (None, ""):
+        return None
+    try:
+        speed = float(value)
+    except (TypeError, ValueError) as err:
+        raise ValueError("TTS speed must be a number") from err
+    if speed < 0.5 or speed > 5:
+        raise ValueError("TTS speed must be between 0.5 and 5")
+    return speed
+
+
+def _ffmpeg_output_args(output_format: str, sample_rate: int | None) -> list[str]:
+    """Return ffmpeg output arguments for the requested playback profile."""
+    output_sample_rate = sample_rate or FFMPEG_DEFAULT_SAMPLE_RATES[output_format]
+    args = ["-ac", "1", "-ar", str(output_sample_rate)]
+    if output_format == "mp3":
+        args.extend(["-b:a", "128k"])
+    elif output_format == "flac":
+        args.extend(["-compression_level", "5"])
+    elif output_format == "ogg":
+        args.extend(["-c:a", "libopus"])
+    elif output_format == "mulaw":
+        args.extend(["-c:a", "pcm_mulaw"])
+    args.extend(["-f", output_format])
+    return args
 
 
 def _tts_service_data(config_entry: ConfigEntry) -> list[dict[str, Any] | None]:
@@ -355,9 +403,10 @@ class GroqTTSEntity(TextToSpeechEntity):
         self,
         output_format: str,
         normalize_audio: bool,
+        sample_rate: int | None = None,
     ) -> None:
         """Ensure ffmpeg can write the requested format before spending Groq quota."""
-        capability = (output_format, normalize_audio)
+        capability = (output_format, normalize_audio, sample_rate)
         if capability in self._ffmpeg_capabilities:
             return
         await self._async_run_ffmpeg(["ffmpeg", "-version"])
@@ -375,24 +424,13 @@ class GroqTTSEntity(TextToSpeechEntity):
         ]
         if normalize_audio:
             cmd.extend(["-af", FFMPEG_LOUDNORM_FILTER])
-        cmd.extend(FFMPEG_OUTPUT_ARGS[output_format])
+        cmd.extend(_ffmpeg_output_args(output_format, sample_rate))
         cmd.append("pipe:1")
         await self._async_run_ffmpeg(cmd)
         self._ffmpeg_capabilities.add(capability)
 
     def _configured_audio_needs_ffmpeg(self) -> bool:
         """Return whether the stored TTS defaults require ffmpeg."""
-        try:
-            output_format = _normalize_response_format(
-                _entry_value(
-                    self._config,
-                    CONF_RESPONSE_FORMAT,
-                    DEFAULT_RESPONSE_FORMAT,
-                    service_data=self._service_data,
-                )
-            )
-        except ValueError:
-            return True
         try:
             normalize_audio = _normalize_bool_option(
                 _entry_value(
@@ -420,7 +458,6 @@ class GroqTTSEntity(TextToSpeechEntity):
         return (
             normalize_audio
             or enable_long_tts
-            or output_format != ORPHEUS_RESPONSE_FORMAT
         )
 
     @property
@@ -435,6 +472,8 @@ class GroqTTSEntity(TextToSpeechEntity):
             CONF_MODEL,
             CONF_NORMALIZE_AUDIO,
             CONF_RESPONSE_FORMAT,
+            CONF_SAMPLE_RATE,
+            CONF_SPEED,
             CONF_VOICE,
             CONF_VOCAL_DIRECTIONS,
         ]
@@ -454,6 +493,16 @@ class GroqTTSEntity(TextToSpeechEntity):
             DEFAULT_RESPONSE_FORMAT,
             service_data=self._service_data,
         )
+        sample_rate = _entry_value(
+            self._config,
+            CONF_SAMPLE_RATE,
+            service_data=self._service_data,
+        )
+        speed = _entry_value(
+            self._config,
+            CONF_SPEED,
+            service_data=self._service_data,
+        )
         try:
             normalize_audio = _normalize_bool_option(
                 normalize_audio, CONF_NORMALIZE_AUDIO
@@ -464,6 +513,14 @@ class GroqTTSEntity(TextToSpeechEntity):
             response_format = _normalize_response_format(response_format)
         except ValueError:
             response_format = DEFAULT_RESPONSE_FORMAT
+        try:
+            sample_rate = _normalize_sample_rate(sample_rate)
+        except ValueError:
+            sample_rate = None
+        try:
+            speed = _normalize_speed(speed)
+        except ValueError:
+            speed = DEFAULT_TTS_SPEED
         return {
             CONF_NORMALIZE_AUDIO: normalize_audio,
             CONF_MODEL: _entry_value(
@@ -473,6 +530,8 @@ class GroqTTSEntity(TextToSpeechEntity):
                 self._config, CONF_VOICE, service_data=self._service_data
             ),
             CONF_RESPONSE_FORMAT: response_format,
+            CONF_SAMPLE_RATE: sample_rate,
+            CONF_SPEED: speed,
             CONF_VOCAL_DIRECTIONS: normalize_vocal_directions(
                 _entry_value(
                     self._config,
@@ -551,6 +610,26 @@ class GroqTTSEntity(TextToSpeechEntity):
                     ),
                 )
             )
+            sample_rate = _normalize_sample_rate(
+                options.get(
+                    CONF_SAMPLE_RATE,
+                    _entry_value(
+                        self._config,
+                        CONF_SAMPLE_RATE,
+                        service_data=self._service_data,
+                    ),
+                )
+            )
+            speed = _normalize_speed(
+                options.get(
+                    CONF_SPEED,
+                    _entry_value(
+                        self._config,
+                        CONF_SPEED,
+                        service_data=self._service_data,
+                    ),
+                )
+            )
             normalize_audio = _normalize_bool_option(
                 options.get(
                     CONF_NORMALIZE_AUDIO,
@@ -594,12 +673,16 @@ class GroqTTSEntity(TextToSpeechEntity):
                     service_data=self._service_data,
                 )
             )
+            needs_ffmpeg = normalize_audio or len(input_chunks) > 1
+            api_response_format = ORPHEUS_RESPONSE_FORMAT if needs_ffmpeg else output_format
             speech_requests = [
                 SpeechRequest(
                     text=input_chunk,
                     model=effective_model,
                     voice=effective_voice,
-                    response_format=ORPHEUS_RESPONSE_FORMAT,
+                    response_format=api_response_format,
+                    sample_rate=sample_rate,
+                    speed=speed,
                     service_id=self._service_data.get(UNIQUE_ID),
                     protect_free_tier=protect_free_tier,
                     cache_max=cache_max,
@@ -618,13 +701,10 @@ class GroqTTSEntity(TextToSpeechEntity):
                     f"({len(input_chunks)}). Shorten the announcement to "
                     f"{MAX_LONG_TTS_CHUNKS} chunks or fewer."
                 )
-            needs_ffmpeg = (
-                normalize_audio
-                or output_format != ORPHEUS_RESPONSE_FORMAT
-                or len(input_chunks) > 1
-            )
             if needs_ffmpeg:
-                await self._async_check_ffmpeg(output_format, normalize_audio)
+                await self._async_check_ffmpeg(
+                    output_format, normalize_audio, sample_rate
+                )
             if len(input_chunks) > 1 and callable(
                 batch_guard := getattr(
                     self._client, "_check_local_tts_free_tier_batch", None
@@ -653,7 +733,9 @@ class GroqTTSEntity(TextToSpeechEntity):
             ):
                 _LOGGER.debug("Rewriting Groq WAV audio for media player compatibility")
                 needs_ffmpeg = True
-                await self._async_check_ffmpeg(output_format, normalize_audio)
+                await self._async_check_ffmpeg(
+                    output_format, normalize_audio, sample_rate
+                )
 
             async def convert_audio_chunk(input_bytes: bytes) -> bytes:
                 """Convert one Orpheus WAV chunk to the requested playback profile."""
@@ -668,7 +750,7 @@ class GroqTTSEntity(TextToSpeechEntity):
                 ]
                 if normalize_audio:
                     cmd.extend(["-af", FFMPEG_LOUDNORM_FILTER])
-                cmd.extend(FFMPEG_OUTPUT_ARGS[output_format])
+                cmd.extend(_ffmpeg_output_args(output_format, sample_rate))
                 cmd.append("pipe:1")
                 return await self._async_run_ffmpeg(
                     cmd,
@@ -711,7 +793,7 @@ class GroqTTSEntity(TextToSpeechEntity):
                         *input_args,
                         "-filter_complex",
                         filter_complex,
-                        *FFMPEG_OUTPUT_ARGS[output_format],
+                        *_ffmpeg_output_args(output_format, sample_rate),
                         "pipe:1",
                     ]
                     return await self._async_run_ffmpeg(
@@ -734,7 +816,9 @@ class GroqTTSEntity(TextToSpeechEntity):
                         else await stitch_audio_chunks(audio_chunks)
                     )
                 except HomeAssistantError:
-                    self._ffmpeg_capabilities.discard((output_format, normalize_audio))
+                    self._ffmpeg_capabilities.discard(
+                        (output_format, normalize_audio, sample_rate)
+                    )
                     async_create_ffmpeg_missing_issue(
                         self.hass, self._config, self._service_data
                     )
