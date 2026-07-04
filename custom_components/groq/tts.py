@@ -455,10 +455,7 @@ class GroqTTSEntity(TextToSpeechEntity):
             )
         except ValueError:
             return True
-        return (
-            normalize_audio
-            or enable_long_tts
-        )
+        return normalize_audio or enable_long_tts
 
     @property
     def default_language(self) -> str:
@@ -674,7 +671,9 @@ class GroqTTSEntity(TextToSpeechEntity):
                 )
             )
             needs_ffmpeg = normalize_audio or len(input_chunks) > 1
-            api_response_format = ORPHEUS_RESPONSE_FORMAT if needs_ffmpeg else output_format
+            api_response_format = (
+                ORPHEUS_RESPONSE_FORMAT if needs_ffmpeg else output_format
+            )
             speech_requests = [
                 SpeechRequest(
                     text=input_chunk,

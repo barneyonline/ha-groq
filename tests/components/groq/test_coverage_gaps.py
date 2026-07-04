@@ -1539,9 +1539,7 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
         )["response_format"]
         == "ogg"
     )
-    advanced_tts_data = text_to_speech_schema(
-        {"sample_rate": "24000", "speed": "1.5"}
-    )(
+    advanced_tts_data = text_to_speech_schema({"sample_rate": "24000", "speed": "1.5"})(
         {
             "name": "TTS",
             "model": "canopylabs/orpheus-v1-english",
