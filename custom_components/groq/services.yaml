@@ -481,6 +481,8 @@ transcribe_audio:
               value: pt-PT
             - label: Dutch
               value: nl-NL
+            - label: Indonesian
+              value: id-ID
             - label: Japanese
               value: ja-JP
             - label: Korean
