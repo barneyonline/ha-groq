@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.3.2 - 2026-07-06
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- Added expanded Groq TTS controls for playback format, sample rate, and speed, with direct native Groq output used for single-part unprocessed requests. (#31)
+
+### 🐛 Bug fixes
+- None
+
+### 🔧 Improvements
+- Kept ffmpeg handling for normalization, Long TTS stitching, and WAV compatibility repair while allowing compatible unprocessed TTS requests to use Groq's native output format directly. (#31)
+- Added Indonesian (`id-ID`) to STT language hint selectors so it is available when configuring STT services and calling the `groq.transcribe_audio` action. (#33)
+
+### 🔄 Other changes
+- Updated README guidance, translations, diagnostics, and regression coverage for expanded TTS controls and STT language option parity. (#31, #33)
+- Bumped the integration manifest version to `1.3.2`.
+
 ## v1.3.1 - 2026-06-28
 
 ### 🚧 Breaking changes
