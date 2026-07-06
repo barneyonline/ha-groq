@@ -66,6 +66,8 @@ from custom_components.groq.const import (
     FEATURE_SPEECH_TO_TEXT,
     FEATURE_TEXT_GENERATION,
     FEATURE_TEXT_TO_SPEECH,
+    STT_LANGUAGE_OPTIONS,
+    STT_LANGUAGES,
     UNIQUE_ID,
     enabled_features_from_entry,
     normalize_enabled_features,
@@ -473,6 +475,10 @@ def test_services_yaml_guides_action_inputs():
     )
     assert stt_fields["model"]["selector"]["select"]["custom_value"] is True
     assert stt_fields["language"]["selector"]["select"]["custom_value"] is True
+    assert stt_fields["language"]["selector"]["select"]["options"] == [
+        {"label": option["label"], "value": option["value"]}
+        for option in STT_LANGUAGE_OPTIONS
+    ]
 
     assert services["clear_cache"]["fields"]["config_entry_id"]["required"] is True
     assert (
@@ -1456,7 +1462,11 @@ async def test_config_flow_dynamic_model_and_locale_fallback_branches(monkeypatc
     assert stt_language_default(None) == DEFAULT_STT_LANGUAGE
     assert stt_language_default("en_AU") == "en"
     assert stt_language_default("es-MX") == "es-ES"
+    assert stt_language_default("id") == "id-ID"
+    assert stt_language_default("id_ID") == "id-ID"
     assert stt_language_default("xx-YY") == DEFAULT_STT_LANGUAGE
+    assert "id-ID" in STT_LANGUAGES
+    assert {"value": "id-ID", "label": "Indonesian"} in STT_LANGUAGE_OPTIONS
 
     flow = config_flow.GroqServiceSubentryFlow()
     flow.hass = DummyHass()
