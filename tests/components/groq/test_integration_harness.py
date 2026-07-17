@@ -11,6 +11,7 @@ import aiohttp
 import pytest
 from homeassistant import data_entry_flow
 from homeassistant.const import CONF_LLM_HASS_API, Platform
+from homeassistant.exceptions import HomeAssistantError
 
 import custom_components.groq as integration
 from custom_components.groq import config_flow, flow_schemas, tts
@@ -475,6 +476,11 @@ class CancelledProc:
         self.returncode = -9
 
 
+class HangingProc(CancelledProc):
+    async def communicate(self, input=None):  # noqa: A002
+        await asyncio.Event().wait()
+
+
 @pytest.mark.asyncio
 async def test_tts_normalize_runs_ffmpeg_and_keeps_selected_format(monkeypatch):
     data = {
@@ -522,11 +528,46 @@ async def test_tts_cancelled_ffmpeg_process_is_stopped(monkeypatch):
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
-    assert await entity.async_get_tts_audio(
-        "Hello", "en", options={"normalize_audio": True}
-    ) == (None, None)
+    with pytest.raises(asyncio.CancelledError):
+        await entity.async_get_tts_audio(
+            "Hello", "en", options={"normalize_audio": True}
+        )
     assert process.killed is True
     assert process.waited is True
+
+
+@pytest.mark.asyncio
+async def test_tts_timed_out_ffmpeg_process_is_stopped(monkeypatch):
+    data = {
+        "url": "http://example.com",
+        "model": ORPHEUS_ENGLISH_MODEL,
+        "voice": ORPHEUS_ENGLISH_VOICE,
+        "unique_id": "uid",
+    }
+    entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
+    process = HangingProc()
+
+    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+        return process
+
+    repair_calls = []
+    monkeypatch.setattr(tts, "FFMPEG_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(
+        tts,
+        "async_create_ffmpeg_missing_issue",
+        lambda hass, entry, service_data: repair_calls.append(
+            (hass, entry, service_data)
+        ),
+    )
+
+    with pytest.raises(HomeAssistantError, match="ffmpeg timed out") as err:
+        await entity._async_run_ffmpeg(["ffmpeg", "-version"])
+    assert process.killed is True
+    assert process.waited is True
+    assert repair_calls == [(entity.hass, entity._config, entity._service_data)]
+    assert err.value.translation_domain == "groq"
+    assert err.value.translation_key == "ffmpeg_timeout"
 
 
 @pytest.mark.asyncio

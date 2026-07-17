@@ -19,20 +19,12 @@ files = ["custom_components/groq"]
 strict = true
 warn_unused_configs = true
 show_error_codes = true
-follow_imports = "skip"
-# Home Assistant's runtime package is intentionally skipped for speed in this
-# custom-component repo, so HA base classes and selector helpers are `Any`.
-# Keep strict checking for local typed code while avoiding noise from skipped
-# framework imports.
 disallow_subclassing_any = false
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-disallow_untyped_calls = false
-disallow_any_generics = false
-warn_return_any = false
 
 [[tool.mypy.overrides]]
 module = [
+  # The Home Assistant runtime wheel does not expose importable typing metadata
+  # to mypy in this standalone custom-component harness.
   "homeassistant",
   "homeassistant.*",
   "jsonschema",

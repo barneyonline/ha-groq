@@ -1,64 +1,8 @@
-levels:
-  bronze:
-    required:
-      - action-setup
-      - appropriate-polling
-      - brands
-      - common-modules
-      - config-flow-test-coverage
-      - config-flow
-      - dependency-transparency
-      - docs-actions
-      - docs-high-level-description
-      - docs-installation-instructions
-      - docs-removal-instructions
-      - entity-event-setup
-      - entity-unique-id
-      - has-entity-name
-      - runtime-data
-      - test-before-configure
-      - test-before-setup
-      - unique-config-entry
-  silver:
-    required:
-      - action-exceptions
-      - config-entry-unloading
-      - docs-configuration-parameters
-      - docs-installation-parameters
-      - entity-unavailable
-      - integration-owner
-      - log-when-unavailable
-      - parallel-updates
-      - reauthentication-flow
-      - test-coverage
-  gold:
-    required:
-      - devices
-      - diagnostics
-      - discovery-update-info
-      - discovery
-      - docs-data-update
-      - docs-examples
-      - docs-known-limitations
-      - docs-supported-devices
-      - docs-supported-functions
-      - docs-troubleshooting
-      - docs-use-cases
-      - dynamic-devices
-      - entity-category
-      - entity-device-class
-      - entity-disabled-by-default
-      - entity-translations
-      - exception-translations
-      - icon-translations
-      - reconfiguration-flow
-      - repair-issues
-      - stale-devices
-  platinum:
-    required:
-      - async-dependency
-      - inject-websession
-      - strict-typing
+metadata:
+  assessment: self-assessed
+  home_assistant_reviewed: false
+  rules_source: https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/
+  rules_last_verified: "2026-07-17"
 
 rules:
   action-setup:
@@ -71,7 +15,7 @@ rules:
       tests:
         - tests/components/groq/test_coverage_gaps.py
   appropriate-polling:
-    status: n/a
+    status: exempt
     comment: The integration does not poll entities or a coordinator; Groq calls are made during setup, explicit service actions, Assist, AI Task, STT, or TTS requests.
     references:
       code:
@@ -122,7 +66,9 @@ rules:
         - README.md
   dependency-transparency:
     status: done
-    comment: The manifest has no third-party requirements; HTTP I/O uses Home Assistant aiohttp sessions.
+    comment: The jsonschema dependency is declared and pinned in the manifest; HTTP I/O uses Home Assistant aiohttp sessions rather than an undeclared API client.
+    requirements:
+      - jsonschema==4.26.0
     references:
       code:
         - custom_components/groq/manifest.json
@@ -135,6 +81,18 @@ rules:
     references:
       code:
         - custom_components/groq/services.yaml
+      docs:
+        - README.md
+  docs-triggers:
+    status: exempt
+    comment: The integration does not provide custom automation triggers; users can use standard Home Assistant entity and event triggers.
+    references:
+      docs:
+        - README.md
+  docs-conditions:
+    status: exempt
+    comment: The integration does not provide custom automation conditions; users can use standard Home Assistant conditions.
+    references:
       docs:
         - README.md
   docs-high-level-description:
@@ -153,7 +111,7 @@ rules:
       docs:
         - README.md
   entity-event-setup:
-    status: n/a
+    status: exempt
     comment: Groq entities do not subscribe to external event buses or dispatcher callbacks.
     references:
       code:
@@ -242,7 +200,7 @@ rules:
       docs:
         - README.md
   entity-unavailable:
-    status: n/a
+    status: exempt
     comment: The entities expose on-demand AI, STT, and TTS capabilities rather than periodically fetched state; request failures are returned through platform/service error paths.
     references:
       code:
@@ -276,14 +234,15 @@ rules:
         - custom_components/groq/ai_task.py
   reauthentication-flow:
     status: done
+    comment: Setup-time authentication failures use ConfigEntryAuthFailed, while runtime 401/403 responses explicitly start reauthentication for loaded entries.
     references:
       code:
         - custom_components/groq/config_flow.py
         - custom_components/groq/api.py
-        - custom_components/groq/tts.py
+        - custom_components/groq/runtime.py
       tests:
         - tests/components/groq/test_groq.py
-        - tests/components/groq/test_integration_harness.py
+        - tests/components/groq/test_coverage_gaps.py
   test-coverage:
     status: done
     comment: Verified 100% coverage for custom_components.groq with the Home Assistant Docker harness.
@@ -298,6 +257,7 @@ rules:
     status: done
     references:
       code:
+        - custom_components/groq/entity.py
         - custom_components/groq/tts.py
         - custom_components/groq/stt.py
         - custom_components/groq/conversation.py
@@ -313,13 +273,13 @@ rules:
       tests:
         - tests/components/groq/test_diagnostics.py
   discovery-update-info:
-    status: n/a
+    status: exempt
     comment: Groq is configured from cloud API keys and user-created service subentries; there is no discovered network address or discovery payload to update.
     references:
       docs:
         - README.md
   discovery:
-    status: n/a
+    status: exempt
     comment: Groq is a cloud API service account integration, not a discoverable local device or network service.
     references:
       docs:
@@ -371,7 +331,7 @@ rules:
         - tests/components/groq/test_integration_harness.py
         - tests/components/groq/test_coverage_gaps.py
   entity-category:
-    status: n/a
+    status: exempt
     comment: The integration currently exposes only primary AI, STT, TTS, and conversation capabilities; it has no diagnostic or configuration entities that need an EntityCategory.
     references:
       code:
@@ -380,7 +340,7 @@ rules:
         - custom_components/groq/conversation.py
         - custom_components/groq/ai_task.py
   entity-device-class:
-    status: n/a
+    status: exempt
     comment: Home Assistant device classes do not apply to the conversation, AI Task, STT, or TTS entities exposed by this integration.
     references:
       code:
@@ -389,7 +349,7 @@ rules:
         - custom_components/groq/conversation.py
         - custom_components/groq/ai_task.py
   entity-disabled-by-default:
-    status: n/a
+    status: exempt
     comment: The integration does not create noisy, diagnostic, or rarely used entities by default; users explicitly create each Groq service subentry they want.
     references:
       docs:
@@ -405,11 +365,18 @@ rules:
         - custom_components/groq/strings.json
   exception-translations:
     status: done
-    comment: Service/action validation errors are raised with translation_domain, translation_key, and placeholders while preserving fallback messages.
+    comment: Service, API, attachment, conversation, AI Task, STT, and TTS errors use stable translation keys and safe value placeholders while retaining fallback messages for logs.
     references:
       code:
+        - custom_components/groq/errors.py
         - custom_components/groq/services.py
+        - custom_components/groq/attachments.py
+        - custom_components/groq/conversation.py
+        - custom_components/groq/ai_task.py
+        - custom_components/groq/tts.py
         - custom_components/groq/strings.json
+      tests:
+        - tests/components/groq/test_coverage_gaps.py
   icon-translations:
     status: done
     references:
@@ -441,14 +408,14 @@ rules:
       docs:
         - README.md
   stale-devices:
-    status: n/a
+    status: exempt
     comment: The integration has no discovered physical device inventory. Devices correspond to user-managed Groq service subentries and are removed when those entries are removed.
     references:
       docs:
         - README.md
   async-dependency:
     status: done
-    comment: There is no third-party API dependency; the Groq clients are implemented with async aiohttp and asyncio subprocess APIs.
+    comment: Groq network and process I/O is implemented with async aiohttp and asyncio subprocess APIs. The jsonschema dependency performs local, CPU-only validation and does not introduce blocking I/O.
     references:
       code:
         - custom_components/groq/api.py
@@ -466,8 +433,11 @@ rules:
         - tests/components/groq/test_coverage_gaps.py
   strict-typing:
     status: done
-    comment: The Docker-backed strict typing script passes for custom_components/groq.
+    comment: The Docker-backed strict typing script checks every local function with the complete strict mypy rule set; the standalone Home Assistant runtime wheel requires a documented missing-import override.
     references:
       code:
         - pyproject.toml
         - scripts/strict-typing
+        - custom_components/groq/types.py
+      tests:
+        - tests/components/groq/test_manifest.py

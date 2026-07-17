@@ -17,12 +17,11 @@ from homeassistant.components.ai_task import (
     GenDataTask,
     GenDataTaskResult,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
 
-from .api import StructuredGenerationRequest, TextGenerationRequest
+from .api import GroqApiClient, StructuredGenerationRequest, TextGenerationRequest
 from .attachments import async_attachment_content_parts
 from .conversation import (
     MAX_TOOL_ITERATIONS,
@@ -31,8 +30,9 @@ from .conversation import (
     _chat_log_tools,
     _result_tool_calls,
 )
-from .const import CONF_SUBENTRY_ID, DOMAIN
-from .errors import GroqApiError
+from .const import CONF_SUBENTRY_ID
+from .entity import service_device_info
+from .errors import GroqApiError, translated_error
 from .feature_registry import GroqFeature
 from .model_registry import GroqCapability, GroqModelRegistry
 from .runtime import async_get_runtime
@@ -63,6 +63,7 @@ from .text_generation import (
     text_generation_service_data,
     voluptuous_schema_to_json_schema,
 )
+from .types import GroqConfigEntry
 
 PARALLEL_UPDATES = 1
 SUPPORT_ATTACHMENTS = getattr(
@@ -73,7 +74,7 @@ _SYSTEM_PROMPT_UNSET = object()
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Groq AI task entities from text generation services."""
@@ -177,8 +178,9 @@ def _validate_json_schema_data(
     try:
         jsonschema.validate(data, schema)
     except (jsonschema.SchemaError, jsonschema.ValidationError, Unresolvable) as err:
-        raise HomeAssistantError(
-            "Groq returned data that did not match the requested structure"
+        raise translated_error(
+            "Groq returned data that did not match the requested structure",
+            "structured_response_invalid",
         ) from err
     return data
 
@@ -194,9 +196,9 @@ class GroqAITaskEntity(AITaskEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: GroqConfigEntry,
         service_data: dict[str, Any],
-        client: Any,
+        client: GroqApiClient,
         model_registry: GroqModelRegistry | None = None,
     ) -> None:
         """Initialize the AI task entity."""
@@ -217,15 +219,14 @@ class GroqAITaskEntity(AITaskEntity):
             self._attr_supported_features |= SUPPORT_ATTACHMENTS
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device information."""
         unique_id = service_unique_id(self._config_entry, self._service_data)
-        return {
-            "identifiers": {(DOMAIN, unique_id)},
-            "manufacturer": "Groq",
-            "model": service_model(self._config_entry, self._service_data),
-            "name": self._service_name,
-        }
+        return service_device_info(
+            unique_id,
+            service_model(self._config_entry, self._service_data),
+            self._service_name,
+        )
 
     def _text_generation_request(
         self,
@@ -335,8 +336,9 @@ class GroqAITaskEntity(AITaskEntity):
             return None
         model = service_model(self._config_entry, self._service_data)
         if not self._model_registry.supports(model, GroqFeature.VISION):
-            raise HomeAssistantError(
-                "Groq AI task attachments require a vision-capable model"
+            raise translated_error(
+                "Groq AI task attachments require a vision-capable model",
+                "vision_model_required",
             )
 
         content = await async_attachment_content_parts(
@@ -355,15 +357,15 @@ class GroqAITaskEntity(AITaskEntity):
             request.model,
             request.compound_builtin_tools,
         ):
-            raise HomeAssistantError(error)
+            raise translated_error(error, "invalid_request_options")
         if error := request_body_options_error_message(
             self._model_registry,
             request.model,
             request.extra_body,
         ):
-            raise HomeAssistantError(error)
+            raise translated_error(error, "invalid_request_options")
         if error := request_context_window_error(self._model_registry, request):
-            raise HomeAssistantError(error)
+            raise translated_error(error, "invalid_request_options")
 
     async def _async_tool_generation_request(
         self,
@@ -412,8 +414,11 @@ class GroqAITaskEntity(AITaskEntity):
         """Generate AI task text while executing Home Assistant LLM tools."""
         model = service_model(self._config_entry, self._service_data)
         if not self._model_registry.supports(model, GroqCapability.TOOL_CALLING):
-            raise HomeAssistantError(
-                f"Groq model {model} is not known to support Home Assistant tool calls"
+            raise translated_error(
+                f"Groq model {model} is not known to support Home Assistant tool calls",
+                "unsupported_model",
+                model=model,
+                feature="Home Assistant tool calls",
             )
 
         for _iteration in range(MAX_TOOL_ITERATIONS):
@@ -443,7 +448,9 @@ class GroqAITaskEntity(AITaskEntity):
                 chat_log.async_add_assistant_content_without_tools(assistant_content)
             if not getattr(chat_log, "unresponded_tool_results", False):
                 return result
-        raise HomeAssistantError("Groq AI task exceeded the tool-call limit")
+        raise translated_error(
+            "Groq AI task exceeded the tool-call limit", "tool_call_limit"
+        )
 
     async def _async_generate_json_fallback(
         self,
@@ -465,8 +472,9 @@ class GroqAITaskEntity(AITaskEntity):
                 data = json.loads(_strip_json_fence(result.text))
                 data = task.structure(data)
             except (json.JSONDecodeError, vol.Invalid) as err:
-                raise HomeAssistantError(
-                    "Groq returned data that did not match the requested structure"
+                raise translated_error(
+                    "Groq returned data that did not match the requested structure",
+                    "structured_response_invalid",
                 ) from err
         return GenDataTaskResult(
             conversation_id=chat_log.conversation_id,
@@ -508,8 +516,9 @@ class GroqAITaskEntity(AITaskEntity):
                     else:
                         data = _validate_json_schema_data(data, schema)
                 except (json.JSONDecodeError, vol.Invalid) as err:
-                    raise HomeAssistantError(
-                        "Groq returned data that did not match the requested structure"
+                    raise translated_error(
+                        "Groq returned data that did not match the requested structure",
+                        "structured_response_invalid",
                     ) from err
             return GenDataTaskResult(
                 conversation_id=chat_log.conversation_id,
@@ -548,8 +557,9 @@ class GroqAITaskEntity(AITaskEntity):
                 try:
                     structured_data = task.structure(structured_data)
                 except vol.Invalid as err:
-                    raise HomeAssistantError(
-                        "Groq returned data that did not match the requested structure"
+                    raise translated_error(
+                        "Groq returned data that did not match the requested structure",
+                        "structured_response_invalid",
                     ) from err
         else:
             return await self._async_generate_json_fallback(

@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
@@ -38,12 +38,20 @@ from .model_registry import GroqModelRegistry
 from .prompt_cache import GroqPromptCache
 from .rate_limit import GroqRateLimiter
 from .subentries import service_data_by_type
+from .types import GroqConfigEntry
 
 CONF_BASE_URL = "base_url"
 CONF_PROMPT_CACHE_SIZE = "prompt_cache_size"
 CONF_PROMPT_CACHE_TTL = "prompt_cache_ttl"
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _start_runtime_reauth(hass: HomeAssistant, entry: GroqConfigEntry) -> None:
+    """Start reauthentication only for an entry that finished setup."""
+    if getattr(entry, "state", None) != ConfigEntryState.LOADED:
+        return
+    entry.async_start_reauth(hass)
 
 
 @dataclass(slots=True)
@@ -58,20 +66,17 @@ class GroqRuntimeData:
     services_by_type: dict[str, tuple[dict[str, Any], ...]]
 
 
-type GroqConfigEntry = ConfigEntry[GroqRuntimeData]
-
-
-def entry_value(entry: ConfigEntry, key: str, default: Any = None) -> Any:
+def entry_value(entry: GroqConfigEntry, key: str, default: Any = None) -> Any:
     """Return an effective config entry value, allowing options to override data."""
     return entry.options.get(key, entry.data.get(key, default))
 
 
-def _has_legacy_tts_config(entry: ConfigEntry) -> bool:
+def _has_legacy_tts_config(entry: GroqConfigEntry) -> bool:
     """Return whether an entry contains pre-subentry TTS configuration."""
     return all(entry_value(entry, key) for key in (CONF_URL, CONF_MODEL, CONF_VOICE))
 
 
-def build_runtime(hass: HomeAssistant, entry: ConfigEntry) -> GroqRuntimeData:
+def build_runtime(hass: HomeAssistant, entry: GroqConfigEntry) -> GroqRuntimeData:
     """Create runtime data for a config entry."""
     base_url = entry_value(
         entry,
@@ -135,6 +140,7 @@ def build_runtime(hass: HomeAssistant, entry: ConfigEntry) -> GroqRuntimeData:
             api_key=entry_value(entry, CONF_API_KEY),
             base_url=base_url,
             rate_limiter=rate_limiter,
+            auth_failure_callback=lambda: _start_runtime_reauth(hass, entry),
         ),
         model_registry=GroqModelRegistry(),
         feature_registry=GroqFeatureRegistry(enabled_features),
@@ -145,7 +151,7 @@ def build_runtime(hass: HomeAssistant, entry: ConfigEntry) -> GroqRuntimeData:
 
 
 async def async_hydrate_runtime_model_registry(
-    entry: ConfigEntry,
+    entry: GroqConfigEntry,
     runtime: GroqRuntimeData,
     *,
     hydrate_details: bool = False,
@@ -171,7 +177,7 @@ async def async_hydrate_runtime_model_registry(
 
 async def async_get_runtime(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: GroqConfigEntry,
 ) -> GroqRuntimeData:
     """Return typed runtime data for a config entry, creating it if needed."""
     runtime = getattr(entry, "runtime_data", None)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 import time
-from typing import Mapping
+from typing import Any, Mapping
 
 from .errors import GroqRateLimitExceeded
 
@@ -75,7 +75,7 @@ class GroqRateLimiter:
 
     @staticmethod
     def raise_for_headers(
-        headers: Mapping[str, str], payload: dict | None = None
+        headers: Mapping[str, str], payload: dict[str, Any] | None = None
     ) -> None:
         """Raise a Groq rate-limit exception using response headers."""
         info = GroqRateLimitInfo.from_headers(headers)

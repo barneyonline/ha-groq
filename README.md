@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/ci.yml?branch=main&label=tests)](https://github.com/barneyonline/ha-groq/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/barneyonline/ha-groq/branch/main/graph/badge.svg)](https://codecov.io/gh/barneyonline/ha-groq)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/hassfest.yml?branch=main&label=hassfest)](https://github.com/barneyonline/ha-groq/actions/workflows/hassfest.yml)
-[![Quality Scale](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbarneyonline%2Fha-groq%2Fmain%2Fcustom_components%2Fgroq%2Fmanifest.json&query=%24.quality_scale&label=quality%20scale&cacheSeconds=3600)](https://developers.home-assistant.io/docs/integration_quality_scale_index)
+[![Self-assessed quality: Platinum](https://img.shields.io/badge/self--assessed%20quality-platinum-blue)](https://developers.home-assistant.io/docs/core/integration-quality-scale/)
 
 [![HACS](https://img.shields.io/badge/HACS-default-orange.svg)](https://hacs.xyz)
 [![Open Issues](https://img.shields.io/github/issues/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/issues)
@@ -19,6 +19,8 @@ Groq is a cloud API service for fast language, speech, and vision models. This H
 > This is an unofficial community project. It is not affiliated with, endorsed by, or supported by Groq.
 >
 > Feature availability, model availability, rate limits, token limits, and billing behavior are controlled by Groq and can vary by account, project, and model.
+
+The Platinum quality-scale label is a repository self-assessment against the current Home Assistant integration quality rules. As a custom integration, ha-groq is not reviewed, security audited, maintained, or supported by the Home Assistant project. The rule-by-rule evidence is tracked in [`quality_scale.yaml`](quality_scale.yaml).
 
 ## Supported Functionality
 
@@ -40,6 +42,8 @@ Provided response actions:
 - `groq.transcribe_audio`: transcribe a local or media-source audio file.
 - `groq.clear_cache`: clear the local response cache for a Groq account.
 - `groq.list_models`: list models visible to a Groq account.
+
+The integration does not provide custom automation triggers or conditions. Use standard Home Assistant entity, event, template, and other built-in automation triggers and conditions with Groq entities and actions.
 
 Each configured Groq service creates its own Home Assistant device and the relevant entity for that platform. Text generation services can create Assist and AI Task entities. Speech-to-text and text-to-speech services create STT and TTS entities.
 

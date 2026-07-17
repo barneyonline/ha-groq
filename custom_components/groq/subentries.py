@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
-
 from .const import CONF_SERVICE_TYPE, CONF_SUBENTRY_ID, UNIQUE_ID
+from .types import GroqConfigEntry
 
 
-def service_data_by_type(entry: ConfigEntry) -> dict[str, tuple[dict[str, Any], ...]]:
+def service_data_by_type(
+    entry: GroqConfigEntry,
+) -> dict[str, tuple[dict[str, Any], ...]]:
     """Return configured subentry data grouped by Groq service type."""
     services: dict[str, list[dict[str, Any]]] = {}
     for subentry in (getattr(entry, "subentries", None) or {}).values():
@@ -30,7 +31,7 @@ def service_data_by_type(entry: ConfigEntry) -> dict[str, tuple[dict[str, Any], 
 
 
 def service_data_for_type(
-    entry: ConfigEntry,
+    entry: GroqConfigEntry,
     service_type: str,
 ) -> list[dict[str, Any]]:
     """Return configured subentry data for a single Groq service type."""

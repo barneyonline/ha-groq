@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+
+from .errors import translated_error
 
 MAX_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
@@ -37,13 +38,19 @@ def attachment_path(attachment: Any) -> Path | None:
 def _read_attachment_data_url(path: Path, mime_type: str) -> str:
     """Read an attachment as a data URL for OpenAI-compatible vision input."""
     if not path.exists():
-        raise HomeAssistantError("Groq image attachment file does not exist")
+        raise translated_error(
+            "Groq image attachment file does not exist", "attachment_file_missing"
+        )
     if not path.is_file():
-        raise HomeAssistantError("Groq image attachment must be a file")
+        raise translated_error(
+            "Groq image attachment must be a file", "attachment_not_file"
+        )
     size = path.stat().st_size
     if size > MAX_IMAGE_ATTACHMENT_BYTES:
-        raise HomeAssistantError(
-            "Groq image attachment exceeds the 10 MB integration limit"
+        raise translated_error(
+            "Groq image attachment exceeds the 10 MB integration limit",
+            "attachment_too_large",
+            limit_mb=MAX_IMAGE_ATTACHMENT_BYTES // 1024 // 1024,
         )
     data = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:{mime_type};base64,{data}"
@@ -64,9 +71,14 @@ async def async_attachment_content_parts(
         mime_type = attachment_mime_type(attachment)
         path = attachment_path(attachment)
         if mime_type is None or not mime_type.startswith("image/"):
-            raise HomeAssistantError("Groq attachments must be image files")
+            raise translated_error(
+                "Groq attachments must be image files", "attachment_not_image"
+            )
         if path is None:
-            raise HomeAssistantError("Groq image attachments must resolve to files")
+            raise translated_error(
+                "Groq image attachments must resolve to files",
+                "attachment_file_required",
+            )
         data_url = await hass.async_add_executor_job(
             _read_attachment_data_url,
             path,

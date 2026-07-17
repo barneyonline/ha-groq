@@ -10,7 +10,7 @@ import json
 import logging
 from asyncio import CancelledError
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator, Callable, cast
 from urllib.parse import quote, urljoin
 
 import aiohttp
@@ -55,7 +55,7 @@ def _load_clientsession_factory() -> Callable[[HomeAssistant], aiohttp.ClientSes
     """Import and return Home Assistant's shared session helper."""
     from homeassistant.helpers.aiohttp_client import async_get_clientsession as _get
 
-    return _get
+    return cast(Callable[[HomeAssistant], aiohttp.ClientSession], _get)
 
 
 async def async_preload_clientsession_helper(hass: HomeAssistant) -> None:
@@ -406,6 +406,7 @@ class GroqApiClient:
         rate_limiter: GroqRateLimiter | None = None,
         request_timeout: aiohttp.ClientTimeout | None = None,
         stream_timeout: aiohttp.ClientTimeout | None = None,
+        auth_failure_callback: Callable[[], None] | None = None,
     ) -> None:
         self._hass = hass
         self._api_key = api_key
@@ -414,6 +415,7 @@ class GroqApiClient:
         self._rate_limiter = rate_limiter or GroqRateLimiter()
         self._request_timeout = request_timeout or JSON_REQUEST_TIMEOUT
         self._stream_timeout = stream_timeout or STREAM_REQUEST_TIMEOUT
+        self._auth_failure_callback = auth_failure_callback
         self._available = True
         self._unavailable_reason: str | None = None
         self._speech_caches: dict[
@@ -424,6 +426,12 @@ class GroqApiClient:
             ],
         ] = {}
         self._tts_usage: dict[str, _TTSUsageState] = {}
+
+    def _authentication_failed(self) -> ConfigEntryAuthFailed:
+        """Notify the config entry and return an authentication failure."""
+        if self._auth_failure_callback is not None:
+            self._auth_failure_callback()
+        return ConfigEntryAuthFailed("Authentication failed for Groq API")
 
     @property
     def base_url(self) -> str:
@@ -731,7 +739,7 @@ class GroqApiClient:
                 body = await response.read()
                 self._rate_limiter.update_from_headers(guard_key, response.headers)
                 if response.status in (401, 403):
-                    raise ConfigEntryAuthFailed("Authentication failed for Groq API")
+                    raise self._authentication_failed()
                 if response.status == 429:
                     payload = self._try_decode_json(body)
                     GroqRateLimiter.raise_for_headers(
@@ -786,7 +794,7 @@ class GroqApiClient:
             ) as response:
                 self._rate_limiter.update_from_headers(guard_key, response.headers)
                 if response.status in (401, 403):
-                    raise ConfigEntryAuthFailed("Authentication failed for Groq API")
+                    raise self._authentication_failed()
                 if response.status < 200 or response.status >= 300:
                     body = await response.read()
                     payload = self._decode_json(body)
@@ -850,9 +858,7 @@ class GroqApiClient:
                     content_type = response.headers.get("content-type", "").lower()
                     self._rate_limiter.update_from_headers(guard_key, response.headers)
                     if response.status in (401, 403):
-                        raise ConfigEntryAuthFailed(
-                            "Authentication failed for Groq API"
-                        )
+                        raise self._authentication_failed()
                     if response.status == 429:
                         payload = self._try_decode_json(body)
                         GroqRateLimiter.raise_for_headers(
@@ -1206,17 +1212,21 @@ class GroqApiClient:
     def _decode_json(body: bytes) -> dict[str, Any] | list[Any]:
         """Decode a JSON response body."""
         try:
-            return json.loads(body)
+            decoded = json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError) as err:
             raise GroqResponseError("Groq API returned invalid JSON") from err
+        if not isinstance(decoded, (dict, list)):
+            raise GroqResponseError("Groq API returned unexpected JSON data")
+        return decoded
 
     @staticmethod
     def _try_decode_json(body: bytes) -> dict[str, Any] | list[Any] | None:
         """Decode JSON when available without hiding HTTP error classification."""
         try:
-            return json.loads(body)
+            decoded = json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError):
             return None
+        return decoded if isinstance(decoded, (dict, list)) else None
 
     @staticmethod
     def _api_error(status: int, payload: dict[str, Any] | list[Any]) -> GroqApiError:

@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntry
 
@@ -49,6 +48,7 @@ from .const import (
     SUPPORTED_FEATURES,
     enabled_features_from_entry,
 )
+from .types import GroqConfigEntry
 
 TO_REDACT = {CONF_API_KEY, CONF_PROMPT, CONF_SYSTEM_PROMPT}
 
@@ -78,12 +78,12 @@ SERVICE_SUMMARY_KEYS = (
 )
 
 
-def _entry_value(entry: ConfigEntry, key: str, default: Any = None) -> Any:
+def _entry_value(entry: GroqConfigEntry, key: str, default: Any = None) -> Any:
     """Return effective value, allowing options to override setup data."""
     return entry.options.get(key, entry.data.get(key, default))
 
 
-def _default_summary(entry: ConfigEntry) -> dict[str, Any]:
+def _default_summary(entry: GroqConfigEntry) -> dict[str, Any]:
     """Return legacy account-level defaults without exposing generated content."""
     return {
         "text_to_speech": {
@@ -105,7 +105,9 @@ def _default_summary(entry: ConfigEntry) -> dict[str, Any]:
     }
 
 
-def _subentry_services_summary(entry: ConfigEntry) -> dict[str, list[dict[str, Any]]]:
+def _subentry_services_summary(
+    entry: GroqConfigEntry,
+) -> dict[str, list[dict[str, Any]]]:
     """Return configured service subentries grouped by service type."""
     services: dict[str, list[dict[str, Any]]] = {}
     for subentry in (getattr(entry, "subentries", None) or {}).values():
@@ -123,7 +125,7 @@ def _subentry_services_summary(entry: ConfigEntry) -> dict[str, list[dict[str, A
 
 
 async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry
+    hass: HomeAssistant, entry: GroqConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry with secrets redacted."""
     redacted_data = async_redact_data(dict(entry.data), TO_REDACT)
@@ -154,7 +156,7 @@ async def async_get_config_entry_diagnostics(
 
 
 async def async_get_device_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry, device: DeviceEntry
+    hass: HomeAssistant, entry: GroqConfigEntry, device: DeviceEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a device.
 

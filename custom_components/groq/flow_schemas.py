@@ -7,7 +7,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.const import CONF_LLM_HASS_API
-from homeassistant.helpers.selector import selector
+from homeassistant.helpers.selector import Selector, selector
 
 from .const import (
     CONF_ADVANCED_OPTIONS,
@@ -90,7 +90,7 @@ def _model_default(
     if not options:
         return default
     configured = values.get(key)
-    if configured in options:
+    if isinstance(configured, str) and configured in options:
         return configured
     if default in options:
         return default
@@ -340,7 +340,7 @@ def text_generation_model_select_options(
     ]
 
 
-def api_key_selector():
+def api_key_selector() -> Selector:
     """Return a password-style selector for Groq API keys."""
     return selector({"text": {"type": "password"}})
 

@@ -8,11 +8,11 @@ from typing import Any
 
 from homeassistant import data_entry_flow
 from homeassistant.components.repairs.models import RepairsFlow
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
 from .const import CONF_NAME, DOMAIN, UNIQUE_ID
+from .types import GroqConfigEntry
 
 ISSUE_FFMPEG_MISSING = "ffmpeg_missing"
 ISSUE_MODEL_ACCESS = "model_access"
@@ -60,7 +60,7 @@ def _service_name(service_data: dict[str, Any] | None) -> str:
 
 def async_create_ffmpeg_missing_issue(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: GroqConfigEntry,
     service_data: dict[str, Any] | None = None,
 ) -> None:
     """Create a repair issue when ffmpeg is required but missing."""
@@ -86,7 +86,7 @@ def async_create_ffmpeg_missing_issue(
 
 def async_delete_ffmpeg_missing_issue(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: GroqConfigEntry,
     service_data: dict[str, Any] | None = None,
 ) -> None:
     """Delete the ffmpeg repair issue after audio processing succeeds."""
@@ -126,7 +126,7 @@ def async_create_model_access_issue(
 
 def async_create_model_configuration_issue(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: GroqConfigEntry,
     service_data: dict[str, Any],
     model: str,
     feature: str,

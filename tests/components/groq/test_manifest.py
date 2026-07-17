@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
+import tomllib
 
 import yaml
 
@@ -30,6 +31,45 @@ def test_manifest_metadata_is_consistent() -> None:
     assert "single_config_entry" not in manifest
     assert manifest["documentation"].endswith("ha-groq")
     assert manifest["issue_tracker"].endswith("ha-groq/issues")
+
+
+def test_custom_quality_claim_is_disclosed_as_self_assessed() -> None:
+    root = Path(__file__).resolve().parents[3]
+    manifest = json.loads(
+        (root / "custom_components" / "groq" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    quality = yaml.safe_load((root / "quality_scale.yaml").read_text(encoding="utf-8"))
+    readme = (root / "README.md").read_text(encoding="utf-8")
+
+    assert manifest["quality_scale"] == "platinum"
+    assert quality["metadata"] == {
+        "assessment": "self-assessed",
+        "home_assistant_reviewed": False,
+        "rules_source": "https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/",
+        "rules_last_verified": "2026-07-17",
+    }
+    assert "Self-assessed quality: Platinum" in readme
+    assert "not reviewed, security audited, maintained, or supported" in readme
+
+
+def test_strict_typing_gate_is_not_relaxed() -> None:
+    """Prevent the self-assessed strict-typing evidence from drifting."""
+    root = Path(__file__).resolve().parents[3]
+    config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    mypy = config["tool"]["mypy"]
+
+    assert mypy["strict"] is True
+    assert mypy.get("follow_imports") != "skip"
+    for option in (
+        "disallow_untyped_defs",
+        "disallow_incomplete_defs",
+        "disallow_untyped_calls",
+        "disallow_any_generics",
+        "warn_return_any",
+    ):
+        assert mypy.get(option, True) is not False, option
 
 
 def test_hacs_minimum_homeassistant_version_is_declared() -> None:

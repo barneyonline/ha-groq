@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Iterable
+from typing import Any, Iterable, Mapping
 
 from homeassistant.const import Platform
 
@@ -107,7 +107,9 @@ def coerce_feature(value: str | GroqFeature) -> GroqFeature:
     return GroqFeature(value)
 
 
-def enabled_features_from_options(options: dict) -> frozenset[GroqFeature]:
+def enabled_features_from_options(
+    options: Mapping[str, Any],
+) -> frozenset[GroqFeature]:
     """Return enabled features from config entry options.
 
     Existing entries do not have feature options yet, so the foundation defaults
@@ -146,7 +148,9 @@ class GroqFeatureRegistry:
         """Raise if a feature is not enabled for the entry."""
         if not self.is_enabled(feature):
             descriptor = FEATURE_DESCRIPTORS[feature]
-            raise GroqFeatureNotEnabled(f"{descriptor.name} is not enabled")
+            raise GroqFeatureNotEnabled(
+                f"{descriptor.name} is not enabled", feature=descriptor.name
+            )
 
     def enabled_platforms(self) -> list[Platform]:
         """Return Home Assistant platforms required by enabled features."""
