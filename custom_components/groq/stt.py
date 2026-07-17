@@ -9,10 +9,10 @@ from typing import Any
 import wave
 
 from homeassistant.components import stt
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import (
     CONF_LANGUAGE,
@@ -23,13 +23,15 @@ from .const import (
     CONF_SUBENTRY_ID,
     DEFAULT_STT_MODEL,
     DEFAULT_PROTECT_FREE_TIER,
-    DOMAIN,
     FEATURE_SPEECH_TO_TEXT,
     STT_LANGUAGES,
     UNIQUE_ID,
 )
+from .api import GroqApiClient
 from .errors import GroqApiError
+from .entity import service_device_info
 from .runtime import async_get_runtime
+from .types import GroqConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ PARALLEL_UPDATES = 1
 MAX_STT_AUDIO_BYTES = 25 * 1024 * 1024
 
 
-def _stt_service_data(config_entry: ConfigEntry) -> list[dict[str, Any]]:
+def _stt_service_data(config_entry: GroqConfigEntry) -> list[dict[str, Any]]:
     """Return configured Speech-to-Text service subentry data."""
     services = []
     for subentry in (getattr(config_entry, "subentries", None) or {}).values():
@@ -53,7 +55,7 @@ def _stt_service_data(config_entry: ConfigEntry) -> list[dict[str, Any]]:
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Groq Speech-to-Text entities."""
@@ -74,9 +76,9 @@ class GroqSTTEntity(stt.SpeechToTextEntity):
 
     def __init__(
         self,
-        config_entry: ConfigEntry,
+        config_entry: GroqConfigEntry,
         service_data: dict[str, Any],
-        client: Any,
+        client: GroqApiClient,
     ) -> None:
         """Initialize the STT entity."""
         self._config_entry = config_entry
@@ -136,14 +138,13 @@ class GroqSTTEntity(stt.SpeechToTextEntity):
         return [stt.AudioChannels.CHANNEL_MONO, stt.AudioChannels.CHANNEL_STEREO]
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device information."""
-        return {
-            "identifiers": {(DOMAIN, self._service_unique_id)},
-            "manufacturer": "Groq",
-            "model": self._service_data.get(CONF_MODEL, DEFAULT_STT_MODEL),
-            "name": self._service_name,
-        }
+        return service_device_info(
+            self._service_unique_id,
+            self._service_data.get(CONF_MODEL, DEFAULT_STT_MODEL),
+            self._service_name,
+        )
 
     async def async_process_audio_stream(
         self,

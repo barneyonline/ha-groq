@@ -14,6 +14,7 @@ from homeassistant import data_entry_flow
 from homeassistant.components import stt
 from homeassistant.components.media_source import Unresolvable
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -22,6 +23,7 @@ from homeassistant.exceptions import (
     ServiceValidationError,
 )
 from homeassistant.helpers.service import SERVICE_DESCRIPTION_CACHE
+from homeassistant.helpers.device_registry import DeviceEntryType
 
 import custom_components.groq as integration
 from custom_components.groq import (
@@ -74,7 +76,12 @@ from custom_components.groq.const import (
     stt_language_default,
     voice_options_for_model,
 )
-from custom_components.groq.errors import GroqApiError, GroqRateLimitExceeded
+from custom_components.groq.errors import (
+    GroqApiError,
+    GroqRateLimitExceeded,
+    GroqResponseError,
+    translated_error,
+)
 from custom_components.groq.feature_registry import (
     GroqFeature,
     GroqFeatureRegistry,
@@ -212,6 +219,7 @@ class DummyEntry:
         self.options = {}
         self.subentries = {}
         self.reloads = []
+        self.reauth_requests = []
 
     def add_update_listener(self, listener):
         self.listener = listener
@@ -219,6 +227,9 @@ class DummyEntry:
 
     def async_on_unload(self, unsub):
         self.unsub = unsub
+
+    def async_start_reauth(self, hass):
+        self.reauth_requests.append(hass)
 
 
 class DummyConfigEntries:
@@ -833,6 +844,7 @@ def test_api_payload_and_extractors_cover_optional_shapes():
 
 @pytest.mark.asyncio
 async def test_api_client_covers_json_stream_and_error_paths():
+    auth_failures = []
     client = GroqApiClient(
         DummyHass(),
         api_key="entry-key",
@@ -853,6 +865,7 @@ async def test_api_client_covers_json_stream_and_error_paths():
                 JsonResponse(401, {"error": "auth"}),
             ]
         ),
+        auth_failure_callback=lambda: auth_failures.append(True),
     )
 
     assert client.base_url == "https://api.groq.com/openai/v1"
@@ -884,6 +897,7 @@ async def test_api_client_covers_json_stream_and_error_paths():
         await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
     with pytest.raises(ConfigEntryAuthFailed):
         await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
+    assert auth_failures == [True]
 
     non_json_auth_client = GroqApiClient(
         DummyHass(),
@@ -932,8 +946,30 @@ async def test_api_client_covers_json_stream_and_error_paths():
 
     with pytest.raises(GroqApiError, match="invalid JSON"):
         GroqApiClient._decode_json(b"{")
+    with pytest.raises(GroqResponseError, match="unexpected JSON data"):
+        GroqApiClient._decode_json(b'"scalar"')
     assert GroqApiClient._try_decode_json(b"<html>") is None
+    assert GroqApiClient._try_decode_json(b'"scalar"') is None
     assert isinstance(GroqApiClient._api_error(500, []), GroqApiError)
+
+
+def test_selected_llm_api_narrows_framework_values() -> None:
+    """Return only valid string and string-list LLM API selections."""
+    entry = SimpleNamespace(options={CONF_LLM_HASS_API: "options-api"})
+
+    assert conversation_module._selected_llm_api(entry, {}) == "options-api"
+    assert (
+        conversation_module._selected_llm_api(entry, {CONF_LLM_HASS_API: "service-api"})
+        == "service-api"
+    )
+    assert conversation_module._selected_llm_api(
+        entry, {CONF_LLM_HASS_API: ["assist", "calendar"]}
+    ) == ["assist", "calendar"]
+    assert (
+        conversation_module._selected_llm_api(entry, {CONF_LLM_HASS_API: ["assist", 1]})
+        is None
+    )
+    assert conversation_module._selected_llm_api(entry, {CONF_LLM_HASS_API: 42}) is None
 
 
 @pytest.mark.asyncio
@@ -1207,6 +1243,8 @@ def test_const_errors_features_cache_and_rate_limit_helpers():
     assert err.status == 500
     assert err.error_type == "server"
     assert err.payload == {"x": 1}
+    assert err.translation_domain == DOMAIN
+    assert err.translation_key == "api_error"
     rate = GroqRateLimitExceeded(
         "limited",
         retry_after="1",
@@ -1218,6 +1256,13 @@ def test_const_errors_features_cache_and_rate_limit_helpers():
     assert rate.retry_after == "1"
     assert rate.reset_requests == "2"
     assert rate.reset_tokens == "3"
+    assert rate.translation_key == "rate_limit_exceeded"
+    runtime_error = translated_error(
+        "fallback message", "attachment_too_large", limit_mb=10
+    )
+    assert runtime_error.translation_domain == DOMAIN
+    assert runtime_error.translation_key == "attachment_too_large"
+    assert runtime_error.translation_placeholders == {"limit_mb": "10"}
 
     assert coerce_feature(GroqFeature.TEXT_GENERATION) == GroqFeature.TEXT_GENERATION
     with pytest.raises(Exception):
@@ -2333,6 +2378,25 @@ async def test_runtime_model_registry_hydration_branches():
         await async_hydrate_runtime_model_registry(entry, runtime)
 
 
+def test_runtime_auth_failure_starts_reauth_only_after_setup():
+    """Runtime 401 responses start reauth without duplicating setup handling."""
+    hass = DummyHass()
+    setup_entry = DummyEntry(state=ConfigEntryState.SETUP_IN_PROGRESS)
+    setup_runtime = build_runtime(hass, setup_entry)
+
+    setup_runtime.client._authentication_failed()
+
+    assert setup_entry.reauth_requests == []
+
+    loaded_entry = DummyEntry(state=ConfigEntryState.LOADED)
+    loaded_runtime = build_runtime(hass, loaded_entry)
+
+    error = loaded_runtime.client._authentication_failed()
+
+    assert isinstance(error, ConfigEntryAuthFailed)
+    assert loaded_entry.reauth_requests == [hass]
+
+
 @pytest.mark.asyncio
 async def test_config_flow_remaining_paths(monkeypatch):
     assert config_flow.generate_entry_id()
@@ -3417,6 +3481,7 @@ async def test_stt_setup_properties_wav_error_and_empty_results(monkeypatch):
     assert stt.AudioChannels.CHANNEL_MONO in entity.supported_channels
     assert entity.device_info["model"] == "whisper-large-v3"
     assert entity.device_info["name"] == "Groq Speech-to-Text"
+    assert entity.device_info["entry_type"] is DeviceEntryType.SERVICE
     assert entity.has_entity_name is True
     assert entity.translation_key == "speech_to_text"
 
@@ -3528,6 +3593,7 @@ async def test_ai_task_helpers_and_fallback_paths():
     client = DummyClient()
     entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
     assert entity.device_info["name"] == "AI"
+    assert entity.device_info["entry_type"] is DeviceEntryType.SERVICE
     assert entity.has_entity_name is True
     assert entity.translation_key == "data_generation_tasks"
     task = SimpleNamespace(
@@ -3771,6 +3837,7 @@ async def test_ai_task_and_conversation_setup_properties():
     entity = conversation_entities[0]
     assert entity.supported_languages == "*"
     assert entity.device_info["name"] == "Assistant"
+    assert entity.device_info["entry_type"] is DeviceEntryType.SERVICE
     assert entity.has_entity_name is True
     assert entity.translation_key == "assist"
     tiny_registry = GroqModelRegistry(
@@ -3860,6 +3927,7 @@ async def test_tts_entity_and_api_remaining_paths(monkeypatch):
     assert entity.supported_languages == ["ar", "en"]
     assert entity.device_info["identifiers"] == {("groq", "tts-id")}
     assert entity.device_info["name"] == "tts"
+    assert entity.device_info["entry_type"] is DeviceEntryType.SERVICE
     assert entity.has_entity_name is True
     assert entity.translation_key == "text_to_speech"
     fmt, audio = await entity.async_get_tts_audio(
@@ -3884,7 +3952,8 @@ async def test_tts_entity_and_api_remaining_paths(monkeypatch):
 
     cancel_client = SimpleNamespace(async_synthesize_speech=cancelled_tts)
     cancel_entity = GroqTTSEntity(DummyHass(), entry, cancel_client, {})
-    assert await cancel_entity.async_get_tts_audio("hello", "en") == (None, None)
+    with pytest.raises(asyncio.CancelledError):
+        await cancel_entity.async_get_tts_audio("hello", "en")
 
     async def missing_ffmpeg(*args, **kwargs):
         raise FileNotFoundError

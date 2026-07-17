@@ -13,17 +13,18 @@ from homeassistant.components.conversation import (
     ConversationInput,
     ConversationResult,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers import intent, llm
 from voluptuous_openapi import convert
 
-from .api import TextGenerationRequest
+from .api import GroqApiClient, TextGenerationRequest
 from .attachments import async_attachment_content_parts
 from .const import CONF_SUBENTRY_ID, DOMAIN
+from .entity import service_device_info
+from .errors import translated_error
 from .feature_registry import GroqFeature
 from .model_registry import GroqCapability, GroqModelRegistry
 from .runtime import async_get_runtime
@@ -50,6 +51,7 @@ from .text_generation import (
     service_unique_id,
     text_generation_service_data,
 )
+from .types import GroqConfigEntry
 
 PARALLEL_UPDATES = 1
 MAX_HISTORY_MESSAGES = 12
@@ -57,7 +59,7 @@ MAX_TOOL_ITERATIONS = 10
 
 
 def _selected_llm_api(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> str | list[str] | None:
     """Return the selected Home Assistant LLM API for a Groq service."""
@@ -66,17 +68,25 @@ def _selected_llm_api(
         value = config_entry.options.get(CONF_LLM_HASS_API)
     if value in (None, "", []):
         return None
-    return value
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return value
+    return None
 
 
 def _content_role(content: Any) -> str | None:
     """Return a chat role for a Home Assistant chat-log content item."""
     if isinstance(content, dict):
         role = content.get("role")
-        return role if role in {"system", "user", "assistant"} else None
+        return (
+            role
+            if isinstance(role, str) and role in {"system", "user", "assistant"}
+            else None
+        )
     role = getattr(content, "role", None)
     if role in {"system", "user", "assistant"}:
-        return role
+        return str(role)
     class_name = content.__class__.__name__.lower()
     if "assistant" in class_name:
         return "assistant"
@@ -155,8 +165,9 @@ async def _message_content(
     if not attachments:
         return text
     if not model_registry.supports(model, GroqFeature.VISION):
-        raise HomeAssistantError(
-            "Groq Assist attachments require a vision-capable model"
+        raise translated_error(
+            "Groq Assist attachments require a vision-capable model",
+            "vision_model_required",
         )
     parts = await async_attachment_content_parts(
         hass,
@@ -445,7 +456,7 @@ def _assistant_native(result: Any) -> dict[str, Any]:
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Groq Assist conversation entities from text generation services."""
@@ -476,9 +487,9 @@ class GroqConversationEntity(ConversationEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: GroqConfigEntry,
         service_data: dict[str, Any],
-        client: Any,
+        client: GroqApiClient,
         model_registry: GroqModelRegistry | None = None,
     ) -> None:
         """Initialize the conversation entity."""
@@ -496,16 +507,13 @@ class GroqConversationEntity(ConversationEntity):
         return "*"
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device information."""
-        return {
-            "identifiers": {
-                (DOMAIN, service_unique_id(self._config_entry, self._service_data))
-            },
-            "manufacturer": "Groq",
-            "model": service_model(self._config_entry, self._service_data),
-            "name": self._service_name,
-        }
+        return service_device_info(
+            service_unique_id(self._config_entry, self._service_data),
+            service_model(self._config_entry, self._service_data),
+            self._service_name,
+        )
 
     async def _async_handle_message(
         self,
@@ -537,8 +545,11 @@ class GroqConversationEntity(ConversationEntity):
         if tools and not self._model_registry.supports(
             model, GroqCapability.TOOL_CALLING
         ):
-            raise HomeAssistantError(
-                f"Groq model {model} is not known to support Home Assistant tool calls"
+            raise translated_error(
+                f"Groq model {model} is not known to support Home Assistant tool calls",
+                "unsupported_model",
+                model=model,
+                feature="Home Assistant tool calls",
             )
         text = ""
         use_streaming = (
@@ -558,15 +569,15 @@ class GroqConversationEntity(ConversationEntity):
                 request.model,
                 request.extra_body,
             ):
-                raise HomeAssistantError(error)
+                raise translated_error(error, "invalid_request_options")
             if error := compound_builtin_tools_error_message(
                 self._model_registry,
                 request.model,
                 request.compound_builtin_tools,
             ):
-                raise HomeAssistantError(error)
+                raise translated_error(error, "invalid_request_options")
             if error := request_context_window_error(self._model_registry, request):
-                raise HomeAssistantError(error)
+                raise translated_error(error, "invalid_request_options")
             if use_streaming:
                 text = await self._async_stream_message(user_input, chat_log, request)
                 break
@@ -592,7 +603,9 @@ class GroqConversationEntity(ConversationEntity):
             if not getattr(chat_log, "unresponded_tool_results", False):
                 break
         else:
-            raise HomeAssistantError("Groq Assist exceeded the tool-call limit")
+            raise translated_error(
+                "Groq Assist exceeded the tool-call limit", "tool_call_limit"
+            )
 
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_speech(text)

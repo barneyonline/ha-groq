@@ -16,9 +16,9 @@ import asyncio
 from asyncio import CancelledError
 
 from homeassistant.components.tts import TextToSpeechEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.exceptions import HomeAssistantError
 from .const import (
     CONF_SERVICE_TYPE,
@@ -32,7 +32,6 @@ from .const import (
     CONF_VOICE,
     CONF_VOCAL_DIRECTIONS,
     CONF_URL,
-    DOMAIN,
     UNIQUE_ID,
     CONF_NORMALIZE_AUDIO,
     CONF_CACHE_SIZE,
@@ -46,11 +45,14 @@ from .const import (
     TTS_SAMPLE_RATES,
 )
 from .api import GroqApiClient, SpeechRequest, async_preload_clientsession_helper
+from .entity import service_device_info
+from .errors import translated_error
 from .repairs import (
     async_create_ffmpeg_missing_issue,
     async_delete_ffmpeg_missing_issue,
 )
 from .runtime import async_get_runtime
+from .types import GroqConfigEntry
 from .vocal_directions import (
     normalize_vocal_directions,
     vocal_directions_validation_error,
@@ -60,6 +62,7 @@ _LOGGER = logging.getLogger(__name__)
 
 MAX_TTS_INPUT_CHARS = 200
 MAX_LONG_TTS_CHUNKS = 10
+FFMPEG_TIMEOUT_SECONDS = 30
 PARALLEL_UPDATES = 1
 ORPHEUS_RESPONSE_FORMAT = "wav"
 FFMPEG_DEFAULT_SAMPLE_RATES = {
@@ -99,7 +102,7 @@ def _audio_needs_compatibility_transcode(audio: bytes) -> bool:
                 return True
             has_compatible_format = True
         elif chunk_id == b"data" and has_compatible_format:
-            return chunk_size == 0
+            return bool(chunk_size == 0)
         offset = chunk_end + (chunk_size % 2)
     return True
 
@@ -191,7 +194,7 @@ def _write_audio_chunks(temp_dir: str, input_chunks: list[bytes]) -> list[str]:
 
 
 def _entry_value(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     key: str,
     default: Any = None,
     service_data: dict[str, Any] | None = None,
@@ -276,7 +279,7 @@ FFMPEG_OUTPUT_ARGS = {
 }
 
 
-def _tts_service_data(config_entry: ConfigEntry) -> list[dict[str, Any] | None]:
+def _tts_service_data(config_entry: GroqConfigEntry) -> list[dict[str, Any] | None]:
     """Return TTS service subentry data for an entry."""
     subentries = getattr(config_entry, "subentries", None) or {}
     services: list[dict[str, Any] | None] = []
@@ -296,7 +299,7 @@ def _tts_service_data(config_entry: ConfigEntry) -> list[dict[str, Any] | None]:
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     runtime = await async_get_runtime(hass, config_entry)
@@ -328,7 +331,7 @@ class GroqTTSEntity(TextToSpeechEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        config: ConfigEntry,
+        config: GroqConfigEntry,
         client: GroqApiClient,
         service_data: dict[str, Any] | None = None,
     ) -> None:
@@ -378,22 +381,34 @@ class GroqTTSEntity(TextToSpeechEntity):
                 async_create_ffmpeg_missing_issue(
                     self.hass, self._config, self._service_data
                 )
-            raise HomeAssistantError("ffmpeg not found")
+            raise translated_error("ffmpeg not found", "ffmpeg_not_found")
         except OSError as err:
             _LOGGER.error("Unable to start ffmpeg: %s", err)
             if create_repair:
                 async_create_ffmpeg_missing_issue(
                     self.hass, self._config, self._service_data
                 )
-            raise HomeAssistantError("ffmpeg could not start") from err
+            raise translated_error(
+                "ffmpeg could not start", "ffmpeg_start_failed"
+            ) from err
         try:
-            stdout, stderr = await process.communicate(input=input_bytes)
-        except CancelledError:
+            async with asyncio.timeout(FFMPEG_TIMEOUT_SECONDS):
+                stdout, stderr = await process.communicate(input=input_bytes)
+        except (CancelledError, TimeoutError) as err:
             if process.returncode is None:
                 with suppress(ProcessLookupError):
                     process.kill()
                 with suppress(Exception, CancelledError):
                     await process.wait()
+            if isinstance(err, TimeoutError):
+                _LOGGER.error(
+                    "ffmpeg timed out after %s seconds", FFMPEG_TIMEOUT_SECONDS
+                )
+                if create_repair:
+                    async_create_ffmpeg_missing_issue(
+                        self.hass, self._config, self._service_data
+                    )
+                raise translated_error("ffmpeg timed out", "ffmpeg_timeout") from err
             raise
         if process.returncode != 0:
             stderr_text = stderr.decode(errors="replace").strip()
@@ -402,7 +417,7 @@ class GroqTTSEntity(TextToSpeechEntity):
                 async_create_ffmpeg_missing_issue(
                     self.hass, self._config, self._service_data
                 )
-            raise HomeAssistantError("ffmpeg failed")
+            raise translated_error("ffmpeg failed", "ffmpeg_failed")
         return stdout
 
     async def _async_check_ffmpeg(
@@ -468,7 +483,7 @@ class GroqTTSEntity(TextToSpeechEntity):
         return "en"
 
     @property
-    def supported_options(self) -> list:
+    def supported_options(self) -> list[str]:
         # Must match option keys actually read from service/data
         return [
             CONF_INPUT,
@@ -482,7 +497,7 @@ class GroqTTSEntity(TextToSpeechEntity):
         ]
 
     @property
-    def default_options(self) -> dict:
+    def default_options(self) -> dict[str, Any]:
         """Advertise default options for the TTS service."""
         normalize_audio = _entry_value(
             self._config,
@@ -546,25 +561,24 @@ class GroqTTSEntity(TextToSpeechEntity):
         }
 
     @property
-    def supported_languages(self) -> list:
+    def supported_languages(self) -> list[str]:
         return ["ar", "en"]
 
     @property
-    def device_info(self) -> dict:
-        return {
-            "identifiers": {(DOMAIN, self._attr_unique_id)},
-            "model": _entry_value(
-                self._config, CONF_MODEL, service_data=self._service_data
+    def device_info(self) -> DeviceInfo:
+        return service_device_info(
+            str(self._attr_unique_id),
+            str(
+                _entry_value(self._config, CONF_MODEL, service_data=self._service_data)
             ),
-            "manufacturer": "Groq",
-            "name": self._service_name,
-        }
+            str(self._service_name),
+        )
 
     async def async_get_tts_audio(
         self,
         message: str,
         language: str,
-        options: dict | None = None,
+        options: dict[str, Any] | None = None,
     ) -> tuple[str, bytes] | tuple[None, None]:
         """Generate TTS audio asynchronously and optionally normalize it."""
         overall_start = time.monotonic()
@@ -843,7 +857,7 @@ class GroqTTSEntity(TextToSpeechEntity):
 
         except CancelledError:
             _LOGGER.debug("TTS task cancelled")
-            return None, None
+            raise
         except ValueError as err:
             _LOGGER.error("Invalid TTS request: %s", err)
             return None, None

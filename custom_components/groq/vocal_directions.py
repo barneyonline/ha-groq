@@ -20,11 +20,11 @@ def normalize_vocal_directions(value: Any) -> str:
         return ""
     if not isinstance(value, str):
         return ""
-    value = value.strip()
-    if value in ("", VOCAL_DIRECTION_NONE):
+    normalized = value.strip()
+    if normalized in ("", VOCAL_DIRECTION_NONE):
         return ""
-    if _is_single_word(value):
-        return value
+    if _is_single_word(normalized):
+        return normalized
     return ""
 
 

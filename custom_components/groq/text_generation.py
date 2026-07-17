@@ -8,8 +8,6 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry
-
 from .api import (
     RESERVED_CHAT_BODY_OPTIONS,
     StructuredGenerationRequest,
@@ -55,6 +53,7 @@ from .const import (
 from .feature_registry import GroqFeature
 from .model_registry import GroqCapability, GroqModelRegistry
 from .subentries import service_data_for_type
+from .types import GroqConfigEntry
 
 _SCHEMA_NAME_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 _APPROX_CHARS_PER_TOKEN = 4
@@ -70,7 +69,7 @@ _MISSING = object()
 
 
 def entry_value(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
     key: str,
     default: Any = None,
@@ -81,12 +80,12 @@ def entry_value(
     return config_entry.options.get(key, config_entry.data.get(key, default))
 
 
-def text_generation_service_data(config_entry: ConfigEntry) -> list[dict[str, Any]]:
+def text_generation_service_data(config_entry: GroqConfigEntry) -> list[dict[str, Any]]:
     """Return configured text generation service subentries."""
     return service_data_for_type(config_entry, FEATURE_TEXT_GENERATION)
 
 
-def service_name(config_entry: ConfigEntry, service_data: dict[str, Any]) -> str:
+def service_name(config_entry: GroqConfigEntry, service_data: dict[str, Any]) -> str:
     """Return the user-facing service name."""
     return str(
         entry_value(
@@ -98,13 +97,13 @@ def service_name(config_entry: ConfigEntry, service_data: dict[str, Any]) -> str
     )
 
 
-def service_model(config_entry: ConfigEntry, service_data: dict[str, Any]) -> str:
+def service_model(config_entry: GroqConfigEntry, service_data: dict[str, Any]) -> str:
     """Return the configured text generation model."""
     return str(entry_value(config_entry, service_data, CONF_MODEL, DEFAULT_TEXT_MODEL))
 
 
 def service_system_prompt(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> str:
     """Return the configured Home Assistant system prompt."""
@@ -120,7 +119,7 @@ def service_system_prompt(
 
 
 def service_temperature(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> float | None:
     """Return the configured text generation temperature."""
@@ -131,7 +130,7 @@ def service_temperature(
 
 
 def service_max_tokens(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
     model_registry: GroqModelRegistry | None = None,
 ) -> int | None:
@@ -150,7 +149,7 @@ def service_max_tokens(
 
 
 def service_top_p(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> float | None:
     """Return the configured top_p nucleus sampling value."""
@@ -161,7 +160,7 @@ def service_top_p(
 
 
 def service_stop(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> str | list[str] | None:
     """Return configured stop sequence data."""
@@ -177,7 +176,7 @@ def service_stop(
 
 
 def service_seed(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> int | None:
     """Return the configured deterministic sampling seed."""
@@ -188,7 +187,7 @@ def service_seed(
 
 
 def service_service_tier(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> str | None:
     """Return the configured Groq service tier."""
@@ -197,7 +196,7 @@ def service_service_tier(
 
 
 def service_reasoning_effort(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> str | None:
     """Return the configured reasoning effort."""
@@ -206,7 +205,7 @@ def service_reasoning_effort(
 
 
 def service_reasoning_format(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> str | None:
     """Return the configured reasoning format."""
@@ -215,7 +214,7 @@ def service_reasoning_format(
 
 
 def service_include_reasoning(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> bool | None:
     """Return whether raw reasoning should be included."""
@@ -224,7 +223,7 @@ def service_include_reasoning(
 
 
 def service_stream(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> bool:
     """Return whether this service should stream Assist responses."""
@@ -232,7 +231,7 @@ def service_stream(
 
 
 def service_prompt_caching(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> bool:
     """Return whether local response caching is enabled for the model."""
@@ -281,7 +280,7 @@ def compound_builtin_tools_error_message(
 
 
 def service_compound_builtin_tools(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
     model_registry: GroqModelRegistry | None = None,
 ) -> list[str] | None:
@@ -308,7 +307,7 @@ def service_compound_builtin_tools(
 
 
 def service_protect_free_tier(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> bool:
     """Return whether this service should use local free-tier safeguards."""
@@ -316,7 +315,7 @@ def service_protect_free_tier(
 
 
 def service_request_body_options(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
     model_registry: GroqModelRegistry | None = None,
 ) -> dict[str, Any] | None:
@@ -499,7 +498,7 @@ def is_prompt_caching_model(model: str) -> bool:
 
 
 def service_structured_outputs(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> bool:
     """Return whether the service should request structured outputs."""
@@ -507,7 +506,7 @@ def service_structured_outputs(
 
 
 def service_schema(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Return the configured JSON schema for structured outputs."""
@@ -518,7 +517,7 @@ def service_schema(
 
 
 def service_schema_name(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
     default: str = "response",
 ) -> str:
@@ -529,14 +528,16 @@ def service_schema_name(
 
 
 def service_strict(
-    config_entry: ConfigEntry,
+    config_entry: GroqConfigEntry,
     service_data: dict[str, Any],
 ) -> bool:
     """Return whether strict structured output mode is enabled."""
     return bool(entry_value(config_entry, service_data, CONF_STRICT, False))
 
 
-def service_unique_id(config_entry: ConfigEntry, service_data: dict[str, Any]) -> str:
+def service_unique_id(
+    config_entry: GroqConfigEntry, service_data: dict[str, Any]
+) -> str:
     """Return a stable service unique id."""
     return str(
         service_data.get(UNIQUE_ID)

@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### 🐛 Bug fixes
+- Start Home Assistant reauthentication when Groq rejects credentials during runtime requests, while avoiding duplicate reauthentication flows during config entry setup.
+- Propagate TTS task cancellation and stop hung ffmpeg processes after a bounded timeout.
+
+### 🔧 Improvements
+- Register Groq cloud-service entities as Home Assistant service devices.
+- Translate runtime, API, attachment, structured-output, and ffmpeg errors with stable Home Assistant translation keys.
+- Apply the typed Groq config entry across the integration and enable the complete strict mypy rule set for local code.
+- Make the quality-scale claim explicitly self-assessed, align its rule catalog with current Home Assistant guidance, and validate evidence against manifest dependencies.
+
+### 🔄 Other changes
+- Expanded regression coverage for runtime reauthentication, service-device metadata, translated exceptions, ffmpeg cancellation and timeout cleanup, strict typing, and quality-scale evidence.
+
 ## v1.3.2 - 2026-07-06
 
 ### 🚧 Breaking changes

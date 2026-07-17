@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN, UNIQUE_ID
 from .runtime import (
-    GroqConfigEntry,
     async_hydrate_runtime_model_registry,
     build_runtime,
 )
+from .types import GroqConfigEntry
 from .api import async_preload_clientsession_helper
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
 
 
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up Groq integration-level actions."""
     if hasattr(hass, "services"):
         from .services import async_register_services
@@ -62,10 +63,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> boo
                 hass,
                 exclude_entry_id=entry.entry_id,
             )
-    return unload_ok
+    return bool(unload_ok)
 
 
-def _has_other_loaded_entries(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+def _has_other_loaded_entries(hass: HomeAssistant, entry: GroqConfigEntry) -> bool:
     """Return whether another Groq config entry is still loaded."""
     async_entries = getattr(hass.config_entries, "async_entries", None)
     if async_entries is None:
@@ -81,7 +82,7 @@ def _has_other_loaded_entries(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return False
 
 
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_migrate_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool:
     """Migrate old entry data to new format.
 
     - Move legacy UNIQUE_ID stored in data to entry.unique_id

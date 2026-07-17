@@ -10,13 +10,13 @@ from hashlib import sha256
 import json
 import mimetypes
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import voluptuous as vol
 
 from homeassistant.const import ATTR_ENTITY_ID
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -76,6 +76,7 @@ from .text_generation import (
     request_body_compound_builtin_tools,
     request_context_window_error,
 )
+from .types import GroqConfigEntry
 
 ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 ATTR_SERVICE_ID = "service_id"
@@ -141,7 +142,7 @@ def is_media_source_id(value: str) -> bool:
     """Return whether a value is a media-source id."""
     from homeassistant.components.media_source import is_media_source_id as check
 
-    return check(value)
+    return bool(check(value))
 
 
 _ENTRY_SELECTOR = vol.Optional(ATTR_CONFIG_ENTRY_ID)
@@ -251,7 +252,7 @@ def _cache_key(namespace: str, data: dict[str, Any]) -> str:
 
 def _domain_data(hass: HomeAssistant) -> dict[str, Any]:
     """Return integration domain data."""
-    return hass.data.setdefault(DOMAIN, {})
+    return cast(dict[str, Any], hass.data.setdefault(DOMAIN, {}))
 
 
 def _service_error(
@@ -268,7 +269,7 @@ def _service_error(
 
 
 def _entry_state_matches(
-    entry: ConfigEntry,
+    entry: GroqConfigEntry,
     *,
     include_setup: bool = False,
 ) -> bool:
@@ -284,7 +285,7 @@ def _loaded_entries(
     *,
     exclude_entry_id: str | None = None,
     include_setup: bool = False,
-) -> list[ConfigEntry]:
+) -> list[GroqConfigEntry]:
     """Return Groq entries usable for service calls or UI selectors."""
     return [
         entry
@@ -303,9 +304,9 @@ def _entry_from_service_id(
     hass: HomeAssistant,
     service_type: str,
     requested: str,
-) -> ConfigEntry | None:
+) -> GroqConfigEntry | None:
     """Return the loaded config entry that owns a selected Groq service."""
-    matched_entry: ConfigEntry | None = None
+    matched_entry: GroqConfigEntry | None = None
     for entry in _loaded_entries(hass):
         runtime = getattr(entry, "runtime_data", None)
         if any(
@@ -326,7 +327,7 @@ def _entry_from_call(
     hass: HomeAssistant,
     call: ServiceCall,
     service_type: str | None = None,
-) -> ConfigEntry:
+) -> GroqConfigEntry:
     """Resolve a Groq config entry from a service call."""
     entry_id = call.data.get(ATTR_CONFIG_ENTRY_ID)
     if entry_id:
@@ -360,7 +361,7 @@ async def _runtime_from_call(
     hass: HomeAssistant,
     call: ServiceCall,
     service_type: str | None = None,
-) -> tuple[ConfigEntry, GroqRuntimeData]:
+) -> tuple[GroqConfigEntry, GroqRuntimeData]:
     """Return entry and runtime for a service call."""
     entry = _entry_from_call(hass, call, service_type)
     runtime = getattr(entry, "runtime_data", None)
@@ -374,7 +375,7 @@ async def _runtime_from_call(
 
 
 def _service_subentries(
-    entry: ConfigEntry,
+    entry: GroqConfigEntry,
     runtime: GroqRuntimeData | None,
     service_type: str,
 ) -> list[dict[str, Any]]:
@@ -386,7 +387,7 @@ def _service_subentries(
 
 
 def _service_from_call(
-    entry: ConfigEntry,
+    entry: GroqConfigEntry,
     runtime: GroqRuntimeData,
     call: ServiceCall,
     service_type: str,
@@ -451,7 +452,7 @@ def _ensure_model(
     feature: GroqFeature,
     *,
     hass: HomeAssistant | None = None,
-    entry: ConfigEntry | None = None,
+    entry: GroqConfigEntry | None = None,
     service_data: dict[str, Any] | None = None,
 ) -> None:
     """Raise if a model is not known to support a feature."""
@@ -1224,7 +1225,7 @@ def _handle_transcribe_audio(hass: HomeAssistant) -> ServiceHandler:
     return handler
 
 
-def _entry_label(entry: ConfigEntry) -> str:
+def _entry_label(entry: GroqConfigEntry) -> str:
     """Return a stable user-facing label for a Groq account."""
     return (
         getattr(entry, "title", None)
@@ -1234,7 +1235,7 @@ def _entry_label(entry: ConfigEntry) -> str:
     )
 
 
-def _service_label(entry: ConfigEntry, service_data: dict[str, Any]) -> str:
+def _service_label(entry: GroqConfigEntry, service_data: dict[str, Any]) -> str:
     """Return a user-facing option label for a configured Groq service."""
     service_name = service_data.get(CONF_NAME) or service_data.get(UNIQUE_ID)
     model = service_data.get(ATTR_MODEL)
