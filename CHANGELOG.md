@@ -2,20 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v1.4.0 - 2026-07-17
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
 
 ### 🐛 Bug fixes
-- Start Home Assistant reauthentication when Groq rejects credentials during runtime requests, while avoiding duplicate reauthentication flows during config entry setup.
-- Propagate TTS task cancellation and stop hung ffmpeg processes after a bounded timeout.
+- Started Home Assistant reauthentication when Groq rejects credentials during runtime requests, while avoiding duplicate reauthentication flows during config entry setup. (#36)
+- Propagated TTS task cancellation and stopped hung ffmpeg processes after a bounded timeout. (#36)
 
 ### 🔧 Improvements
-- Register Groq cloud-service entities as Home Assistant service devices.
-- Translate runtime, API, attachment, structured-output, and ffmpeg errors with stable Home Assistant translation keys.
-- Apply the typed Groq config entry across the integration and enable the complete strict mypy rule set for local code.
-- Make the quality-scale claim explicitly self-assessed, align its rule catalog with current Home Assistant guidance, and validate evidence against manifest dependencies.
+- Registered Groq cloud-service entities as Home Assistant service devices. (#36)
+- Translated runtime, API, attachment, structured-output, and ffmpeg errors with stable Home Assistant translation keys. (#36)
+- Applied the typed Groq config entry across the integration and enabled the complete strict mypy rule set for local code. (#36)
+- Made the quality-scale claim explicitly self-assessed, aligned its rule catalog with current Home Assistant guidance, and validated evidence against manifest dependencies. (#36)
 
 ### 🔄 Other changes
-- Expanded regression coverage for runtime reauthentication, service-device metadata, translated exceptions, ffmpeg cancellation and timeout cleanup, strict typing, and quality-scale evidence.
+- Expanded regression coverage for runtime reauthentication, service-device metadata, translated exceptions, ffmpeg cancellation and timeout cleanup, strict typing, and quality-scale evidence. (#36)
+- Bumped the integration manifest version to `1.4.0`.
 
 ## v1.3.2 - 2026-07-06
 
