@@ -160,8 +160,8 @@ async def async_get_device_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a device.
 
-    This integration exposes a single device per config entry; include the same redacted
-    data with the device identifiers.
+    Devices represent configured Groq services; include the same redacted data with the
+    device identifiers.
     """
     data = await async_get_config_entry_diagnostics(hass, entry)
     data["device"] = {

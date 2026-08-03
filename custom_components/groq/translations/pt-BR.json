@@ -99,7 +99,7 @@
                         "model": "Modelo",
                         "system_prompt": "Alerta do sistema",
                         "temperature": "Temperatura",
-                        "advanced_options": "Configurar opções avançadas de solicitação",
+                        "advanced_options": "Configurar opções adicionais de solicitação",
                         "protect_free_tier": "Proteção de nível gratuito",
                         "llm_hass_api": "Home Assistant LLM API"
                     },
@@ -108,13 +108,13 @@
                         "model": "O modelo de bate-papo Groq usado para respostas de texto, conversas Assist e tarefas de geração de dados.",
                         "system_prompt": "Instruções que orientam o modelo. O padrão corresponde ao prompt de tarefa AI do Home Assistant.",
                         "temperature": "Controla a variação da resposta. Valores mais baixos são mais previsíveis; valores mais altos são mais criativos.",
-                        "advanced_options": "Abre controles avançados para opções menos comuns de solicitação de bate-papo Groq.",
+                        "advanced_options": "Abre controles adicionais para opções menos comuns de solicitação de bate-papo Groq.",
                         "protect_free_tier": "Quando Groq relata que este serviço atingiu um limite de solicitação ou token, Home Assistant pausa apenas este serviço até o tempo de redefinição de Groq antes de enviar mais solicitações.",
                         "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
                     }
                 },
                 "text_generation_advanced": {
-                    "title": "Geração Avançada de Texto",
+                    "title": "Opções adicionais de geração de texto",
                     "data": {
                         "max_tokens": "Máximo de tokens de conclusão",
                         "top_p": "P superior",
@@ -149,7 +149,7 @@
                         "schema_name": "Um identificador curto enviado para Groq com o esquema.",
                         "schema": "Objeto JSON Schema enviado como response_format.json_schema.schema.",
                         "strict": "Usa decodificação restrita Groq quando o modelo selecionado suporta saídas estruturadas estritas.",
-                        "request_body_options": "Objeto JSON mesclado no corpo da solicitação de conclusão do bate-papo. Esta é a passagem avançada para cada opção de corpo de criação de bate-papo Groq não mostrada como um campo dedicado, incluindo citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+                        "request_body_options": "Objeto JSON mesclado no corpo da solicitação de conclusão do bate-papo. Use este campo para cada opção de corpo de criação de bate-papo Groq não mostrada como um campo dedicado, incluindo citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
                     }
                 }
             }
@@ -610,11 +610,11 @@
                 },
                 "image_path": {
                     "name": "Local Image Path",
-                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                    "description": "Optional local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
                 },
                 "image_url": {
                     "name": "Image URL",
-                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                    "description": "Optional public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
                 },
                 "model": {
                     "name": "Model",
@@ -644,11 +644,11 @@
                 },
                 "image_path": {
                     "name": "Local Image Path",
-                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                    "description": "Optional local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
                 },
                 "image_url": {
                     "name": "Image URL",
-                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                    "description": "Optional public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
                 },
                 "prompt": {
                     "name": "Prompt",
@@ -678,7 +678,7 @@
                 },
                 "audio_path": {
                     "name": "Local Audio Path",
-                    "description": "Advanced local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
+                    "description": "Optional local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
                 },
                 "model": {
                     "name": "Model",
