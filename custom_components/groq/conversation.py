@@ -500,6 +500,10 @@ class GroqConversationEntity(ConversationEntity):
         self._model_registry = model_registry or GroqModelRegistry()
         self._service_name = service_name(config_entry, service_data)
         self._attr_unique_id = f"{service_unique_id(config_entry, service_data)}_assist"
+        if _selected_llm_api(config_entry, service_data):
+            self._attr_supported_features = (
+                conversation.ConversationEntityFeature.CONTROL
+            )
 
     @property
     def supported_languages(self) -> list[str] | str:

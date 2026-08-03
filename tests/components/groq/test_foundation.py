@@ -391,6 +391,33 @@ async def async_dummy_tool_chat_log() -> DummyToolChatLog:
     return chat_log
 
 
+def test_conversation_entity_advertises_control_with_llm_api():
+    """Advertise home control only when an LLM API is configured."""
+    entry = DummyEntry()
+    client = DummyTextClient("unused")
+
+    without_tools = GroqConversationEntity(
+        DummyHass(), entry, {"model": "openai/gpt-oss-20b"}, client
+    )
+    with_tools = GroqConversationEntity(
+        DummyHass(),
+        entry,
+        {
+            "model": "openai/gpt-oss-20b",
+            CONF_LLM_HASS_API: ["assist"],
+        },
+        client,
+    )
+
+    assert (
+        conversation.ConversationEntityFeature.CONTROL
+        not in without_tools.supported_features
+    )
+    assert (
+        conversation.ConversationEntityFeature.CONTROL in with_tools.supported_features
+    )
+
+
 class DummyEntry:
     def __init__(self, entry_id="entry-id", state=ConfigEntryState.LOADED):
         self.entry_id = entry_id
