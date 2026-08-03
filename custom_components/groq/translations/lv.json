@@ -114,7 +114,7 @@
                     }
                 },
                 "text_generation_advanced": {
-                    "title": "Uzlabota teksta ģenerēšana",
+                    "title": "Papildu teksta ģenerēšanas opcijas",
                     "data": {
                         "max_tokens": "Maksimālais pabeigšanas marķieris",
                         "top_p": "Augšējais P",
@@ -149,7 +149,7 @@
                         "schema_name": "Īss identifikators, kas nosūtīts uz Groq ar shēmu.",
                         "schema": "JSON Schema objekts nosūtīts kā response_format.json_schema.shēma.",
                         "strict": "Izmanto Groq ierobežoto dekodēšanu, ja atlasītais modelis atbalsta stingras strukturētas izvades.",
-                        "request_body_options": "JSON objekts ir apvienots tērzēšanas pabeigšanas pieprasījuma pamattekstā. Šī ir uzlabotā caurlaide katrai Groq tērzēšanas pamatteksta izveides opcijai, kas nav parādīta kā īpašs lauks, tostarp citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+                        "request_body_options": "JSON objekts ir apvienots tērzēšanas pabeigšanas pieprasījuma pamattekstā. Izmantojiet šo lauku katrai Groq tērzēšanas pamatteksta izveides opcijai, kas nav parādīta kā īpašs lauks, tostarp citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
                     }
                 }
             }
@@ -610,11 +610,11 @@
                 },
                 "image_path": {
                     "name": "Local Image Path",
-                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                    "description": "Optional local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
                 },
                 "image_url": {
                     "name": "Image URL",
-                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                    "description": "Optional public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
                 },
                 "model": {
                     "name": "Model",
@@ -644,11 +644,11 @@
                 },
                 "image_path": {
                     "name": "Local Image Path",
-                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                    "description": "Optional local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
                 },
                 "image_url": {
                     "name": "Image URL",
-                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                    "description": "Optional public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
                 },
                 "prompt": {
                     "name": "Prompt",
@@ -678,7 +678,7 @@
                 },
                 "audio_path": {
                     "name": "Local Audio Path",
-                    "description": "Advanced local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
+                    "description": "Optional local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
                 },
                 "model": {
                     "name": "Model",

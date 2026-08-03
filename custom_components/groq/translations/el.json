@@ -100,7 +100,7 @@
                         "system_prompt": "Ερώτηση συστήματος",
                         "llm_hass_api": "Home Assistant LLM API",
                         "temperature": "Θερμοκρασία",
-                        "advanced_options": "Διαμόρφωση σύνθετων επιλογών αιτήματος",
+                        "advanced_options": "Διαμόρφωση πρόσθετων επιλογών αιτήματος",
                         "protect_free_tier": "Προστασία ελεύθερων επιπέδων"
                     },
                     "data_description": {
@@ -109,12 +109,12 @@
                         "system_prompt": "Οδηγίες που καθοδηγούν το μοντέλο. Η προεπιλογή ταιριάζει με την προτροπή εργασιών AI του Home Assistant.",
                         "llm_hass_api": "Home Assistant LLM API που μπορεί να χρησιμοποιήσει αυτός ο agent Assist για κλήσεις εργαλείων. Αφήστε κενό για να απενεργοποιήσετε την πρόσβαση στα εργαλεία Home Assistant.",
                         "temperature": "Ελέγχει την παραλλαγή απόκρισης. Οι χαμηλότερες τιμές είναι πιο προβλέψιμες. Οι υψηλότερες αξίες είναι πιο δημιουργικές.",
-                        "advanced_options": "Ανοίγει προηγμένα στοιχεία ελέγχου για λιγότερο κοινές επιλογές αιτήματος συνομιλίας Groq.",
+                        "advanced_options": "Ανοίγει πρόσθετα στοιχεία ελέγχου για λιγότερο κοινές επιλογές αιτήματος συνομιλίας Groq.",
                         "protect_free_tier": "Όταν το Groq αναφέρει ότι αυτή η υπηρεσία έχει φτάσει σε ένα όριο αιτήματος ή διακριτικού, το Home Assistant διακόπτει μόνο αυτήν την υπηρεσία μέχρι τον χρόνο επαναφοράς του Groq πριν στείλει περισσότερα αιτήματα."
                     }
                 },
                 "text_generation_advanced": {
-                    "title": "Προηγμένη δημιουργία κειμένου",
+                    "title": "Πρόσθετες επιλογές δημιουργίας κειμένου",
                     "data": {
                         "max_tokens": "Μέγιστα διακριτικά ολοκλήρωσης",
                         "top_p": "Κορυφαία Π",
@@ -149,7 +149,7 @@
                         "schema_name": "Ένα σύντομο αναγνωριστικό στάλθηκε στο Groq με το σχήμα.",
                         "schema": "Το αντικείμενο JSON Schema στάλθηκε ως response_format.json_schema.schema.",
                         "strict": "Χρησιμοποιεί περιορισμένη αποκωδικοποίηση Groq όταν το επιλεγμένο μοντέλο υποστηρίζει αυστηρές δομημένες εξόδους.",
-                        "request_body_options": "Το αντικείμενο JSON συγχωνεύτηκε στο σώμα αιτήματος ολοκλήρωσης συνομιλίας. Αυτή είναι η προηγμένη μετάβαση για κάθε επιλογή δημιουργίας σώματος συνομιλίας Groq που δεν εμφανίζεται ως αποκλειστικό πεδίο, συμπεριλαμβανομένων των citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+                        "request_body_options": "Το αντικείμενο JSON συγχωνεύτηκε στο σώμα αιτήματος ολοκλήρωσης συνομιλίας. Χρησιμοποιήστε αυτό το πεδίο για κάθε επιλογή δημιουργίας σώματος συνομιλίας Groq που δεν εμφανίζεται ως αποκλειστικό πεδίο, συμπεριλαμβανομένων των citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
                     }
                 }
             }
@@ -610,11 +610,11 @@
                 },
                 "image_path": {
                     "name": "Local Image Path",
-                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                    "description": "Optional local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
                 },
                 "image_url": {
                     "name": "Image URL",
-                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                    "description": "Optional public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
                 },
                 "model": {
                     "name": "Model",
@@ -644,11 +644,11 @@
                 },
                 "image_path": {
                     "name": "Local Image Path",
-                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                    "description": "Optional local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
                 },
                 "image_url": {
                     "name": "Image URL",
-                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                    "description": "Optional public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
                 },
                 "prompt": {
                     "name": "Prompt",
@@ -678,7 +678,7 @@
                 },
                 "audio_path": {
                     "name": "Local Audio Path",
-                    "description": "Advanced local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
+                    "description": "Optional local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
                 },
                 "model": {
                     "name": "Model",

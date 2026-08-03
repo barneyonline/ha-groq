@@ -99,7 +99,7 @@
                         "model": "Modell",
                         "system_prompt": "Systemprompt",
                         "temperature": "Temperatur",
-                        "advanced_options": "Konfigurera avancerade förfrågningsalternativ",
+                        "advanced_options": "Konfigurera ytterligare förfrågningsalternativ",
                         "protect_free_tier": "Free-Leer Protection",
                         "llm_hass_api": "Home Assistant LLM API"
                     },
@@ -108,13 +108,13 @@
                         "model": "Groq-chattmodellen som används för textsvar, Assist-konversationer och datagenereringsuppgifter.",
                         "system_prompt": "Instruktioner som vägleder modellen. Standarden matchar Home Assistant:s AI-uppgiftsprompt.",
                         "temperature": "Styr svarsvariation. Lägre värden är mer förutsägbara; högre värden är mer kreativa.",
-                        "advanced_options": "Öppnar avancerade kontroller för mindre vanliga Groq chattförfrågningar.",
+                        "advanced_options": "Öppnar ytterligare kontroller för mindre vanliga Groq chattförfrågningar.",
                         "protect_free_tier": "När Groq rapporterar att denna tjänst har nått en begäran eller token-gräns, pausar Home Assistant endast denna tjänst tills Groq:s återställningstid innan den skickar fler förfrågningar.",
                         "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
                     }
                 },
                 "text_generation_advanced": {
-                    "title": "Avancerad textgenerering",
+                    "title": "Ytterligare alternativ för textgenerering",
                     "data": {
                         "max_tokens": "Max fullbordande tokens",
                         "top_p": "Top P",
@@ -149,7 +149,7 @@
                         "schema_name": "En kort identifierare skickad till Groq med schemat.",
                         "schema": "JSON Schema-objekt skickat som response_format.json_schema.schema.",
                         "strict": "Använder Groq begränsad avkodning när den valda modellen stöder strikt strukturerade utdata.",
-                        "request_body_options": "JSON-objektet slogs samman med begäran om chattslutförande. Detta är den avancerade genomgången för varje Groq chatt-skapande textalternativ som inte visas som ett dedikerat fält, inklusive citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+                        "request_body_options": "JSON-objektet slogs samman med begäran om chattslutförande. Använd det här fältet för varje Groq chatt-skapande textalternativ som inte visas som ett dedikerat fält, inklusive citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
                     }
                 }
             }
@@ -610,11 +610,11 @@
                 },
                 "image_path": {
                     "name": "Local Image Path",
-                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                    "description": "Optional local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
                 },
                 "image_url": {
                     "name": "Image URL",
-                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                    "description": "Optional public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
                 },
                 "model": {
                     "name": "Model",
@@ -644,11 +644,11 @@
                 },
                 "image_path": {
                     "name": "Local Image Path",
-                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                    "description": "Optional local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
                 },
                 "image_url": {
                     "name": "Image URL",
-                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                    "description": "Optional public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
                 },
                 "prompt": {
                     "name": "Prompt",
@@ -678,7 +678,7 @@
                 },
                 "audio_path": {
                     "name": "Local Audio Path",
-                    "description": "Advanced local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
+                    "description": "Optional local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
                 },
                 "model": {
                     "name": "Model",

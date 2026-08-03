@@ -99,7 +99,7 @@
                         "model": "Modelis",
                         "system_prompt": "Sistemos raginimas",
                         "temperature": "Temperatūra",
-                        "advanced_options": "Konfigūruokite išplėstines užklausos parinktis",
+                        "advanced_options": "Konfigūruokite papildomas užklausos parinktis",
                         "protect_free_tier": "Laisvos pakopos apsauga",
                         "llm_hass_api": "Home Assistant LLM API"
                     },
@@ -108,13 +108,13 @@
                         "model": "Groq pokalbių modelis, naudojamas tekstiniams atsakymams, Assist pokalbiams ir duomenų generavimo užduotims atlikti.",
                         "system_prompt": "Instrukcijos, pagal kurias vadovaujamasi modeliu. Numatytoji reikšmė atitinka Home Assistant AI užduočių eilutę.",
                         "temperature": "Valdo atsako pokyčius. Mažesnės vertės yra labiau nuspėjamos; didesnės vertybės yra kūrybiškesnės.",
-                        "advanced_options": "Atidaro išplėstinius valdiklius, skirtus retesnėms Groq pokalbių užklausų parinktims.",
+                        "advanced_options": "Atidaro papildomus valdiklius, skirtus retesnėms Groq pokalbių užklausų parinktims.",
                         "protect_free_tier": "Kai Groq praneša, kad ši paslauga pasiekė užklausų arba prieigos raktų limitą, Home Assistant pristabdo tik šią paslaugą iki Groq nustatymo iš naujo laiko, prieš išsiųsdama daugiau užklausų.",
                         "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
                     }
                 },
                 "text_generation_advanced": {
-                    "title": "Išplėstinis teksto generavimas",
+                    "title": "Papildomos teksto generavimo parinktys",
                     "data": {
                         "max_tokens": "Maksimalus užbaigimo žetonų skaičius",
                         "top_p": "Į viršų P",
@@ -149,7 +149,7 @@
                         "schema_name": "Trumpas identifikatorius, išsiųstas į Groq su schema.",
                         "schema": "JSON Schema objektas išsiųstas kaip response_format.json_schema.schema.",
                         "strict": "Naudoja apribotą Groq dekodavimą, kai pasirinktas modelis palaiko griežtus struktūrinius išėjimus.",
-                        "request_body_options": "JSON objektas sujungtas į pokalbio užbaigimo užklausos turinį. Tai yra išplėstinis kiekvienos Groq pokalbių kūrimo parinkties perėjimas, kuris nerodomas kaip specialus laukas, įskaitant citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+                        "request_body_options": "JSON objektas sujungtas į pokalbio užbaigimo užklausos turinį. Naudokite šį lauką kiekvienai Groq pokalbių kūrimo parinkčiai, kuri nerodomas kaip specialus laukas, įskaitant citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
                     }
                 }
             }
@@ -610,11 +610,11 @@
                 },
                 "image_path": {
                     "name": "Local Image Path",
-                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                    "description": "Optional local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
                 },
                 "image_url": {
                     "name": "Image URL",
-                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                    "description": "Optional public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
                 },
                 "model": {
                     "name": "Model",
@@ -644,11 +644,11 @@
                 },
                 "image_path": {
                     "name": "Local Image Path",
-                    "description": "Advanced local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
+                    "description": "Optional local image path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a camera entity or media image."
                 },
                 "image_url": {
                     "name": "Image URL",
-                    "description": "Advanced public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
+                    "description": "Optional public or data URL for the image. Leave empty when using a camera entity, media image, or local path."
                 },
                 "prompt": {
                     "name": "Prompt",
@@ -678,7 +678,7 @@
                 },
                 "audio_path": {
                     "name": "Local Audio Path",
-                    "description": "Advanced local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
+                    "description": "Optional local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
                 },
                 "model": {
                     "name": "Model",

@@ -83,14 +83,14 @@ Initial account setup asks for:
 
 After adding an account, open the Groq integration page and add one or more services:
 
-- Text Generation: name, model, system prompt, temperature, free-tier protection, and optional advanced request options.
+- Text Generation: name, model, system prompt, temperature, free-tier protection, and optional additional request options.
 - Speech-to-Text: name, model, language hint, and free-tier protection.
 - Text-to-Speech: name, model, voice, output format, optional sample rate, optional speed, optional vocal directions, optional audio normalization, optional Long TTS, and free-tier protection.
 - Image Recognition: name, model, system prompt, and free-tier protection.
 
-Advanced Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, Compound built-in tool allow-lists, structured output schema, strict schema mode, and additional Groq request body options.
+Additional Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, Compound built-in tool allow-lists, structured output schema, strict schema mode, and additional Groq request body options.
 
-Compound built-in tools are opt-in. For `groq/compound` and `groq/compound-mini`, the integration sends an explicit empty built-in tool allow-list unless you enable tools such as web search, visit website, browser automation, code execution, or Wolfram Alpha in the service's advanced options. Enabling these tools allows Groq to run server-side tools and inspect external content for the request.
+Compound built-in tools are opt-in. For `groq/compound` and `groq/compound-mini`, the integration sends an explicit empty built-in tool allow-list unless you enable tools such as web search, visit website, browser automation, code execution, or Wolfram Alpha in the service's additional options. Enabling these tools allows Groq to run server-side tools and inspect external content for the request.
 
 You can add more than one Groq account. The integration prevents adding the same API key twice.
 
@@ -98,7 +98,7 @@ You can add more than one Groq account. The integration prevents adding the same
 
 - This is a cloud integration and will not work without internet access to Groq.
 - Groq can change model availability, limits, and request option support outside this integration.
-- Some advanced options work only on models that support them. The setup flow validates known model capabilities where possible.
+- Some additional options work only on models that support them. The setup flow validates known model capabilities where possible.
 - TTS input is limited by Groq Orpheus model limits. Enable the Long TTS option to split longer announcements and stitch them with `ffmpeg`; this uses more CPU and more Groq request quota. Without Long TTS, overly long requests are blocked locally.
 - Groq speech can generate WAV, MP3, FLAC, OGG, or MULAW audio. The integration sends the selected format directly to Groq for single-part announcements without audio processing. When audio normalization or Long TTS is enabled, the integration asks Groq for WAV chunks and uses `ffmpeg` to normalize, stitch, or convert the final playback output.
 - TTS sample rate and speed are optional. Leave sample rate unset to use Groq's model default or the integration's playback profile; use speed `1.0` for normal playback.
