@@ -4,7 +4,7 @@ services:
       context: ../..
       dockerfile: devtools/docker/Dockerfile
       args:
-        HA_IMAGE: ${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:stable}
+        HA_IMAGE: ${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.7.2}
         PYTHON_VERSION: ${PYTHON_VERSION:-3.14}
     volumes:
       - ../..:/workspace:delegated

@@ -1,4 +1,4 @@
-ARG HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable
+ARG HA_IMAGE=ghcr.io/home-assistant/home-assistant:2026.7.2
 ARG PYTHON_VERSION=3.14
 FROM ${HA_IMAGE}
 

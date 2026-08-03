@@ -1,6 +1,7 @@
 pytest
 pytest-asyncio
-pytest-homeassistant-custom-component
+# Keep this plugin aligned with the pinned Home Assistant dev image.
+pytest-homeassistant-custom-component==0.13.346
 pytest-cov
 PyYAML
 mypy
