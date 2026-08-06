@@ -4,8 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v1.4.1 - 2026-08-06
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
 ### 🐛 Bug fixes
-- Advertise Home Assistant control support for Groq Assist agents when an LLM API is configured, removing the incorrect "This assistant cannot control your home" warning.
+- Advertised Home Assistant control support for Groq Assist agents when an LLM API is configured, removing the incorrect "This assistant cannot control your home" warning. (#38)
+
+### 🔧 Improvements
+- Aligned configuration, diagnostics, translations, and documentation terminology with current Home Assistant guidelines. (#39)
+
+### 🔄 Other changes
+- Pinned the Home Assistant development test image and matching test dependencies for reproducible local and CI checks. (#38)
+- Bumped the integration manifest version to `1.4.1`.
 
 ## v1.4.0 - 2026-07-17
 
