@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import importlib.util
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
+
+import pytest
 
 
 def _load_module():
@@ -42,14 +44,19 @@ def test_discover_modules_returns_integration_package_modules(tmp_path: Path) ->
 def test_build_import_runner_imports_each_module() -> None:
     runner = importtime_profile.build_import_runner(
         ("package", "package.module"),
+        preload_modules=("preload.package",),
         warning_module_pattern=r"package(\.|$)",
     )
 
     assert "importlib.import_module(module)" in runner
+    assert "importlib.import_module(preload_module)" in runner
     assert '"package", "package.module"' in runner
+    assert '"preload.package"' in runner
     assert "warnings.filterwarnings" in runner
     assert "DeprecationWarning" in runner
+    assert "preloaded {len(preload_modules)} modules" in runner
     assert "imported {len(modules)} modules" in runner
+    assert "integration import duration ms" in runner
 
 
 def test_run_importtime_uses_importtime(monkeypatch, tmp_path: Path) -> None:
@@ -65,6 +72,7 @@ def test_run_importtime_uses_importtime(monkeypatch, tmp_path: Path) -> None:
         tmp_path,
         ("custom_components.groq",),
         python="python3.14",
+        preload_modules=("homeassistant.bootstrap",),
         strict_warnings=True,
     )
 
@@ -72,10 +80,34 @@ def test_run_importtime_uses_importtime(monkeypatch, tmp_path: Path) -> None:
     command = calls[0]["args"][0]
     assert command[:3] == ["python3.14", "-X", "importtime=2"]
     assert "custom_components\\\\.groq" in command[4]
+    assert "homeassistant.bootstrap" in command[4]
     assert calls[0]["kwargs"]["cwd"] == tmp_path
     assert calls[0]["kwargs"]["text"] is True
     assert calls[0]["kwargs"]["capture_output"] is True
     assert str(tmp_path) in calls[0]["kwargs"]["env"]["PYTHONPATH"].split(os.pathsep)
+
+
+def test_render_reports_includes_median_duration() -> None:
+    results = tuple(
+        subprocess.CompletedProcess(
+            ["python"],
+            0,
+            f"integration import duration ms: {duration}\n",
+            "",
+        )
+        for duration in (30, 10, 20)
+    )
+
+    report = importtime_profile.render_reports(results)
+
+    assert "run 1/3" in report
+    assert "run 3/3" in report
+    assert "median integration import duration ms: 20.000" in report
+
+
+def test_parse_args_rejects_nonpositive_runs() -> None:
+    with pytest.raises(SystemExit):
+        importtime_profile.parse_args(["--runs", "0"])
 
 
 def test_main_writes_output(monkeypatch, tmp_path: Path) -> None:
@@ -84,10 +116,12 @@ def test_main_writes_output(monkeypatch, tmp_path: Path) -> None:
         _modules,
         *,
         python,
+        preload_modules,
         strict_warnings,
         warning_module_pattern,
     ):
         assert strict_warnings is True
+        assert preload_modules == ("homeassistant.bootstrap",)
         assert warning_module_pattern == r"custom_components\.groq(\.|$)"
         return subprocess.CompletedProcess(
             [python], 0, "imported 1 modules\n", "import time: test\n"
@@ -106,6 +140,7 @@ def test_main_writes_output(monkeypatch, tmp_path: Path) -> None:
             str(tmp_path),
             "--module",
             "custom_components.groq",
+            "--preload-home-assistant",
             "--strict-integration-warnings",
             "--output",
             str(output),

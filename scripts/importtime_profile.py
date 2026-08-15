@@ -6,13 +6,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
 import re
+import statistics
 import subprocess
 import sys
-from typing import Sequence
+from collections.abc import Sequence
+from pathlib import Path
 
 DEFAULT_PACKAGE = "custom_components.groq"
+IMPORT_DURATION_PATTERN = re.compile(
+    r"integration import duration ms: (?P<duration>[0-9.]+)"
+)
 
 
 def discover_modules(root: Path, package: str = DEFAULT_PACKAGE) -> tuple[str, ...]:
@@ -32,11 +36,15 @@ def discover_modules(root: Path, package: str = DEFAULT_PACKAGE) -> tuple[str, .
 
 
 def build_import_runner(
-    modules: Sequence[str], *, warning_module_pattern: str | None = None
+    modules: Sequence[str],
+    *,
+    preload_modules: Sequence[str] = (),
+    warning_module_pattern: str | None = None,
 ) -> str:
     """Return Python code that imports every requested module."""
 
     modules_json = json.dumps(list(modules))
+    preload_modules_json = json.dumps(list(preload_modules))
     warning_lines = ""
     if warning_module_pattern is not None:
         warning_lines = (
@@ -54,11 +62,20 @@ def build_import_runner(
         )
     return (
         "import importlib\n"
+        "import time\n"
         f"{warning_lines}"
+        f"preload_modules = {preload_modules_json}\n"
+        "for preload_module in preload_modules:\n"
+        "    importlib.import_module(preload_module)\n"
         f"modules = {modules_json}\n"
+        "import_start = time.perf_counter()\n"
         "for module in modules:\n"
         "    importlib.import_module(module)\n"
+        "integration_import_ms = (time.perf_counter() - import_start) * 1000\n"
+        "if preload_modules:\n"
+        "    print(f'preloaded {len(preload_modules)} modules')\n"
         "print(f'imported {len(modules)} modules')\n"
+        "print(f'integration import duration ms: {integration_import_ms:.3f}')\n"
     )
 
 
@@ -67,6 +84,7 @@ def run_importtime(
     modules: Sequence[str],
     *,
     python: str = sys.executable,
+    preload_modules: Sequence[str] = (),
     strict_warnings: bool = False,
     warning_module_pattern: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
@@ -84,7 +102,11 @@ def run_importtime(
             "-X",
             "importtime=2",
             "-c",
-            build_import_runner(modules, warning_module_pattern=warning_module_pattern),
+            build_import_runner(
+                modules,
+                preload_modules=preload_modules,
+                warning_module_pattern=warning_module_pattern,
+            ),
         ],
         cwd=root,
         env=env,
@@ -103,6 +125,35 @@ def render_report(result: subprocess.CompletedProcess[str]) -> str:
     if result.stderr:
         sections.append(result.stderr.rstrip())
     return "\n\n".join(sections) + "\n"
+
+
+def render_reports(results: Sequence[subprocess.CompletedProcess[str]]) -> str:
+    """Render one or more import reports with a median duration summary."""
+    if len(results) == 1:
+        return render_report(results[0])
+    reports = [
+        f"run {index}/{len(results)}\n{render_report(result).rstrip()}"
+        for index, result in enumerate(results, start=1)
+    ]
+    durations = [
+        float(match.group("duration"))
+        for result in results
+        if (match := IMPORT_DURATION_PATTERN.search(result.stdout)) is not None
+    ]
+    if durations:
+        reports.append(
+            "median integration import duration ms: "
+            f"{statistics.median(durations):.3f}"
+        )
+    return "\n\n".join(reports) + "\n"
+
+
+def _positive_int(value: str) -> int:
+    """Return a positive integer for argparse."""
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than zero")
+    return parsed
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -137,6 +188,20 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Optional path for the combined importtime report.",
     )
     parser.add_argument(
+        "--runs",
+        type=_positive_int,
+        default=1,
+        help="Run the profile in multiple fresh processes and report median duration.",
+    )
+    parser.add_argument(
+        "--preload-home-assistant",
+        action="store_true",
+        help=(
+            "Import homeassistant.bootstrap before the integration to profile "
+            "incremental import cost in normal Home Assistant startup order."
+        ),
+    )
+    parser.add_argument(
         "--strict-integration-warnings",
         action="store_true",
         help=(
@@ -156,23 +221,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.strict_integration_warnings
         else None
     )
-    result = run_importtime(
-        root,
-        modules,
-        python=args.python,
-        strict_warnings=args.strict_integration_warnings,
-        warning_module_pattern=warning_module_pattern,
+    results = tuple(
+        run_importtime(
+            root,
+            modules,
+            python=args.python,
+            preload_modules=(
+                ("homeassistant.bootstrap",) if args.preload_home_assistant else ()
+            ),
+            strict_warnings=args.strict_integration_warnings,
+            warning_module_pattern=warning_module_pattern,
+        )
+        for _ in range(args.runs)
     )
-    report = render_report(result)
+    report = render_reports(results)
 
     if args.output:
         args.output.write_text(report, encoding="utf-8")
     else:
         print(report, end="")
 
-    if result.returncode != 0 and args.output:
+    returncode = next((result.returncode for result in results if result.returncode), 0)
+    if returncode != 0 and args.output:
         print(report, file=sys.stderr, end="")
-    return result.returncode
+    return returncode
 
 
 if __name__ == "__main__":

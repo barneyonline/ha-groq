@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import OrderedDict
 import json
+import logging
 import struct
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -303,9 +304,10 @@ async def test_get_dynamic_options_filters_discovered_models(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_async_get_tts_uses_cache_and_evicts_lru():
+async def test_async_get_tts_uses_cache_and_evicts_lru(caplog):
     session = DummyCaptureSession()
     client = GroqApiClient(DummyHass(), api_key="api-key", session=session)
+    caplog.set_level(logging.DEBUG, logger="custom_components.groq.api")
 
     first = await client.async_synthesize_speech(
         SpeechRequest(
@@ -334,6 +336,17 @@ async def test_async_get_tts_uses_cache_and_evicts_lru():
 
     assert first == cached == second
     assert len(session.calls) == 2
+    assert (
+        sum(
+            "Groq TTS API request completed" in record.message
+            for record in caplog.records
+        )
+        == 2
+    )
+    assert (
+        sum("Returning cached speech" in record.message for record in caplog.records)
+        == 1
+    )
     cache = client._speech_caches[f"{ORPHEUS_ENGLISH_MODEL}:{ORPHEUS_ENGLISH_VOICE}"]
     assert list(cache) == [
         (ORPHEUS_ENGLISH_MODEL, ORPHEUS_ENGLISH_VOICE, "wav", None, None, "new")
@@ -1384,7 +1397,7 @@ async def test_tts_long_batch_guard_blocks_eviction_misses_before_api(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_tts_long_stitching_temp_file_work_uses_executor(monkeypatch):
+async def test_tts_long_stitching_temp_file_work_uses_executor(monkeypatch, caplog):
     data = {
         "url": "http://example.com",
         "model": ORPHEUS_ENGLISH_MODEL,
@@ -1409,6 +1422,7 @@ async def test_tts_long_stitching_temp_file_work_uses_executor(monkeypatch):
 
     monkeypatch.setattr(tts.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    caplog.set_level(logging.DEBUG, logger="custom_components.groq.tts")
 
     ext, payload = await entity.async_get_tts_audio(
         f"{'A' * 198}. {'B' * 40}.",
@@ -1421,6 +1435,10 @@ async def test_tts_long_stitching_temp_file_work_uses_executor(monkeypatch):
     assert "mkdtemp" in calls
     assert "_write_audio_chunks" in calls
     assert "rmtree" in calls
+    assert "TTS synthesis chunk 1/2 completed" in caplog.text
+    assert "TTS synthesis chunk 2/2 completed" in caplog.text
+    assert "TTS synthesis phase completed: chunks=2" in caplog.text
+    assert "TTS processing completed: chunks=2" in caplog.text
 
 
 @pytest.mark.asyncio
