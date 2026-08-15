@@ -8,6 +8,7 @@ from contextlib import suppress
 from hashlib import sha256
 import json
 import logging
+import time
 from asyncio import CancelledError
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Callable, cast
@@ -671,12 +672,18 @@ class GroqApiClient:
             payload["sample_rate"] = request.sample_rate
         if request.speed is not None:
             payload["speed"] = request.speed
+        api_start = time.monotonic()
         audio = await self._request_audio(
             "POST",
             AUDIO_SPEECH_PATH,
             json_payload=payload,
             api_key=request.api_key,
             guard_key=guard_key,
+        )
+        api_duration = (time.monotonic() - api_start) * 1000
+        _LOGGER.debug(
+            "Groq TTS API request completed in %.2f ms",
+            api_duration,
         )
         if cache is not None:
             cache[cache_key] = audio

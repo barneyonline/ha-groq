@@ -732,19 +732,28 @@ class GroqTTSEntity(TextToSpeechEntity):
                 batch_guard(speech_requests)
 
             audio_chunks = []
-            api_start = time.monotonic()
-            for speech_request in speech_requests:
-                _LOGGER.debug("Creating TTS API request")
+            synthesis_start = time.monotonic()
+            chunk_count = len(speech_requests)
+            for chunk_index, speech_request in enumerate(speech_requests, start=1):
+                chunk_start = time.monotonic()
                 audio_chunks.append(
                     await self._client.async_synthesize_speech(speech_request)
                 )
-            api_duration = (time.monotonic() - api_start) * 1000
+                chunk_duration = (time.monotonic() - chunk_start) * 1000
+                _LOGGER.debug(
+                    "TTS synthesis chunk %d/%d completed in %.2f ms",
+                    chunk_index,
+                    chunk_count,
+                    chunk_duration,
+                )
+            synthesis_duration = (time.monotonic() - synthesis_start) * 1000
             _LOGGER.debug(
-                "TTS API call%s completed in %.2f ms",
-                "s" if len(audio_chunks) != 1 else "",
-                api_duration,
+                "TTS synthesis phase completed: chunks=%d duration_ms=%.2f",
+                chunk_count,
+                synthesis_duration,
             )
             audio_content = audio_chunks[0]
+            postprocess_start = time.monotonic()
             if (
                 not needs_ffmpeg
                 and output_format == ORPHEUS_RESPONSE_FORMAT
@@ -851,8 +860,16 @@ class GroqTTSEntity(TextToSpeechEntity):
                         self.hass, self._config, self._service_data
                     )
 
+            postprocess_duration = (time.monotonic() - postprocess_start) * 1000
             overall_duration = (time.monotonic() - overall_start) * 1000
-            _LOGGER.debug("Overall TTS processing time: %.2f ms", overall_duration)
+            _LOGGER.debug(
+                "TTS processing completed: chunks=%d synthesis_ms=%.2f "
+                "postprocess_ms=%.2f total_ms=%.2f",
+                chunk_count,
+                synthesis_duration,
+                postprocess_duration,
+                overall_duration,
+            )
             return output_format, audio_content
 
         except CancelledError:
