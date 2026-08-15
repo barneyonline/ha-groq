@@ -112,6 +112,11 @@ def _entry_unique_id(entry: GroqConfigEntry) -> str:
     )
 
 
+def _entry_has_update_listener(entry: GroqConfigEntry) -> bool:
+    """Return whether entry updates already schedule a reload."""
+    return bool(getattr(entry, "update_listeners", ()))
+
+
 def _api_key_validation_errors(validation_error: str | None) -> dict[str, str]:
     """Return config-flow errors for a Groq API key validation result."""
     if validation_error == "invalid_auth":
@@ -362,7 +367,12 @@ class GroqConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
 
             if not errors:
                 new_data[CONF_NAME] = new_name
-                return self.async_update_reload_and_abort(
+                update_and_abort = (
+                    self.async_update_and_abort
+                    if _entry_has_update_listener(entry)
+                    else self.async_update_reload_and_abort
+                )
+                return update_and_abort(
                     entry,
                     unique_id=unique_id,
                     title=new_name,
@@ -443,7 +453,12 @@ class GroqConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
                     new_options = dict(reauth_entry.options)
                     new_options.pop(CONF_API_KEY, None)
                     unique_id = _entry_unique_id(reauth_entry)
-                    return self.async_update_reload_and_abort(
+                    update_and_abort = (
+                        self.async_update_and_abort
+                        if _entry_has_update_listener(reauth_entry)
+                        else self.async_update_reload_and_abort
+                    )
+                    return update_and_abort(
                         reauth_entry,
                         unique_id=unique_id,
                         data=new_data,
@@ -523,7 +538,10 @@ class GroqOptionsFlow(OptionsFlow):
                         options=new_options,
                         unique_id=_entry_unique_id(current_entry),
                     )
-                    await self.hass.config_entries.async_reload(current_entry.entry_id)
+                    if not _entry_has_update_listener(current_entry):
+                        await self.hass.config_entries.async_reload(
+                            current_entry.entry_id
+                        )
                     user_input = new_options
                 return self.async_create_entry(title="", data=user_input)
         options_schema = vol.Schema(
