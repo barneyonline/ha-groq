@@ -43,6 +43,11 @@ Provided response actions:
 - `groq.clear_cache`: clear the local response cache for a Groq account.
 - `groq.list_models`: list models visible to a Groq account.
 
+Camera inputs honor the invoking Home Assistant user's entity read permissions.
+Media-source and direct local-path inputs are restricted to administrators because
+they are resolved with Home Assistant process privileges. Assist and AI Task image
+inputs accept at most four attachments with a combined 20 MB limit.
+
 The integration does not provide custom automation triggers or conditions. Use standard Home Assistant entity, event, template, and other built-in automation triggers and conditions with Groq entities and actions.
 
 Each configured Groq service creates its own Home Assistant device and the relevant entity for that platform. Text generation services can create Assist and AI Task entities. Speech-to-text and text-to-speech services create STT and TTS entities.
@@ -113,8 +118,8 @@ You can add more than one Groq account. The integration prevents adding the same
 - Service actions: provide `service_id` for Text Generation, Image Recognition, and Speech-to-Text actions so automations keep using the intended configured Groq service. Provide `config_entry_id` for account-level actions such as clearing the cache or listing models.
 - Rate-limit errors: wait for Groq's reset window, lower automation frequency, choose a smaller model, or use separate Groq projects/keys where appropriate.
 - TTS audio processing fails: install `ffmpeg` on the Home Assistant host, choose direct single-part playback without audio normalization, or disable Long TTS.
-- Local image or audio file fails: make sure the path is allowed by Home Assistant `allowlist_external_dirs`, or use a media-source file.
-- Diagnostics: download diagnostics from the integration page. API keys and prompt fields are redacted.
+- Local image or audio file fails: direct paths and media-source inputs require an administrator, and direct paths must also be allowed by Home Assistant `allowlist_external_dirs`.
+- Diagnostics: download diagnostics from the integration page. API keys, endpoint URLs, and prompt fields are redacted.
 
 ## Removal
 

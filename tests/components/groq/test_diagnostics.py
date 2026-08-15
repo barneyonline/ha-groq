@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 
@@ -11,16 +12,19 @@ from custom_components.groq.diagnostics import (
 
 
 class DummyEntry:
-    data = {
+    data: ClassVar[dict[str, object]] = {
         "api_key": "secret-key",
-        "url": "https://api.groq.com/openai/v1/audio/speech",
+        "url": "https://user:secret@example.test/openai/v1/audio/speech",
+        "base_url": "https://token@example.test/openai/v1",
         "model": "canopylabs/orpheus-v1-english",
         "voice": "autumn",
         "response_format": "wav",
         "vocal_directions": "friendly",
     }
-    options = {
+    options: ClassVar[dict[str, object]] = {
         "api_key": "option-secret",
+        "url": "https://option-secret@example.test/openai/v1/audio/speech",
+        "base_url": "https://option-token@example.test/openai/v1",
         "enabled_features": ["text_to_speech", "image_recognition"],
         "voice": "troy",
         "normalize_audio": True,
@@ -36,6 +40,10 @@ async def test_config_entry_diagnostics_redacts_api_keys() -> None:
 
     assert diagnostics["entry_data"]["api_key"] == "**REDACTED**"
     assert diagnostics["options"]["api_key"] == "**REDACTED**"
+    assert diagnostics["entry_data"]["url"] == "**REDACTED**"
+    assert diagnostics["entry_data"]["base_url"] == "**REDACTED**"
+    assert diagnostics["options"]["url"] == "**REDACTED**"
+    assert diagnostics["options"]["base_url"] == "**REDACTED**"
     assert diagnostics["summary"] == {
         "enabled_features": ["text_to_speech", "image_recognition"],
         "available_features": [
@@ -50,7 +58,6 @@ async def test_config_entry_diagnostics_redacts_api_keys() -> None:
         "services": {},
         "legacy_defaults": {
             "text_to_speech": {
-                "endpoint": "https://api.groq.com/openai/v1/audio/speech",
                 "model": "canopylabs/orpheus-v1-english",
                 "voice": "troy",
                 "response_format": "wav",

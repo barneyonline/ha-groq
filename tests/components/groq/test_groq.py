@@ -198,11 +198,20 @@ def test_api_clientsession_helper_loads_on_direct_use(monkeypatch):
     assert calls == ["load"]
 
 
+class DummyContent:
+    def __init__(self, body: bytes):
+        self.body = body
+
+    async def iter_chunked(self, _size):
+        yield self.body
+
+
 class DummyResponse:
     def __init__(self, status: int, headers: dict, body: bytes):
         self.status = status
         self.headers = headers
         self._body = body
+        self.content = DummyContent(body)
 
     async def read(self):
         return self._body

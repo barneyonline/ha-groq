@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-from collections import OrderedDict, deque
-from contextlib import suppress
-from hashlib import sha256
 import json
 import logging
 from asyncio import CancelledError
+from collections import OrderedDict, deque
+from collections.abc import AsyncIterator, Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable, cast
+from hashlib import sha256
+from typing import Any, cast
 from urllib.parse import quote, urljoin
 
 import aiohttp
@@ -40,6 +41,10 @@ TTS_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 AUDIO_REQUEST_RETRIES = 1
 AUDIO_RETRY_DELAY_SECONDS = 1
 MODEL_DETAIL_CONCURRENCY = 5
+MAX_JSON_RESPONSE_BYTES = 10 * 1024 * 1024
+MAX_STREAM_RESPONSE_BYTES = 10 * 1024 * 1024
+MAX_AUDIO_RESPONSE_BYTES = 25 * 1024 * 1024
+RESPONSE_READ_CHUNK_BYTES = 64 * 1024
 GROQ_MODEL_VERSION_HEADER = "Groq-Model-Version"
 GROQ_LATEST_MODEL_VERSION = "latest"
 RATE_LIMIT_WINDOW_SECONDS = 60
@@ -181,6 +186,65 @@ def normalize_base_url(url: str | None) -> str:
     if cleaned.endswith("/audio/speech"):
         cleaned = cleaned.removesuffix("/audio/speech")
     return cleaned
+
+
+def _ensure_response_content_length(
+    response: aiohttp.ClientResponse,
+    limit: int,
+    response_type: str,
+) -> None:
+    """Reject a response whose declared body exceeds its byte ceiling."""
+    raw_length = response.headers.get("content-length")
+    if raw_length is None:
+        return
+    try:
+        content_length = int(raw_length)
+    except ValueError:
+        return
+    if content_length > limit:
+        raise GroqResponseError(
+            f"Groq {response_type} response exceeded the {limit} byte limit"
+        )
+
+
+async def _read_limited_response(
+    response: aiohttp.ClientResponse,
+    limit: int,
+    response_type: str,
+) -> bytes:
+    """Read a provider response without buffering more than the byte ceiling."""
+    _ensure_response_content_length(response, limit, response_type)
+    buffer = bytearray()
+    async for chunk in response.content.iter_chunked(RESPONSE_READ_CHUNK_BYTES):
+        if len(buffer) + len(chunk) > limit:
+            raise GroqResponseError(
+                f"Groq {response_type} response exceeded the {limit} byte limit"
+            )
+        buffer.extend(chunk)
+    return bytes(buffer)
+
+
+async def _iter_limited_response_lines(
+    response: aiohttp.ClientResponse,
+    limit: int,
+    response_type: str,
+) -> AsyncIterator[bytes]:
+    """Yield response lines while bounding chunked and single-line streams."""
+    _ensure_response_content_length(response, limit, response_type)
+    total_bytes = 0
+    pending = bytearray()
+    async for chunk in response.content.iter_chunked(RESPONSE_READ_CHUNK_BYTES):
+        total_bytes += len(chunk)
+        if total_bytes > limit:
+            raise GroqResponseError(
+                f"Groq {response_type} exceeded the response byte limit"
+            )
+        pending.extend(chunk)
+        while (newline := pending.find(b"\n")) >= 0:
+            yield bytes(pending[: newline + 1])
+            del pending[: newline + 1]
+    if pending:
+        yield bytes(pending)
 
 
 def build_text_generation_payload(request: TextGenerationRequest) -> dict[str, Any]:
@@ -724,6 +788,7 @@ class GroqApiClient:
         request_kwargs: dict[str, Any] = {
             "headers": headers,
             "timeout": self._request_timeout,
+            "allow_redirects": False,
         }
         if json_payload is not None:
             request_kwargs["json"] = json_payload
@@ -736,10 +801,12 @@ class GroqApiClient:
                 self._url(path),
                 **request_kwargs,
             ) as response:
-                body = await response.read()
                 self._rate_limiter.update_from_headers(guard_key, response.headers)
                 if response.status in (401, 403):
                     raise self._authentication_failed()
+                body = await _read_limited_response(
+                    response, MAX_JSON_RESPONSE_BYTES, "API"
+                )
                 if response.status == 429:
                     payload = self._try_decode_json(body)
                     GroqRateLimiter.raise_for_headers(
@@ -791,12 +858,15 @@ class GroqApiClient:
                     ),
                 ),
                 timeout=self._stream_timeout,
+                allow_redirects=False,
             ) as response:
                 self._rate_limiter.update_from_headers(guard_key, response.headers)
                 if response.status in (401, 403):
                     raise self._authentication_failed()
                 if response.status < 200 or response.status >= 300:
-                    body = await response.read()
+                    body = await _read_limited_response(
+                        response, MAX_JSON_RESPONSE_BYTES, "API"
+                    )
                     payload = self._decode_json(body)
                     if response.status == 429 and isinstance(payload, dict):
                         GroqRateLimiter.raise_for_headers(response.headers, payload)
@@ -807,7 +877,9 @@ class GroqApiClient:
                     raise self._api_error(response.status, payload)
 
                 self._mark_available()
-                async for raw_line in response.content:
+                async for raw_line in _iter_limited_response_lines(
+                    response, MAX_STREAM_RESPONSE_BYTES, "stream"
+                ):
                     line = raw_line.decode("utf-8").strip()
                     if not line or not line.startswith("data:"):
                         continue
@@ -853,12 +925,15 @@ class GroqApiClient:
                     json=json_payload,
                     headers=self._headers(api_key),
                     timeout=TTS_REQUEST_TIMEOUT,
+                    allow_redirects=False,
                 ) as response:
-                    body = await response.read()
                     content_type = response.headers.get("content-type", "").lower()
                     self._rate_limiter.update_from_headers(guard_key, response.headers)
                     if response.status in (401, 403):
                         raise self._authentication_failed()
+                    body = await _read_limited_response(
+                        response, MAX_AUDIO_RESPONSE_BYTES, "audio"
+                    )
                     if response.status == 429:
                         payload = self._try_decode_json(body)
                         GroqRateLimiter.raise_for_headers(
