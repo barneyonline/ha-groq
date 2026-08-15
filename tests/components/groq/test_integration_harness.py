@@ -101,9 +101,11 @@ class DummyConfigEntry:
         self.options = options
         self.unique_id = unique_id
         self.entry_id = "entry-id"
+        self.update_listeners = []
 
     def add_update_listener(self, listener):
         self.listener = listener
+        self.update_listeners.append(listener)
         return "unsub"
 
     def async_on_unload(self, unsub):
@@ -1728,6 +1730,12 @@ async def test_integration_setup_unload_update_and_migration():
 
     assert await integration.async_setup_entry(hass, entry) is True
     assert config_entries.forwarded == [(entry, [Platform.TTS])]
+    assert entry.listener is integration._async_update_listener
+    assert entry.update_listeners == [integration._async_update_listener]
+    assert entry.unsub == "unsub"
+
+    await entry.listener(hass, entry)
+    assert config_entries.reloaded == [entry.entry_id]
 
     assert await integration.async_unload_entry(hass, entry) is True
     assert config_entries.unloaded == [(entry, [Platform.TTS])]
@@ -2720,7 +2728,7 @@ async def test_config_flow_reauth_confirm(monkeypatch):
         flow,
         "async_update_and_abort",
         lambda *args, **kwargs: pytest.fail(
-            "reauth should reload entries without a config entry update listener"
+            "reauth must reload an entry that failed before registering a listener"
         ),
     )
 
@@ -2782,12 +2790,13 @@ async def test_config_flow_reauth_confirm(monkeypatch):
 @pytest.mark.asyncio
 async def test_config_flow_reconfigure_updates_account(monkeypatch):
     entry = DummyConfigEntry({"api_key": "old", "name": "Old Groq"}, {})
+    entry.update_listeners.append(integration._async_update_listener)
     flow = config_flow.GroqConfigFlow()
     _patch_flow_common(monkeypatch, flow)
     monkeypatch.setattr(flow, "_get_reconfigure_entry", lambda: entry)
     monkeypatch.setattr(
         flow,
-        "async_update_reload_and_abort",
+        "async_update_and_abort",
         lambda entry, **kwargs: {"type": "abort", "entry": entry, **kwargs},
     )
 
@@ -2834,6 +2843,7 @@ async def test_options_flow_shows_schema_and_saves(monkeypatch):
     entry = DummyConfigEntry(
         {"api_key": "data-key", "model": ORPHEUS_ENGLISH_MODEL}, {}
     )
+    entry.update_listeners.append(integration._async_update_listener)
     flow.handler = entry.entry_id
 
     async def async_add_executor_job(func):
@@ -2869,7 +2879,6 @@ async def test_options_flow_shows_schema_and_saves(monkeypatch):
     assert updated[0][1]["data"]["api_key"] == "new-key"
     assert updated[0][1]["options"] == {}
     assert updated[0][1]["unique_id"] == entry.unique_id
-    assert reloaded == [entry.entry_id]
 
     saved_options = await flow.async_step_init({"api_key": ""})
     assert saved_options == {
@@ -2881,7 +2890,11 @@ async def test_options_flow_shows_schema_and_saves(monkeypatch):
     assert updated[1][1]["data"] == entry.data
     assert updated[1][1]["options"] == {}
     assert updated[1][1]["unique_id"] == entry.unique_id
-    assert reloaded == [entry.entry_id, entry.entry_id]
+    assert reloaded == []
+
+    entry.update_listeners.clear()
+    await flow.async_step_init({"api_key": ""})
+    assert reloaded == [entry.entry_id]
 
     async def cannot_connect(_hass, _api_key):
         return "cannot_connect"

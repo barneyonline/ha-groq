@@ -218,11 +218,13 @@ class DummyEntry:
         self.data = {"api_key": "entry-key", "name": "Groq"}
         self.options = {}
         self.subentries = {}
+        self.update_listeners = []
         self.reloads = []
         self.reauth_requests = []
 
     def add_update_listener(self, listener):
         self.listener = listener
+        self.update_listeners.append(listener)
         return "unsub"
 
     def async_on_unload(self, unsub):
@@ -2515,10 +2517,11 @@ async def test_config_flow_remaining_paths(monkeypatch):
     ] == "required"
 
     reauth_entry = DummyEntry()
+    reauth_entry.update_listeners.append(integration._async_update_listener)
     flow._reauth_entry = reauth_entry
     monkeypatch.setattr(
         flow,
-        "async_update_reload_and_abort",
+        "async_update_and_abort",
         lambda entry, **kwargs: {"entry": entry, **kwargs},
     )
     updated = await flow.async_step_reauth_confirm({CONF_API_KEY: "updated"})

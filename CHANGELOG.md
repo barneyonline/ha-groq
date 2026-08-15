@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v1.4.3 - 2026-08-15
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- Reloaded Groq automatically when service subentries are added or changed so new Assist conversation, speech-to-text, and text-to-speech entities appear immediately in voice assistant pipelines. (#41)
+
+### 🔧 Improvements
+- None
+
+### 🔄 Other changes
+- Bumped the integration manifest version to `1.4.3`.
+
 ## v1.4.2 - 2026-08-15
 
 ### 🚧 Breaking changes
