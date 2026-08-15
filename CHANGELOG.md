@@ -4,11 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v1.4.2 - 2026-08-15
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
 ### 🐛 Bug fixes
-- Enforced caller permissions for camera and local media access, bounded attachment and provider-response memory use, disabled provider redirects, and redacted endpoint URLs from diagnostics.
+- Enforced caller permissions for camera and local media access, bounded attachment and provider-response memory use, disabled provider redirects, and redacted endpoint URLs from diagnostics. (#42)
+
+### 🔧 Improvements
+- Added precise Groq TTS API, synthesis, and post-processing timings, and expanded performance tooling to measure import overhead and both steady-state and expired-history rate-limit checks. (#43)
 
 ### 🔄 Other changes
-- Pinned GitHub Actions and Home Assistant development/runtime images to immutable revisions.
+- Pinned GitHub Actions and Home Assistant development/runtime images to immutable revisions. (#42)
+- Bumped the integration manifest version to `1.4.2`.
 
 ## v1.4.1 - 2026-08-06
 
