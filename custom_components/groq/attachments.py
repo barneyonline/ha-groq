@@ -11,6 +11,8 @@ from homeassistant.core import HomeAssistant
 from .errors import translated_error
 
 MAX_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_ATTACHMENTS = 4
+MAX_IMAGE_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024
 
 
 def attachment_mime_type(attachment: Any) -> str | None:
@@ -35,7 +37,7 @@ def attachment_path(attachment: Any) -> Path | None:
     return Path(value)
 
 
-def _read_attachment_data_url(path: Path, mime_type: str) -> str:
+def _read_attachment_data_url(path: Path, mime_type: str) -> tuple[str, int]:
     """Read an attachment as a data URL for OpenAI-compatible vision input."""
     if not path.exists():
         raise translated_error(
@@ -52,8 +54,15 @@ def _read_attachment_data_url(path: Path, mime_type: str) -> str:
             "attachment_too_large",
             limit_mb=MAX_IMAGE_ATTACHMENT_BYTES // 1024 // 1024,
         )
-    data = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:{mime_type};base64,{data}"
+    content = path.read_bytes()
+    if len(content) > MAX_IMAGE_ATTACHMENT_BYTES:
+        raise translated_error(
+            "Groq image attachment exceeds the 10 MB integration limit",
+            "attachment_too_large",
+            limit_mb=MAX_IMAGE_ATTACHMENT_BYTES // 1024 // 1024,
+        )
+    data = base64.b64encode(content).decode("ascii")
+    return f"data:{mime_type};base64,{data}", len(content)
 
 
 async def async_attachment_content_parts(
@@ -67,7 +76,14 @@ async def async_attachment_content_parts(
         return None
 
     content: list[dict[str, Any]] = [{"type": "text", "text": text}]
+    total_bytes = 0
     for attachment in attachments:
+        if len(content) > MAX_IMAGE_ATTACHMENTS:
+            raise translated_error(
+                f"Groq accepts at most {MAX_IMAGE_ATTACHMENTS} image attachments",
+                "too_many_attachments",
+                limit=MAX_IMAGE_ATTACHMENTS,
+            )
         mime_type = attachment_mime_type(attachment)
         path = attachment_path(attachment)
         if mime_type is None or not mime_type.startswith("image/"):
@@ -79,11 +95,18 @@ async def async_attachment_content_parts(
                 "Groq image attachments must resolve to files",
                 "attachment_file_required",
             )
-        data_url = await hass.async_add_executor_job(
+        data_url, attachment_bytes = await hass.async_add_executor_job(
             _read_attachment_data_url,
             path,
             mime_type,
         )
+        total_bytes += attachment_bytes
+        if total_bytes > MAX_IMAGE_ATTACHMENT_TOTAL_BYTES:
+            raise translated_error(
+                "Groq image attachments exceed the combined attachment size limit",
+                "attachments_too_large",
+                limit_mb=MAX_IMAGE_ATTACHMENT_TOTAL_BYTES // 1024 // 1024,
+            )
         content.append(
             {
                 "type": "image_url",

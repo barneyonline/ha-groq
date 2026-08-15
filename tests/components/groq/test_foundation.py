@@ -80,15 +80,22 @@ from custom_components.groq.services import (
 from custom_components.groq.stt import GroqSTTEntity
 
 
+class DummyContent:
+    def __init__(self, body: bytes):
+        self.body = body
+
+    async def iter_chunked(self, _size):
+        yield self.body
+
+
 class DummyResponse:
     def __init__(self, status: int, headers: dict[str, str], payload: dict):
         self.status = status
         self.headers = headers
         self._payload = payload
+        self.content = DummyContent(json.dumps(payload).encode())
 
     async def read(self):
-        import json
-
         return json.dumps(self._payload).encode()
 
     async def __aenter__(self):

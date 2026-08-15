@@ -4,7 +4,7 @@ services:
       context: ../..
       dockerfile: devtools/docker/Dockerfile
       args:
-        HA_IMAGE: ${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.7.2}
+        HA_IMAGE: ${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.7.2@sha256:1476924357b46e80735c13e94232ba5c853cac052e9df4bb28d50fa56348097b}
         PYTHON_VERSION: ${PYTHON_VERSION:-3.14}
     volumes:
       - ../..:/workspace:delegated
@@ -15,7 +15,7 @@ services:
       - PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
 
   ha-runtime:
-    image: ghcr.io/home-assistant/home-assistant:stable
+    image: ghcr.io/home-assistant/home-assistant:stable@sha256:56690a89c79a0de98035e1719f8324a92d5859c1192ff45adb0230ea81cb42a5
     restart: unless-stopped
     ports:
       - "8123:8123"

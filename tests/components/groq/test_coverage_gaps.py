@@ -291,6 +291,8 @@ class JsonResponse:
         self.status = status
         self._payload = payload
         self.headers = headers or {"content-type": "application/json"}
+        body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+        self.content = StreamContent([body])
 
     async def read(self):
         if isinstance(self._payload, bytes):
@@ -306,7 +308,13 @@ class JsonResponse:
 
 class StreamContent:
     def __init__(self, lines):
-        self._lines = [line.encode() for line in lines]
+        self._lines = [
+            line if isinstance(line, bytes) else line.encode() for line in lines
+        ]
+
+    async def iter_chunked(self, _size):
+        for line in self._lines:
+            yield line
 
     def __aiter__(self):
         self._iter = iter(self._lines)
@@ -322,7 +330,7 @@ class StreamContent:
 class StreamResponse(JsonResponse):
     def __init__(self, status: int, lines, headers: dict[str, str] | None = None):
         super().__init__(status, {}, headers or {})
-        self.content = StreamContent(lines)
+        self.content = StreamContent([f"{line}\n" for line in lines])
 
 
 class DummySession:

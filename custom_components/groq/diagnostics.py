@@ -13,6 +13,7 @@ from homeassistant.helpers.device_registry import DeviceEntry
 
 from .const import (
     CONF_API_KEY,
+    CONF_BASE_URL,
     CONF_CACHE_SIZE,
     CONF_ENABLE_LONG_TTS,
     CONF_INCLUDE_REASONING,
@@ -43,14 +44,19 @@ from .const import (
     CONF_VOICE,
     DEFAULT_CACHE_SIZE,
     DEFAULT_RESPONSE_FORMAT,
-    DEFAULT_TTS_URL,
     FEATURE_TEXT_TO_SPEECH,
     SUPPORTED_FEATURES,
     enabled_features_from_entry,
 )
 from .types import GroqConfigEntry
 
-TO_REDACT = {CONF_API_KEY, CONF_PROMPT, CONF_SYSTEM_PROMPT}
+TO_REDACT = {
+    CONF_API_KEY,
+    CONF_BASE_URL,
+    CONF_PROMPT,
+    CONF_SYSTEM_PROMPT,
+    CONF_URL,
+}
 
 SERVICE_SUMMARY_KEYS = (
     CONF_NAME,
@@ -87,7 +93,6 @@ def _default_summary(entry: GroqConfigEntry) -> dict[str, Any]:
     """Return legacy account-level defaults without exposing generated content."""
     return {
         "text_to_speech": {
-            "endpoint": _entry_value(entry, CONF_URL, DEFAULT_TTS_URL),
             "model": _entry_value(entry, CONF_MODEL),
             "voice": _entry_value(entry, CONF_VOICE),
             "response_format": _entry_value(

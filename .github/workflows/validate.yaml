@@ -31,8 +31,8 @@ jobs:
   validate-hacs:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: HACS validation
-        uses: "hacs/action@main"
+        uses: "hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa" # main
         with:
           category: "integration"

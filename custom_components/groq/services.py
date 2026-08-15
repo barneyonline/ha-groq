@@ -2,28 +2,28 @@
 
 from __future__ import annotations
 
+import json
+import mimetypes
 from base64 import b64decode, b64encode
 from binascii import Error as BinasciiError
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from hashlib import sha256
-import json
-import mimetypes
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlparse
 
 import voluptuous as vol
-
-from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.auth.permissions.const import POLICY_READ
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
     ServiceResponse,
     SupportsResponse,
 )
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import ServiceValidationError, Unauthorized
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import service as service_helper
 from homeassistant.util.yaml.loader import load_yaml
@@ -33,6 +33,7 @@ from .api import (
     TextGenerationRequest,
     VisionRequest,
 )
+from .compound_tools import compound_builtin_tools_request_value
 from .const import (
     CONF_COMPOUND_BUILTIN_TOOLS,
     CONF_INCLUDE_REASONING,
@@ -63,17 +64,16 @@ from .const import (
     FEATURE_TEXT_GENERATION,
     UNIQUE_ID,
 )
-from .compound_tools import compound_builtin_tools_request_value
 from .errors import translated_service_error
 from .feature_registry import GroqFeature
 from .model_registry import DEFAULT_VISION_MODEL, GroqCapability, GroqModelRegistry
-from .runtime import GroqRuntimeData, async_get_runtime
 from .repairs import async_create_model_configuration_issue
+from .runtime import GroqRuntimeData, async_get_runtime
 from .subentries import service_data_for_type
 from .text_generation import (
     compound_builtin_tools_error_message,
-    request_body_options_error_message,
     request_body_compound_builtin_tools,
+    request_body_options_error_message,
     request_context_window_error,
 )
 from .types import GroqConfigEntry
@@ -695,6 +695,34 @@ def _ensure_size_limit(
     )
 
 
+async def _ensure_media_access(
+    hass: HomeAssistant,
+    call: ServiceCall,
+    *,
+    entity_id: str | None = None,
+    admin_only: bool = False,
+) -> None:
+    """Authorize user-originated access to media read with process privileges."""
+    context = getattr(call, "context", None)
+    user_id = getattr(context, "user_id", None)
+    if user_id is None:
+        # Internal Home Assistant calls have no user and retain existing behavior.
+        return
+    user = await hass.auth.async_get_user(user_id)
+    allowed = user is not None
+    if allowed and admin_only:
+        allowed = user.is_admin
+    elif allowed and entity_id is not None:
+        allowed = user.is_admin or user.permissions.check_entity(entity_id, POLICY_READ)
+    if allowed:
+        return
+    raise Unauthorized(
+        context=context,
+        entity_id=entity_id,
+        permission="admin" if admin_only else POLICY_READ,
+    )
+
+
 def _validate_image_url(image_url: str) -> str:
     """Return a supported image URL or raise a service validation error."""
     parsed = urlparse(image_url)
@@ -776,6 +804,7 @@ async def _image_from_camera_target(
         return None
     if len(camera_entities) > 1:
         raise _service_error("select_one_camera", "Select only one camera entity")
+    await _ensure_media_access(hass, call, entity_id=camera_entities[0])
     try:
         image = await camera.async_get_image(hass, camera_entities[0])
     except Exception as err:  # pylint: disable=broad-except
@@ -854,8 +883,10 @@ async def _image_url_from_call(hass: HomeAssistant, call: ServiceCall) -> str:
     if camera_image := await _image_from_camera_target(hass, call):
         return camera_image
     if image_file := call.data.get(ATTR_IMAGE_FILE):
+        await _ensure_media_access(hass, call, admin_only=True)
         return await _image_from_media_source(hass, image_file)
     if image_path := call.data.get(ATTR_IMAGE_PATH):
+        await _ensure_media_access(hass, call, admin_only=True)
         return await _image_from_local_path(hass, image_path)
     if image_url := call.data.get(ATTR_IMAGE_URL):
         return _validate_image_url(image_url)
@@ -932,8 +963,10 @@ async def _audio_from_media_source(
 async def _audio_from_call(hass: HomeAssistant, call: ServiceCall) -> tuple[bytes, str]:
     """Resolve the audio source selected for a speech-to-text action."""
     if audio_file := call.data.get(ATTR_AUDIO_FILE):
+        await _ensure_media_access(hass, call, admin_only=True)
         return await _audio_from_media_source(hass, audio_file)
     if audio_path := call.data.get(ATTR_AUDIO_PATH):
+        await _ensure_media_access(hass, call, admin_only=True)
         return await _audio_from_local_path(hass, audio_path)
     raise _service_error(
         "audio_source_required",

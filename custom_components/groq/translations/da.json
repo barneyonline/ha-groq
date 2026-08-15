@@ -393,6 +393,12 @@
         "attachment_too_large": {
             "message": "The selected image attachment exceeds the {limit_mb} MB limit"
         },
+        "too_many_attachments": {
+            "message": "Groq accepts at most {limit} image attachments"
+        },
+        "attachments_too_large": {
+            "message": "The selected image attachments exceed the combined {limit_mb} MB limit"
+        },
         "attachment_not_image": {
             "message": "Only image files can be attached to a Groq request"
         },

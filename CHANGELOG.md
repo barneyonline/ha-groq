@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### 🐛 Bug fixes
+- Enforced caller permissions for camera and local media access, bounded attachment and provider-response memory use, disabled provider redirects, and redacted endpoint URLs from diagnostics.
+
+### 🔄 Other changes
+- Pinned GitHub Actions and Home Assistant development/runtime images to immutable revisions.
+
 ## v1.4.1 - 2026-08-06
 
 ### 🚧 Breaking changes
