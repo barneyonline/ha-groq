@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import yaml
+
 REPOSITORY_ROOT = Path(__file__).parents[2]
 IMMUTABLE_ACTION = re.compile(r"^[\w.-]+/[\w.-]+(?:/[\w.-]+)?@[0-9a-f]{40}$")
 HOME_ASSISTANT_IMAGE = re.compile(
@@ -28,6 +30,42 @@ def test_github_actions_are_pinned_to_full_commit_shas() -> None:
                 mutable.append(f"{workflow.name}:{line_number}: {reference}")
 
     assert mutable == []
+
+
+def test_consolidated_checks_do_not_persist_write_credentials() -> None:
+    """Keep third-party hooks isolated from write-scoped checkout credentials."""
+    workflow = yaml.safe_load(
+        (REPOSITORY_ROOT / ".github/workflows/tests.yml").read_text()
+    )
+    checks = workflow["jobs"]["checks"]
+
+    assert checks["permissions"] == {"contents": "read"}
+
+    checkout = next(
+        step
+        for step in checks["steps"]
+        if step.get("uses", "").startswith("actions/checkout@")
+    )
+    assert checkout["with"]["persist-credentials"] is False
+
+
+def test_codecov_uploads_require_completed_pytest_step() -> None:
+    """Do not attempt uploads when an earlier consolidated check skips pytest."""
+    workflow = yaml.safe_load(
+        (REPOSITORY_ROOT / ".github/workflows/tests.yml").read_text()
+    )
+    codecov_steps = [
+        step
+        for step in workflow["jobs"]["checks"]["steps"]
+        if step.get("uses", "").startswith("codecov/codecov-action@")
+    ]
+
+    assert len(codecov_steps) == 2
+    for step in codecov_steps:
+        condition = step["if"]
+        assert "steps.pytest.outcome == 'success'" in condition
+        assert "steps.pytest.outcome == 'failure'" in condition
+        assert "always()" not in condition
 
 
 def test_home_assistant_container_defaults_are_digest_pinned() -> None:

@@ -3,8 +3,67 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
+compose_file=devtools/docker/docker-compose.yml
+project_hash=$(printf '%s\n' "$(pwd -P)" | git hash-object --stdin | cut -c1-12)
+compose_project="ha-groq-$project_hash"
+git_common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
+
+export COMPOSE_PROJECT_NAME=$compose_project
+export HA_GROQ_GIT_COMMON_DIR=$git_common_dir
+
+if [ "${1:-}" = "--stop" ]; then
+  docker compose -f "$compose_file" down --remove-orphans
+  exit 0
+fi
+
+resolved_compose_config=$(
+  HA_GROQ_TEST_ENVIRONMENT_HASH=fingerprint \
+    HA_GROQ_TEST_IMAGE=ha-groq-dev:fingerprint \
+    docker compose -f "$compose_file" config --format json ha-dev
+)
+
+environment_hash=$(
+  {
+    git hash-object \
+      .dockerignore \
+      devtools/docker/Dockerfile \
+      devtools/docker/docker-compose.yml \
+      devtools/docker/requirements-dev.txt
+    printf '%s\n' "$resolved_compose_config"
+  } | git hash-object --stdin
+)
+
+export HA_GROQ_TEST_ENVIRONMENT_HASH=$environment_hash
+export HA_GROQ_TEST_IMAGE="ha-groq-dev:$project_hash"
+
+previous_image_id=$(docker image inspect --format '{{.Id}}' "$HA_GROQ_TEST_IMAGE" 2>/dev/null || true)
+image_environment_hash=$(
+  docker image inspect \
+    --format '{{ index .Config.Labels "io.ha-groq.test-environment-hash" }}' \
+    "$HA_GROQ_TEST_IMAGE" 2>/dev/null || true
+)
+
+if [ "$image_environment_hash" != "$environment_hash" ]; then
+  docker compose -f "$compose_file" build ha-dev
+fi
+
+docker compose -f "$compose_file" up -d --no-build --remove-orphans ha-dev
+
+current_image_id=$(docker image inspect --format '{{.Id}}' "$HA_GROQ_TEST_IMAGE")
+if [ -n "$previous_image_id" ] && [ "$previous_image_id" != "$current_image_id" ]; then
+  docker image rm "$previous_image_id" >/dev/null 2>&1 || true
+fi
+
+if [ "${1:-}" = "--prepare" ]; then
+  exit 0
+fi
+
 if [ "$#" -eq 0 ]; then
   set -- python -m pytest -q
 fi
 
-docker compose -f devtools/docker/docker-compose.yml run --rm --remove-orphans --build ha-dev "$@"
+if [ -t 0 ] && [ -t 1 ]; then
+  docker compose -f "$compose_file" exec ha-dev "$@"
+else
+  docker compose -f "$compose_file" exec -T ha-dev "$@"
+fi

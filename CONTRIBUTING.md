@@ -42,7 +42,7 @@ Include the integration version, Home Assistant version, installation method, se
 docker compose -f devtools/docker/docker-compose.yml build ha-dev
 ```
 
-4. Develop and test your changes inside `ha-dev` or through the `scripts/test` wrapper.
+4. Develop and test your changes inside `ha-dev` or through the `scripts/test` wrapper. The wrapper builds the test image only when its Docker inputs change and reuses a per-worktree container between commands. Run `scripts/test --stop` when you want to remove that container.
 5. Start `ha-runtime` when you need a real Home Assistant UI for manual verification:
 
 ```bash
