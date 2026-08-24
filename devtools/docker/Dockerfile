@@ -30,6 +30,11 @@ PY
 
 RUN python -m pip install --no-cache-dir --no-compile -r requirements-dev.txt
 
-RUN git config --global --add safe.directory /workspace
+RUN git config --global --add safe.directory /workspace \
+    && git config --global --add safe.directory '/root/.cache/pre-commit/*'
+
+ARG TEST_ENVIRONMENT_HASH=manual
+
+LABEL io.ha-groq.test-environment-hash="${TEST_ENVIRONMENT_HASH}"
 
 CMD ["bash"]
