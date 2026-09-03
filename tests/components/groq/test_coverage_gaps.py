@@ -982,6 +982,80 @@ def test_selected_llm_api_narrows_framework_values() -> None:
     assert conversation_module._selected_llm_api(entry, {CONF_LLM_HASS_API: 42}) is None
 
 
+def test_openapi_serializer_matches_schema_implementation(monkeypatch) -> None:
+    """Use the serializer that matches the schema, even when both are installed."""
+    calls = []
+
+    class ProbatioSchema:
+        pass
+
+    def probatio_to_openapi(schema, *, custom_serializer=None):
+        calls.append(("probatio", schema, custom_serializer))
+        return {"serializer": "probatio"}
+
+    def voluptuous_to_openapi(schema, *, custom_serializer=None):
+        calls.append(("voluptuous", schema, custom_serializer))
+        return {"serializer": "voluptuous"}
+
+    probatio = SimpleNamespace(
+        Schema=ProbatioSchema,
+        to_openapi=probatio_to_openapi,
+    )
+    voluptuous_openapi = SimpleNamespace(convert=voluptuous_to_openapi)
+    monkeypatch.setattr(conversation_module, "_probatio", probatio)
+    monkeypatch.setattr(
+        conversation_module,
+        "_voluptuous_openapi",
+        voluptuous_openapi,
+    )
+    custom_serializer = object()
+    voluptuous_schema = vol.Schema({vol.Required("entity_id"): str})
+
+    assert conversation_module._to_openapi(
+        voluptuous_schema,
+        custom_serializer,
+    ) == {"serializer": "voluptuous"}
+    probatio_schema = ProbatioSchema()
+    assert conversation_module._to_openapi(
+        probatio_schema,
+        custom_serializer,
+    ) == {"serializer": "probatio"}
+    assert calls == [
+        ("voluptuous", voluptuous_schema, custom_serializer),
+        ("probatio", probatio_schema, custom_serializer),
+    ]
+
+    monkeypatch.setattr(conversation_module, "_voluptuous_openapi", None)
+    assert conversation_module._to_openapi({"value": str}) == {"serializer": "probatio"}
+
+    monkeypatch.setattr(conversation_module, "_probatio", None)
+    with pytest.raises(ImportError, match="No supported OpenAPI"):
+        conversation_module._to_openapi({"value": str})
+
+
+def test_optional_import_only_ignores_requested_module() -> None:
+    """Do not hide an optional package's missing transitive dependency."""
+    missing_module = ModuleNotFoundError(name="missing_module")
+    with patch.object(
+        conversation_module.importlib,
+        "import_module",
+        side_effect=missing_module,
+    ):
+        assert conversation_module._optional_import("missing_module") is None
+
+    missing_dependency = ModuleNotFoundError(name="missing_dependency")
+    with (
+        patch.object(
+            conversation_module.importlib,
+            "import_module",
+            side_effect=missing_dependency,
+        ),
+        pytest.raises(ModuleNotFoundError) as err,
+    ):
+        conversation_module._optional_import("installed_module")
+    assert err.value is missing_dependency
+
+
 @pytest.mark.asyncio
 async def test_api_client_hydrates_model_limits():
     client = GroqApiClient(

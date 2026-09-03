@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
 - None
 
 ### 🐛 Bug fixes
-- Declared the `voluptuous-openapi` runtime dependency so Groq loads correctly on Home Assistant installations that do not bundle it.
+- Restored Groq setup on Home Assistant 2026.9 by using Probatio's OpenAPI serializer, while retaining the legacy serializer as a fallback for older supported releases.
 
 ### 🔧 Improvements
 - None

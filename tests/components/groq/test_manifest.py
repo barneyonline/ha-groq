@@ -27,10 +27,7 @@ def test_manifest_metadata_is_consistent() -> None:
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["loggers"] == []
     assert manifest["quality_scale"] == "platinum"
-    assert manifest["requirements"] == [
-        "jsonschema==4.26.0",
-        "voluptuous-openapi==0.4.1",
-    ]
+    assert manifest["requirements"] == ["jsonschema==4.26.0"]
     assert "single_config_entry" not in manifest
     assert manifest["documentation"].endswith("ha-groq")
     assert manifest["issue_tracker"].endswith("ha-groq/issues")
