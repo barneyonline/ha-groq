@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 from collections.abc import AsyncIterator, Sequence
-from typing import Any
+from typing import Any, cast
 
 from homeassistant.components import conversation
 from homeassistant.components.conversation import (
@@ -18,7 +19,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers import intent, llm
-from voluptuous_openapi import convert
 
 from .api import GroqApiClient, TextGenerationRequest
 from .attachments import async_attachment_content_parts
@@ -53,9 +53,49 @@ from .text_generation import (
 )
 from .types import GroqConfigEntry
 
+
+def _optional_import(module_name: str) -> Any:
+    """Import an optional module without hiding its broken dependencies."""
+    try:
+        return importlib.import_module(module_name)
+    except ModuleNotFoundError as err:
+        if err.name != module_name:
+            raise
+        return None
+
+
+_probatio = _optional_import("probatio")
+_voluptuous_openapi = _optional_import("voluptuous_openapi")
+
 PARALLEL_UPDATES = 1
 MAX_HISTORY_MESSAGES = 12
 MAX_TOOL_ITERATIONS = 10
+
+
+def _to_openapi(
+    schema: Any,
+    custom_serializer: Any = None,
+) -> dict[str, Any]:
+    """Convert a tool schema with its matching Home Assistant serializer."""
+    if _probatio is not None and (
+        _voluptuous_openapi is None or isinstance(schema, _probatio.Schema)
+    ):
+        return cast(
+            dict[str, Any],
+            _probatio.to_openapi(
+                schema,
+                custom_serializer=custom_serializer,
+            ),
+        )
+    if _voluptuous_openapi is not None:
+        return cast(
+            dict[str, Any],
+            _voluptuous_openapi.convert(
+                schema,
+                custom_serializer=custom_serializer,
+            ),
+        )
+    raise ImportError("No supported OpenAPI schema serializer is available")
 
 
 def _selected_llm_api(
@@ -372,7 +412,7 @@ def _format_tool(tool: llm.Tool, custom_serializer: Any = None) -> dict[str, Any
     """Return an OpenAI-compatible function tool definition."""
     function: dict[str, Any] = {
         "name": tool.name,
-        "parameters": convert(
+        "parameters": _to_openapi(
             tool.parameters,
             custom_serializer=custom_serializer,
         ),

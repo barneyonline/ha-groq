@@ -2,7 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v1.4.4 - 2026-09-03
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- Restored Groq setup on Home Assistant 2026.9 by using Probatio's OpenAPI serializer, while retaining the legacy serializer as a fallback for older supported releases.
+
+### 🔧 Improvements
+- None
+
+### 🔄 Other changes
+- Bumped the integration manifest version to `1.4.4`.
 
 ## v1.4.3 - 2026-08-15
 

@@ -66,7 +66,7 @@ rules:
         - README.md
   dependency-transparency:
     status: done
-    comment: The jsonschema dependency is declared and pinned in the manifest; HTTP I/O uses Home Assistant aiohttp sessions rather than an undeclared API client.
+    comment: The jsonschema dependency is declared and pinned in the manifest; OpenAPI serialization uses the package bundled by each supported Home Assistant release, and HTTP I/O uses Home Assistant aiohttp sessions rather than an undeclared API client.
     requirements:
       - jsonschema==4.26.0
     references:
