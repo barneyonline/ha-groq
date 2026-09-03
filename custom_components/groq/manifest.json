@@ -21,7 +21,8 @@
   "loggers": [],
   "quality_scale": "platinum",
   "requirements": [
-    "jsonschema==4.26.0"
+    "jsonschema==4.26.0",
+    "voluptuous-openapi==0.4.1"
   ],
-  "version": "1.4.3"
+  "version": "1.4.4"
 }

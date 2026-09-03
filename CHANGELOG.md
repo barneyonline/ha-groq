@@ -2,7 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v1.4.4 - 2026-09-03
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- Declared the `voluptuous-openapi` runtime dependency so Groq loads correctly on Home Assistant installations that do not bundle it.
+
+### 🔧 Improvements
+- None
+
+### 🔄 Other changes
+- Bumped the integration manifest version to `1.4.4`.
 
 ## v1.4.3 - 2026-08-15
 
