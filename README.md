@@ -32,6 +32,7 @@ Supported Home Assistant platforms:
 - `ai_task`: data generation tasks for services and automations that need structured output.
 - `stt`: speech-to-text entities for Home Assistant voice pipelines.
 - `tts`: text-to-speech entities for `tts.speak`.
+- `sensor`: optional usage diagnostics on Text Generation and Image Recognition devices.
 
 Provided response actions:
 
@@ -39,7 +40,8 @@ Provided response actions:
 - `groq.generate_structured`: generate JSON or schema-shaped output.
 - `groq.analyze_image`: ask a question about a camera image, media image, local image, or image URL.
 - `groq.extract_text_from_image`: OCR-style text extraction from an image.
-- `groq.transcribe_audio`: transcribe a local or media-source audio file.
+- `groq.transcribe_audio`: transcribe a local or media-source audio file, optionally returning timestamps and speech-quality metadata.
+- `groq.translate_audio`: translate recorded speech into English using Whisper Large V3.
 - `groq.clear_cache`: clear the local response cache for a Groq account.
 - `groq.list_models`: list models visible to a Groq account.
 
@@ -102,6 +104,79 @@ Explicit action arguments override service defaults; omitted structured-output f
 Compound built-in tools are opt-in. For `groq/compound` and `groq/compound-mini`, the integration sends an explicit empty built-in tool allow-list unless you enable tools such as web search, visit website, browser automation, code execution, or Wolfram Alpha in the service's additional options. Enabling these tools allows Groq to run server-side tools and inspect external content for the request.
 
 You can add more than one Groq account. The integration prevents adding the same API key twice.
+
+## Speech transcription and translation
+
+Existing `groq.transcribe_audio` calls keep their text response. Select
+`response_format: verbose_json` to also return the provider's detected language,
+duration, segments, and words when supplied. `timestamp_granularities` accepts
+`word`, `segment`, or both and requires `verbose_json`. Segment metadata includes
+`avg_logprob`, `compression_ratio`, and `no_speech_prob`; these are diagnostic
+indicators, not guarantees of recognition accuracy. The Assist STT pipeline
+continues to receive plain text.
+
+```yaml
+action: groq.transcribe_audio
+data:
+  service_id: YOUR_STT_SERVICE_ID
+  audio_path: /config/www/recording.wav
+  response_format: verbose_json
+  timestamp_granularities:
+    - word
+    - segment
+response_variable: transcript
+```
+
+`groq.translate_audio` uses the selected STT service's account and rate-limit
+protection but defaults to `whisper-large-v3`, even when that service normally uses
+Turbo. Translation produces English text only; it does not accept a language
+selector or timestamp options. Both audio actions retain the existing administrator
+and allowed-path restrictions and 25 MiB local upload ceiling.
+
+```yaml
+action: groq.translate_audio
+data:
+  service_id: YOUR_STT_SERVICE_ID
+  audio_path: /config/www/recording.wav
+response_variable: translation
+```
+
+## Usage sensors
+
+Text Generation and Image Recognition devices have seven diagnostic sensors,
+disabled by default. Enable the ones you want from the device's entity list:
+successful generation requests, last input/output/total tokens, last cached input
+tokens, last response time, and last provider cache hit rate.
+
+Measurements cover only completed generation requests made by this integration,
+including Assist tool rounds, AI Tasks, and image actions. They do not represent
+organization-wide usage, billed cost, or STT/TTS usage. Local response-cache hits
+make no request and do not increment the counter. Groq provider cache hits still
+count as requests. Counters reset on integration reload or Home Assistant restart;
+missing provider measurements remain unknown. Updates are pushed without polling
+or extra API calls, and sensors retain no prompts, responses, or source URLs.
+
+## Streaming and browser search
+
+Streaming Assist now works with Home Assistant tools enabled. Text arrives while
+Groq generates it; local tool calls execute only after the full response has
+arrived and the complete arguments and exposed tool names have been validated.
+Cancelled, malformed, and incomplete tool streams do not execute pending calls.
+The existing maximum number of tool rounds still applies.
+
+For GPT-OSS 20B, 120B, and Safeguard 20B, enable **Browser search** in a Text
+Generation service's additional options. It is off by default. `groq.generate_text`
+also accepts a `browser_search` boolean to override the service default. Browser
+search can coexist with exposed HA tools on compatible models, but cannot be used
+with structured output or a structured AI Task. Searches bypass the local response
+cache. Groq may charge for server-side tools and browsing can increase latency.
+
+Text action responses include `citations`, a list of `{url, title}` source objects
+when Groq supplies annotations or search results. The same sources are retained
+in Assist conversation trace metadata, including streamed responses. Source URLs
+are not added to spoken replies. Existing Compound web search remains available;
+its `search_settings` domain filters can still be supplied through additional
+request body options.
 
 ## Known Limitations
 

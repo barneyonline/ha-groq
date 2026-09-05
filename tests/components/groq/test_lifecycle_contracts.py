@@ -415,7 +415,7 @@ async def test_loaded_subentry_update_reloads_once_and_retains_ownership(hass):
             entity.entity_id
             for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         }
-        assert len(initial) == 2
+        assert len(initial) == 9
         assert all(
             entity.config_subentry_id == "text-service"
             for entity in er.async_entries_for_config_entry(registry, entry.entry_id)

@@ -40,14 +40,14 @@ FEATURE_DESCRIPTORS: dict[GroqFeature, GroqFeatureDescriptor] = {
     GroqFeature.TEXT_GENERATION: GroqFeatureDescriptor(
         feature=GroqFeature.TEXT_GENERATION,
         name="Text generation",
-        platforms=frozenset({Platform.CONVERSATION, Platform.AI_TASK}),
+        platforms=frozenset({Platform.CONVERSATION, Platform.AI_TASK, Platform.SENSOR}),
         services=frozenset({"generate_text", "generate_structured"}),
     ),
     GroqFeature.SPEECH_TO_TEXT: GroqFeatureDescriptor(
         feature=GroqFeature.SPEECH_TO_TEXT,
         name="Speech to text",
         platforms=frozenset({Platform.STT}),
-        services=frozenset({"transcribe_audio"}),
+        services=frozenset({"transcribe_audio", "translate_audio"}),
     ),
     GroqFeature.TEXT_TO_SPEECH: GroqFeatureDescriptor(
         feature=GroqFeature.TEXT_TO_SPEECH,
@@ -58,7 +58,7 @@ FEATURE_DESCRIPTORS: dict[GroqFeature, GroqFeatureDescriptor] = {
     GroqFeature.VISION: GroqFeatureDescriptor(
         feature=GroqFeature.VISION,
         name="Image recognition",
-        platforms=frozenset(),
+        platforms=frozenset({Platform.SENSOR}),
         services=frozenset({"analyze_image", "extract_text_from_image"}),
     ),
     GroqFeature.OCR: GroqFeatureDescriptor(

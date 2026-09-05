@@ -4,7 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### New features
+- Add optional transcription timestamps and speech-quality metadata, plus a separate English audio translation action using Whisper Large V3.
+- Add disabled-by-default diagnostic sensors for generation request counts, token usage, response time, and provider cache hits.
+- Stream Assist responses with Home Assistant tools enabled, validating complete calls before execution.
+- Add opt-in GPT-OSS browser search and normalized source citations in text actions and Assist traces.
+
 ### Bug fixes
+- Accept nullable streamed tool fragments, retain browser source URLs and Compound usage breakdowns, and report invalid request-body values in the configuration form.
 - Preserve credentials and advanced options when saving account/service forms, honor cleared Assist control, and migrate immutable HA entry data correctly.
 - Respect active/discovered models, per-service cache opt-outs, explicit reasoning overrides and configured structured-output defaults.
 - Validate all structured results and tool arguments; retain HA context consistently across AI Task paths and avoid loading discarded historic attachments.

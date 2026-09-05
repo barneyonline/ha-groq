@@ -3146,7 +3146,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
 
     await async_register_services(hass)
     await async_register_services(hass)
-    assert len(hass.services.registered) == 7
+    assert len(hass.services.registered) == 8
     await async_unregister_services(hass)
     assert {service for _, service in hass.services.removed} == {
         SERVICE_GENERATE_TEXT,
@@ -3156,6 +3156,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
         SERVICE_TRANSCRIBE_AUDIO,
         SERVICE_CLEAR_CACHE,
         SERVICE_LIST_MODELS,
+        "translate_audio",
     }
     await async_unregister_services(hass)
 

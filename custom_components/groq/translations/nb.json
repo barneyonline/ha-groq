@@ -54,6 +54,7 @@
             "unsupported_reasoning_model": "Den valgte modellen støtter ikke resonnementalternativer.",
             "unsupported_prompt_caching_model": "Den valgte modellen støtter ikke lokal responsbufring.",
             "unsupported_structured_outputs_model": "Den valgte modellen støtter ikke strukturerte utdata.",
+            "invalid_request_body_options": "Additional request body options must be a JSON object.",
             "reserved_request_body_option": "Ytterligere forespørselstekstalternativer kan ikke overstyre modell, meldinger eller strøm. Bruk de dedikerte feltene i stedet.",
             "max_completion_tokens_exceeded": "Den valgte modellen støtter ikke så mange maks fullføringssymboler.",
             "invalid_voice": "Den valgte stemmen er ikke tilgjengelig for den valgte modellen.",
@@ -64,7 +65,9 @@
             "ffmpeg_required": "Installer ffmpeg for å aktivere dette alternativet.",
             "unsupported_tool_calling_model": "The selected model is not known to support Home Assistant tool calls.",
             "unsupported_compound_builtin_tools_model": "Compound built-in tools are only supported by Groq Compound models.",
-            "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool."
+            "invalid_compound_builtin_tools": "One or more selected Compound built-in tools are unsupported or require another selected tool.",
+            "unsupported_browser_search_model": "Browser search requires a supported GPT-OSS model.",
+            "browser_search_structured_output": "Browser search cannot be combined with structured output."
         }
     },
     "options": {
@@ -133,7 +136,8 @@
                         "schema_name": "Skjemanavn",
                         "schema": "JSON schema",
                         "strict": "Strengt skjemamodus",
-                        "request_body_options": "Ytterligere forespørselstekstalternativer"
+                        "request_body_options": "Ytterligere forespørselstekstalternativer",
+                        "browser_search": "Browser search"
                     },
                     "data_description": {
                         "max_tokens": "Begrenser antall tokens Groq kan generere i svaret.",
@@ -151,7 +155,8 @@
                         "schema_name": "En kort identifikator sendt til Groq med skjemaet.",
                         "schema": "JSON Schema objekt sendt som response_format.json_schema.schema.",
                         "strict": "Bruker Groq begrenset dekoding når den valgte modellen støtter strenge strukturerte utdata.",
-                        "request_body_options": "JSON-objektet slått sammen med forespørselsteksten for chatfullføring. Bruk dette feltet for hvert Groq chat-opprett kroppsalternativ som ikke vises som et dedikert felt, inkludert citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user."
+                        "request_body_options": "JSON-objektet slått sammen med forespørselsteksten for chatfullføring. Bruk dette feltet for hvert Groq chat-opprett kroppsalternativ som ikke vises som et dedikert felt, inkludert citation_options, compound_custom, disable_tool_validation, documents, exclude_domains, frequency_penalty, function_call, functions, include_domains, logit_bias, logprobs, max_tokens, metadata, n, parallel_tool_calls, presence_penalty, response_format, search_settings, store, stream_options, tool_choice, tools, top_logprobs, and user.",
+                        "browser_search": "Allow GPT-OSS to search and browse public websites. Cannot be used with structured output. Search requests bypass the local response cache."
                     }
                 }
             }
@@ -275,6 +280,29 @@
         "tts": {
             "text_to_speech": {
                 "name": "Tekst-til-tale"
+            }
+        },
+        "sensor": {
+            "requests": {
+                "name": "Successful generation requests"
+            },
+            "prompt_tokens": {
+                "name": "Last input tokens"
+            },
+            "completion_tokens": {
+                "name": "Last output tokens"
+            },
+            "total_tokens": {
+                "name": "Last total tokens"
+            },
+            "cached_tokens": {
+                "name": "Last cached input tokens"
+            },
+            "response_time": {
+                "name": "Last response time"
+            },
+            "cache_hit_rate": {
+                "name": "Last provider cache hit rate"
             }
         }
     },
@@ -517,6 +545,10 @@
                 "strict": {
                     "name": "Strict Schema Mode",
                     "description": "Use Groq constrained decoding when the selected model supports strict structured outputs."
+                },
+                "browser_search": {
+                    "name": "Browser search",
+                    "description": "Override the service browser search setting. Only supported GPT-OSS models without structured output can use it."
                 }
             }
         },
@@ -595,6 +627,10 @@
                 "request_body_options": {
                     "name": "Additional Request Body Options",
                     "description": "Free-form Groq chat-create request options not exposed above, such as metadata, tools, tool_choice, parallel_tool_calls, or citation_options. This is an object because Groq accepts nested option data."
+                },
+                "browser_search": {
+                    "name": "Browser search",
+                    "description": "Override the service browser search setting. Only supported GPT-OSS models without structured output can use it."
                 }
             }
         },
@@ -705,6 +741,14 @@
                 "prompt": {
                     "name": "Prompt",
                     "description": "Optional context or spelling hints for the transcription."
+                },
+                "response_format": {
+                    "name": "Response format",
+                    "description": "JSON returns text. Verbose JSON also returns timing and speech-quality metadata."
+                },
+                "timestamp_granularities": {
+                    "name": "Timestamps",
+                    "description": "Select word and/or segment timestamps. Requires verbose JSON."
                 }
             }
         },
@@ -729,6 +773,36 @@
                 "refresh": {
                     "name": "Refresh From Groq",
                     "description": "Query Groq before returning the model list."
+                }
+            }
+        },
+        "translate_audio": {
+            "name": "Translate Audio",
+            "description": "Translate speech into English using Whisper Large V3. Uses the selected Speech-to-Text service account and rate-limit protection.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Groq Account",
+                    "description": "Groq account to use. Leave empty when only one Groq account is configured."
+                },
+                "service_id": {
+                    "name": "Groq Service",
+                    "description": "Configured Speech-to-Text service to use. Home Assistant fills this dropdown from loaded Groq services when the integration is running."
+                },
+                "audio_file": {
+                    "name": "Audio File",
+                    "description": "Choose an audio file from Home Assistant media. Leave empty when using a local audio path."
+                },
+                "audio_path": {
+                    "name": "Local Audio Path",
+                    "description": "Optional local audio path. The path must be allowed in Home Assistant's allowlist_external_dirs. Leave empty when using a media audio file."
+                },
+                "model": {
+                    "name": "Model",
+                    "description": "Translation uses whisper-large-v3, even if the selected service uses Turbo. Other models are not supported."
+                },
+                "prompt": {
+                    "name": "Prompt",
+                    "description": "Optional context or spelling hints for the transcription."
                 }
             }
         }
