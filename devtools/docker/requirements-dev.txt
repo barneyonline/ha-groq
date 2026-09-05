@@ -6,7 +6,7 @@ pytest-cov
 PyYAML
 mypy==2.3.1
 ruff==0.6.9
-black==25.9.0
+black==26.3.1
 freezegun
 pre-commit
 jsonschema==4.26.0
