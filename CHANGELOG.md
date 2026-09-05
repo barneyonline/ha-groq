@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v2.0.0 - 2026-09-05
+
 ### New features
 - Add optional transcription timestamps and speech-quality metadata, plus a separate English audio translation action using Whisper Large V3.
 - Add disabled-by-default diagnostic sensors for generation request counts, token usage, response time, and provider cache hits.
@@ -24,6 +26,9 @@ All notable changes to this project will be documented in this file.
 - Consolidate chat, schema, request-option and media helpers and remove redundant production code and obsolete tests.
 - Add real HA lifecycle, flow, registry, service and ChatLog regressions; verify both HA 2026.6.0 and 2026.9.0 with matched dependencies.
 - Check strict typing against installed HA source and provide deterministic runtime/performance measurements and current architecture documentation.
+
+### Other changes
+- Bumped the integration manifest version to `2.0.0`.
 
 ## v1.4.4 - 2026-09-03
 
