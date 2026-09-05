@@ -490,6 +490,96 @@ async def test_speech_cache_global_budget_and_credential_namespaces(monkeypatch)
     assert client._speech_cache_bytes == 0
 
 
+def test_credential_cache_identity_is_stable_only_within_one_client():
+    first = GroqApiClient(Hass(), api_key="account-key")
+    second = GroqApiClient(Hass(), api_key="account-key")
+    request = SpeechRequest(
+        text="hello",
+        model="custom",
+        voice="v",
+        service_id="same-service",
+        api_key="override-key",
+    )
+    namespace = first._speech_namespace(request)
+    assert namespace == first._speech_namespace(request)
+    assert namespace != second._speech_namespace(request)
+    assert "override-key" not in namespace
+
+
+@pytest.mark.asyncio
+async def test_speech_cache_isolates_credentials_within_the_same_service():
+    client = GroqApiClient(Hass(), api_key="account-key")
+    with patch.object(
+        client,
+        "_request_audio",
+        side_effect=[
+            b"first",
+            b"second",
+            b"default",
+            b"explicit-account",
+            b"other-service",
+        ],
+    ) as upstream:
+        for service_id, credential, expected in (
+            ("same-service", "first-key", b"first"),
+            ("same-service", "second-key", b"second"),
+            ("same-service", None, b"default"),
+            ("same-service", "", b"default"),
+            ("same-service", "account-key", b"explicit-account"),
+            ("other-service", "first-key", b"other-service"),
+        ):
+            request = SpeechRequest(
+                text="hello",
+                model="custom",
+                voice="v",
+                service_id=service_id,
+                api_key=credential,
+            )
+            assert await client.async_synthesize_speech(request) == expected
+            assert await client.async_synthesize_speech(request) == expected
+    assert [call.kwargs["api_key"] for call in upstream.call_args_list] == [
+        "first-key",
+        "second-key",
+        None,
+        "account-key",
+        "first-key",
+    ]
+    assert len(client._speech_caches) == 5
+    assert all(
+        "first-key" not in key and "second-key" not in key
+        for key in client._speech_caches
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_preflight_uses_the_synthesis_credential_namespace():
+    client = GroqApiClient(Hass(), api_key="account-key")
+    requests = [
+        SpeechRequest(
+            text="hello",
+            model="custom",
+            voice="v",
+            service_id="same-service",
+            api_key=key,
+        )
+        for key in ("first-key", "second-key")
+    ]
+    limits = {
+        "requests_per_minute": 1,
+        "requests_per_day": 100,
+        "tokens_per_minute": 1000,
+        "tokens_per_day": 1000,
+    }
+    with (
+        patch.object(client, "_free_tier_limits", return_value=limits),
+        patch.object(client, "_request_audio", return_value=b"audio"),
+    ):
+        assert await client.async_synthesize_speech(requests[0]) == b"audio"
+        assert client.check_tts_batch([requests[0]]) == [5]
+        with pytest.raises(GroqApiError, match="batch usage"):
+            client.check_tts_batch([requests[1]])
+
+
 @pytest.mark.asyncio
 async def test_new_speech_request_waits_for_cancelled_flight_cleanup():
     started, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
@@ -526,14 +616,19 @@ async def test_new_speech_request_waits_for_cancelled_flight_cleanup():
 
 
 @pytest.mark.asyncio
-async def test_failed_speech_does_not_retain_empty_cache_namespaces():
+@pytest.mark.parametrize("api_key", [None, "override-key"])
+async def test_failed_speech_does_not_retain_empty_cache_namespaces(api_key):
     client = GroqApiClient(Hass(), api_key="key")
     with patch.object(client, "_request_audio", side_effect=GroqApiError("offline")):
         for index in range(20):
             with pytest.raises(GroqApiError):
                 await client.async_synthesize_speech(
                     SpeechRequest(
-                        text="hello", model="custom", voice="v", service_id=str(index)
+                        text="hello",
+                        model="custom",
+                        voice="v",
+                        service_id=str(index),
+                        api_key=api_key,
                     )
                 )
     assert not client._speech_caches

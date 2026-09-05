@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Prevent nested cached-response mutation and clean up audio resources even when cancellation interrupts file preparation.
 
 ### Improvements
+- Scope speech-cache credential fingerprints to each client with a random-key HMAC while preserving credential isolation and cache reuse.
 - Bound cache content, media reads and ffmpeg output; share identical concurrent speech requests with cancellation and unload ownership.
 - Consolidate chat, schema, request-option and media helpers and remove redundant production code and obsolete tests.
 - Add real HA lifecycle, flow, registry, service and ChatLog regressions; verify both HA 2026.6.0 and 2026.9.0 with matched dependencies.

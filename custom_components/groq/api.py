@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import time
@@ -12,6 +13,7 @@ from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from hashlib import sha256
+from secrets import token_bytes
 from typing import Any, cast
 from urllib.parse import quote, urljoin
 
@@ -508,6 +510,7 @@ class GroqApiClient:
             OrderedDict()
         )
         self._speech_cache_bytes = 0
+        self._speech_namespace_key = token_bytes(32)
         self._speech_inflight: dict[SpeechRequest, _SpeechFlight] = {}
         self._speech_slots = asyncio.Semaphore(MAX_SPEECH_INFLIGHT)
 
@@ -845,12 +848,18 @@ class GroqApiClient:
             self._store_speech(request, cache_key, audio)
         return audio
 
-    @staticmethod
-    def _speech_namespace(request: SpeechRequest) -> str:
+    def _speech_namespace(self, request: SpeechRequest) -> str:
         """Keep service and explicit credential overrides in separate caches."""
         namespace = request.service_id or f"{request.model}:{request.voice}"
         if request.api_key:
-            namespace += ":" + sha256(request.api_key.encode()).hexdigest()
+            # Cache identity is private to this client, not a password verifier
+            # or a reusable fingerprint of the bearer credential.
+            namespace += (
+                ":"
+                + hmac.digest(
+                    self._speech_namespace_key, request.api_key.encode(), "sha256"
+                ).hex()
+            )
         return namespace
 
     def _evict_speech(self, namespace: str, key: SpeechCacheKey) -> None:
