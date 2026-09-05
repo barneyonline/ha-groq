@@ -510,7 +510,7 @@ class GroqApiClient:
             OrderedDict()
         )
         self._speech_cache_bytes = 0
-        self._speech_namespace_key = token_bytes(32)
+        self._speech_namespace_context = token_bytes(32)
         self._speech_inflight: dict[SpeechRequest, _SpeechFlight] = {}
         self._speech_slots = asyncio.Semaphore(MAX_SPEECH_INFLIGHT)
 
@@ -853,11 +853,13 @@ class GroqApiClient:
         namespace = request.service_id or f"{request.model}:{request.voice}"
         if request.api_key:
             # Cache identity is private to this client, not a password verifier
-            # or a reusable fingerprint of the bearer credential.
+            # or a reusable fingerprint of the bearer credential. Hex encoding
+            # prevents HMAC key padding from aliasing keys with trailing NULs.
+            credential_key = request.api_key.encode().hex().encode("ascii")
             namespace += (
                 ":"
                 + hmac.digest(
-                    self._speech_namespace_key, request.api_key.encode(), "sha256"
+                    credential_key, self._speech_namespace_context, "sha256"
                 ).hex()
             )
         return namespace

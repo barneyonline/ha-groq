@@ -172,9 +172,12 @@ partitions an in-memory speech cache; it is not a password verifier or persisted
 credential store. A globally stable credential fingerprint was nevertheless
 unnecessary for that client-private state.
 
-`GroqApiClient` now generates a random 32-byte key once per client and uses
+`GroqApiClient` now generates a random 32-byte context once per client and uses
 [HMAC-SHA256](https://docs.python.org/3/library/hmac.html) for explicit credential
-namespace suffixes. All cache lookups, writes, eviction accounting, and batch
+namespace suffixes. The bearer credential supplies the HMAC key; the random context
+is its message. Hex encoding preserves exact credential identity even for strings
+that differ only by trailing NUL bytes, which plain HMAC key padding could alias.
+All cache lookups, writes, eviction accounting, and batch
 preflight use the same helper. Namespace length, service separation, ordinary cache
 reuse, and `None`/empty-key fallback behavior are preserved. Authentication headers
 and in-flight cancellation identity are unchanged. No CodeQL rule is disabled or
@@ -187,10 +190,10 @@ fallback and explicit-account credentials, verify service separation and cached 
 preflight under exhausted quota, and cover failed synthesis with a credential override.
 An independent read-only candidate review found no concrete bypass or regression.
 
-Local verification after this follow-up: 478 tests pass with 100% statement coverage
-across 4,472 statements; all 93 transport regressions pass on both HA versions;
+Local verification after this follow-up: 480 tests pass with 100% statement coverage
+across 4,473 statements; all 95 transport regressions pass on both HA versions;
 strict typing checks all 28 modules. The full pre-commit, quality, and integration
-import-warning checks pass. The changed `api.py` has 825 statements at 100% coverage
+import-warning checks pass. The changed `api.py` has 826 statements at 100% coverage
 in the independent component-only run. The original CodeQL annotation must be checked
 again against the pushed commit in GitHub; local tests do not substitute for that check.
 

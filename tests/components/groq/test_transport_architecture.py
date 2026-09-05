@@ -506,6 +506,27 @@ def test_credential_cache_identity_is_stable_only_within_one_client():
     assert "override-key" not in namespace
 
 
+@pytest.mark.parametrize(
+    "first_key,second_key",
+    [("override-key", "override-key\0"), ("\u00e9", "e\u0301")],
+)
+def test_credential_cache_identity_preserves_exact_key_bytes(first_key, second_key):
+    client = GroqApiClient(Hass(), api_key="account-key")
+    requests = [
+        SpeechRequest(
+            text="hello",
+            model="custom",
+            voice="v",
+            service_id="same-service",
+            api_key=key,
+        )
+        for key in (first_key, second_key)
+    ]
+    assert client._speech_namespace(requests[0]) != client._speech_namespace(
+        requests[1]
+    )
+
+
 @pytest.mark.asyncio
 async def test_speech_cache_isolates_credentials_within_the_same_service():
     client = GroqApiClient(Hass(), api_key="account-key")
