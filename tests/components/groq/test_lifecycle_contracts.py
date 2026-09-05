@@ -1,23 +1,32 @@
 """Regression tests across real Home Assistant configuration and registry boundaries."""
 
+from copy import deepcopy
+from datetime import timedelta
 from types import MappingProxyType
 from unittest.mock import patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.data_entry_flow import InvalidData
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
-from custom_components.groq import async_migrate_entry
+from custom_components.groq import async_migrate_entry, async_unload_entry
+from custom_components.groq.api import SpeechRequest, TextGenerationRequest
 from custom_components.groq.config_flow import (
     GroqServiceSubentryFlow,
     async_get_model_registry,
 )
 from custom_components.groq.const import enabled_features_from_entry
 from custom_components.groq.diagnostics import async_get_config_entry_diagnostics
+from custom_components.groq.errors import GroqApiError
 from custom_components.groq.feature_registry import GroqFeature
 from custom_components.groq.model_registry import (
     BUILT_IN_MODELS,
@@ -34,6 +43,8 @@ from custom_components.groq.repairs import (
     async_reconcile_entry_issues,
 )
 from custom_components.groq.subentries import service_data_for_type
+
+from .test_foundation import DummyResponse
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -88,6 +99,171 @@ def own_issues(hass):
         for key, value in ir.async_get(hass).issues.items()
         if key[0] == "groq"
     }
+
+
+class LifecycleSession:
+    """Keep HA lifecycle machinery real while controlling provider responses."""
+
+    def __init__(self):
+        self.offline = False
+        self.revoked = set()
+        self.requests = []
+
+    def request(self, method, url, **kwargs):
+        self.requests.append((url, kwargs))
+        credential = kwargs["headers"].get("Authorization")
+        if credential in self.revoked:
+            return DummyResponse(401, {}, {})
+        if self.offline:
+            return DummyResponse(503, {}, {})
+        if url.endswith("/models"):
+            return DummyResponse(
+                200, {}, {"data": [{"id": model} for model in BUILT_IN_MODELS]}
+            )
+        return DummyResponse(
+            200, {}, {"choices": [{"message": {"content": "Available"}}]}
+        )
+
+
+async def test_setup_retry_recovers_through_home_assistant(hass):
+    entry = account(hass, services=[text_service()])
+    session = LifecycleSession()
+    session.offline = True
+    with patch(
+        "custom_components.groq.api.async_get_clientsession", return_value=session
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        assert entry.state is ConfigEntryState.SETUP_RETRY
+        assert not entry.update_listeners
+        assert not er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        assert not hass.config_entries.flow.async_progress()
+        session.offline = False
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=1))
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert entry.state is ConfigEntryState.LOADED
+        assert len(entry.update_listeners) == 1
+        assert (
+            len(er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id))
+            == 2
+        )
+        response = await entry.runtime_data.client.async_generate_text(
+            TextGenerationRequest(prompt="Hello", model=TEXT_MODEL)
+        )
+        assert response.text == "Available"
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_failed_platform_unload_preserves_runtime_and_descriptions(hass):
+    from homeassistant.helpers.service import SERVICE_DESCRIPTION_CACHE
+
+    entry = account(hass, services=[text_service()])
+    session = LifecycleSession()
+    with patch(
+        "custom_components.groq.api.async_get_clientsession", return_value=session
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        runtime = entry.runtime_data
+        descriptions = deepcopy(hass.data[SERVICE_DESCRIPTION_CACHE])
+        with (
+            patch.object(
+                hass.config_entries, "async_unload_platforms", return_value=False
+            ),
+            patch.object(
+                runtime.client, "async_shutdown", wraps=runtime.client.async_shutdown
+            ) as shutdown,
+        ):
+            assert not await async_unload_entry(hass, entry)
+            shutdown.assert_not_awaited()
+        assert entry.runtime_data is runtime
+        assert hass.data[SERVICE_DESCRIPTION_CACHE] == descriptions
+        assert (
+            await runtime.client.async_generate_text(
+                TextGenerationRequest(prompt="Hello", model=TEXT_MODEL)
+            )
+        ).text == "Available"
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        assert not entry.update_listeners
+
+
+async def test_runtime_reauth_reloads_only_affected_account(hass):
+    first_service = text_service()
+    second_service = text_service()
+    second_service["subentry_id"] = "other-text-service"
+    first = account(hass, services=[first_service])
+    second = account(
+        hass,
+        entry_id="account-b",
+        services=[second_service],
+        data={"api_key": "other-key", "name": "Other Groq"},
+    )
+    session = LifecycleSession()
+    with (
+        patch(
+            "custom_components.groq.api.async_get_clientsession", return_value=session
+        ),
+        patch(
+            "custom_components.groq.config_flow.async_get_clientsession",
+            return_value=session,
+        ),
+    ):
+        assert await async_setup_component(hass, "groq", {})
+        await hass.async_block_till_done()
+        first_runtime, second_runtime = first.runtime_data, second.runtime_data
+        registry = er.async_get(hass)
+        original_entities = {
+            item.entity_id: item.config_subentry_id
+            for entry in (first, second)
+            for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+        }
+        request = TextGenerationRequest(prompt="Hello", model=TEXT_MODEL)
+        session.revoked.add("Bearer test-key")
+        for _ in range(2):
+            with pytest.raises(ConfigEntryAuthFailed):
+                await first_runtime.client.async_generate_text(request)
+        await hass.async_block_till_done()
+        flows = hass.config_entries.flow.async_progress()
+        assert len(flows) == 1
+        assert flows[0]["context"]["entry_id"] == first.entry_id
+        assert flows[0]["context"]["source"] == "reauth"
+        assert (
+            await second_runtime.client.async_generate_text(request)
+        ).text == "Available"
+        with patch.object(
+            hass.config_entries, "async_reload", wraps=hass.config_entries.async_reload
+        ) as reload:
+            result = await hass.config_entries.flow.async_configure(
+                flows[0]["flow_id"], {"api_key": "replacement-key"}
+            )
+            await hass.async_block_till_done()
+        assert result["reason"] == "reauth_successful"
+        reload.assert_awaited_once_with(first.entry_id)
+        assert first.state is second.state is ConfigEntryState.LOADED
+        assert first.data["api_key"] == "replacement-key"
+        assert second.data["api_key"] == "other-key"
+        assert first.runtime_data is not first_runtime
+        assert second.runtime_data is second_runtime
+        assert not hass.config_entries.flow.async_progress()
+        assert (
+            await first.runtime_data.client.async_generate_text(request)
+        ).text == "Available"
+        assert (
+            session.requests[-1][1]["headers"]["Authorization"]
+            == "Bearer replacement-key"
+        )
+        with pytest.raises(GroqApiError, match="unloaded"):
+            await first_runtime.client.async_synthesize_speech(
+                SpeechRequest(text="Hello", model=TTS_MODEL, voice="troy")
+            )
+        assert {
+            item.entity_id: item.config_subentry_id
+            for entry in (first, second)
+            for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+        } == original_entities
+        assert len(first.update_listeners) == len(second.update_listeners) == 1
+        for entry in (first, second):
+            assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_real_entry_mapping_diagnostics(hass):
