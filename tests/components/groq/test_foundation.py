@@ -2449,7 +2449,7 @@ async def test_conversation_entity_limits_unresolved_tool_iterations():
 
 
 @pytest.mark.asyncio
-async def test_conversation_entity_uses_real_chat_log_llm_prompt():
+async def test_conversation_entity_adapts_chat_log_llm_prompt():
     entry = DummyEntry()
     service_data = {
         "unique_id": "assist-service",
@@ -2486,7 +2486,7 @@ async def test_conversation_entity_uses_real_chat_log_llm_prompt():
 
 
 @pytest.mark.asyncio
-async def test_conversation_entity_uses_real_chat_log_tool_execution():
+async def test_conversation_entity_adapts_chat_log_tool_results():
     entry = DummyEntry()
     service_data = {
         "unique_id": "assist-service",
