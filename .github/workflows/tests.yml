@@ -19,9 +19,6 @@ on:
       - ".github/workflows/tests.yml"
   workflow_dispatch:
   workflow_call:
-    secrets:
-      CODECOV_TOKEN:
-        required: false
 
 concurrency:
   group: ${{ format('{0}-{1}', github.workflow_ref || github.workflow, github.ref) }}
@@ -32,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Authenticate Codecov uploads without repository or Dependabot secrets.
+      id-token: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -106,14 +105,14 @@ jobs:
         if: ${{ (steps.pytest.outcome == 'success' || steps.pytest.outcome == 'failure') && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
           files: ./coverage.xml
           fail_ci_if_error: true
       - name: Upload test results to Codecov
         if: ${{ (steps.pytest.outcome == 'success' || steps.pytest.outcome == 'failure') && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
           files: ./junit.xml
           report_type: test_results
       - name: Fail if tests failed
