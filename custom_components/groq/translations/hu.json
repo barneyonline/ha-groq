@@ -88,7 +88,9 @@
                 "reconfigure": "Szöveggenerálás újrakonfigurálása"
             },
             "abort": {
-                "reconfigure_successful": "Szöveggeneráló szolgáltatás sikeresen frissítve."
+                "reconfigure_successful": "Szöveggeneráló szolgáltatás sikeresen frissítve.",
+                "no_compatible_models": "Ehhez a Groq-fiókhoz nincs a szolgáltatással kompatibilis aktív modell. Ellenőrizze a modellek elérését a Groq-konzolon, majd próbálja újra.",
+                "model_unavailable": "A kiválasztott modell már nem érhető el ehhez a szolgáltatáshoz. Indítsa újra a beállítást, és válasszon elérhető modellt."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Beszéd-szöveg újrakonfigurálása"
             },
             "abort": {
-                "reconfigure_successful": "A beszéd-szöveg szolgáltatás sikeresen frissítve."
+                "reconfigure_successful": "A beszéd-szöveg szolgáltatás sikeresen frissítve.",
+                "no_compatible_models": "Ehhez a Groq-fiókhoz nincs a szolgáltatással kompatibilis aktív modell. Ellenőrizze a modellek elérését a Groq-konzolon, majd próbálja újra.",
+                "model_unavailable": "A kiválasztott modell már nem érhető el ehhez a szolgáltatáshoz. Indítsa újra a beállítást, és válasszon elérhető modellt."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "A Text-to-Speech újrakonfigurálása"
             },
             "abort": {
-                "reconfigure_successful": "Szövegfelolvasó szolgáltatás sikeresen frissítve."
+                "reconfigure_successful": "Szövegfelolvasó szolgáltatás sikeresen frissítve.",
+                "no_compatible_models": "Ehhez a Groq-fiókhoz nincs a szolgáltatással kompatibilis aktív modell. Ellenőrizze a modellek elérését a Groq-konzolon, majd próbálja újra.",
+                "model_unavailable": "A kiválasztott modell már nem érhető el ehhez a szolgáltatáshoz. Indítsa újra a beállítást, és válasszon elérhető modellt."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Képfelismerés újrakonfigurálása"
             },
             "abort": {
-                "reconfigure_successful": "Képfelismerő szolgáltatás sikeresen frissítve."
+                "reconfigure_successful": "Képfelismerő szolgáltatás sikeresen frissítve.",
+                "no_compatible_models": "Ehhez a Groq-fiókhoz nincs a szolgáltatással kompatibilis aktív modell. Ellenőrizze a modellek elérését a Groq-konzolon, majd próbálja újra.",
+                "model_unavailable": "A kiválasztott modell már nem érhető el ehhez a szolgáltatáshoz. Indítsa újra a beállítást, és válasszon elérhető modellt."
             },
             "step": {
                 "image_recognition": {

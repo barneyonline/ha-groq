@@ -3,48 +3,49 @@ Setting up TTS entity.
 """
 
 from __future__ import annotations
+
+import asyncio
+import logging
+import math
+import re
+import struct
+import time
+from asyncio import CancelledError
 from contextlib import suppress
 from typing import Any
-import logging
-from pathlib import Path
-import re
-import shutil
-import struct
-import tempfile
-import time
-import asyncio
-from asyncio import CancelledError
 
 from homeassistant.components.tts import TextToSpeechEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+from .api import GroqApiClient, SpeechRequest, async_preload_clientsession_helper
+from .audio_files import async_audio_chunk_paths, async_communicate_audio
 from .const import (
-    CONF_SERVICE_TYPE,
-    CONF_SUBENTRY_ID,
+    CONF_CACHE_SIZE,
+    CONF_ENABLE_LONG_TTS,
     CONF_INPUT,
     CONF_MODEL,
     CONF_NAME,
+    CONF_NORMALIZE_AUDIO,
+    CONF_PROTECT_FREE_TIER,
     CONF_RESPONSE_FORMAT,
     CONF_SAMPLE_RATE,
+    CONF_SERVICE_TYPE,
     CONF_SPEED,
-    CONF_VOICE,
-    CONF_VOCAL_DIRECTIONS,
+    CONF_SUBENTRY_ID,
     CONF_URL,
-    UNIQUE_ID,
-    CONF_NORMALIZE_AUDIO,
-    CONF_CACHE_SIZE,
-    CONF_ENABLE_LONG_TTS,
-    CONF_PROTECT_FREE_TIER,
+    CONF_VOCAL_DIRECTIONS,
+    CONF_VOICE,
     DEFAULT_CACHE_SIZE,
     DEFAULT_PROTECT_FREE_TIER,
     DEFAULT_RESPONSE_FORMAT,
     DEFAULT_TTS_SPEED,
     FEATURE_TEXT_TO_SPEECH,
     TTS_SAMPLE_RATES,
+    UNIQUE_ID,
 )
-from .api import GroqApiClient, SpeechRequest, async_preload_clientsession_helper
 from .entity import service_device_info
 from .errors import translated_error
 from .repairs import (
@@ -182,17 +183,6 @@ def _tts_input_chunks(
     return _split_tts_text(text, max_chars)
 
 
-def _write_audio_chunks(temp_dir: str, input_chunks: list[bytes]) -> list[str]:
-    """Write audio chunks to temporary files and return their paths."""
-    temp_path = Path(temp_dir)
-    chunk_paths = []
-    for index, chunk in enumerate(input_chunks):
-        chunk_path = temp_path / f"chunk-{index}.wav"
-        chunk_path.write_bytes(chunk)
-        chunk_paths.append(str(chunk_path))
-    return chunk_paths
-
-
 def _entry_value(
     config_entry: GroqConfigEntry,
     key: str,
@@ -224,7 +214,7 @@ def _normalize_response_format(value: Any) -> str:
     """Return a normalized TTS output format."""
     output_format = DEFAULT_RESPONSE_FORMAT if value in (None, "") else value
     if not isinstance(output_format, str):
-        raise ValueError("TTS output format must be a string")
+        raise TypeError("TTS output format must be a string")
     output_format = output_format.strip().lower()
     if output_format not in FFMPEG_DEFAULT_SAMPLE_RATES:
         raise ValueError(f"Unsupported TTS output format: {output_format}")
@@ -236,7 +226,10 @@ def _normalize_sample_rate(value: Any) -> int | None:
     if value in (None, ""):
         return None
     try:
-        sample_rate = int(value)
+        number = float(value)
+        if not math.isfinite(number) or not number.is_integer():
+            raise ValueError("TTS sample rate must be an integer")
+        sample_rate = int(number)
     except (TypeError, ValueError) as err:
         raise ValueError("TTS sample rate must be an integer") from err
     if sample_rate not in TTS_SAMPLE_RATES:
@@ -252,7 +245,7 @@ def _normalize_speed(value: Any) -> float | None:
         speed = float(value)
     except (TypeError, ValueError) as err:
         raise ValueError("TTS speed must be a number") from err
-    if speed < 0.5 or speed > 5:
+    if not math.isfinite(speed) or speed < 0.5 or speed > 5:
         raise ValueError("TTS speed must be between 0.5 and 5")
     return speed
 
@@ -271,12 +264,6 @@ def _ffmpeg_output_args(output_format: str, sample_rate: int | None) -> list[str
         args.extend(["-c:a", "pcm_mulaw"])
     args.extend(["-f", output_format])
     return args
-
-
-FFMPEG_OUTPUT_ARGS = {
-    output_format: _ffmpeg_output_args(output_format, None)
-    for output_format in FFMPEG_DEFAULT_SAMPLE_RATES
-}
 
 
 def _tts_service_data(config_entry: GroqConfigEntry) -> list[dict[str, Any] | None]:
@@ -393,8 +380,8 @@ class GroqTTSEntity(TextToSpeechEntity):
             ) from err
         try:
             async with asyncio.timeout(FFMPEG_TIMEOUT_SECONDS):
-                stdout, stderr = await process.communicate(input=input_bytes)
-        except (CancelledError, TimeoutError) as err:
+                stdout, stderr = await async_communicate_audio(process, input_bytes)
+        except (CancelledError, TimeoutError, HomeAssistantError, OSError) as err:
             if process.returncode is None:
                 with suppress(ProcessLookupError):
                     process.kill()
@@ -409,6 +396,10 @@ class GroqTTSEntity(TextToSpeechEntity):
                         self.hass, self._config, self._service_data
                     )
                 raise translated_error("ffmpeg timed out", "ffmpeg_timeout") from err
+            if isinstance(err, OSError):
+                raise translated_error(
+                    "ffmpeg pipe I/O failed", "ffmpeg_failed"
+                ) from err
             raise
         if process.returncode != 0:
             stderr_text = stderr.decode(errors="replace").strip()
@@ -529,7 +520,7 @@ class GroqTTSEntity(TextToSpeechEntity):
             normalize_audio = False
         try:
             response_format = _normalize_response_format(response_format)
-        except ValueError:
+        except (TypeError, ValueError):
             response_format = DEFAULT_RESPONSE_FORMAT
         try:
             sample_rate = _normalize_sample_rate(sample_rate)
@@ -724,12 +715,8 @@ class GroqTTSEntity(TextToSpeechEntity):
                 await self._async_check_ffmpeg(
                     output_format, normalize_audio, sample_rate
                 )
-            if len(input_chunks) > 1 and callable(
-                batch_guard := getattr(
-                    self._client, "_check_local_tts_free_tier_batch", None
-                )
-            ):
-                batch_guard(speech_requests)
+            if len(input_chunks) > 1:
+                self._client.check_tts_batch(speech_requests)
 
             audio_chunks = []
             synthesis_start = time.monotonic()
@@ -790,17 +777,9 @@ class GroqTTSEntity(TextToSpeechEntity):
                 input_chunks: list[bytes],
             ) -> bytes:
                 """Stitch multiple Orpheus WAV chunks into the playback format."""
-                if hasattr(self.hass, "async_add_executor_job"):
-                    temp_dir = await self.hass.async_add_executor_job(tempfile.mkdtemp)
-                else:
-                    temp_dir = tempfile.mkdtemp()
-                try:
-                    if hasattr(self.hass, "async_add_executor_job"):
-                        chunk_paths = await self.hass.async_add_executor_job(
-                            _write_audio_chunks, temp_dir, input_chunks
-                        )
-                    else:
-                        chunk_paths = _write_audio_chunks(temp_dir, input_chunks)
+                async with async_audio_chunk_paths(
+                    self.hass, input_chunks
+                ) as chunk_paths:
                     input_args = [
                         arg for chunk_path in chunk_paths for arg in ("-i", chunk_path)
                     ]
@@ -828,13 +807,6 @@ class GroqTTSEntity(TextToSpeechEntity):
                         cmd,
                         create_repair=False,
                     )
-                finally:
-                    if hasattr(self.hass, "async_add_executor_job"):
-                        await self.hass.async_add_executor_job(
-                            shutil.rmtree, temp_dir, True
-                        )
-                    else:
-                        shutil.rmtree(temp_dir, ignore_errors=True)
 
             if needs_ffmpeg:
                 try:
@@ -875,7 +847,7 @@ class GroqTTSEntity(TextToSpeechEntity):
         except CancelledError:
             _LOGGER.debug("TTS task cancelled")
             raise
-        except ValueError as err:
+        except (TypeError, ValueError) as err:
             _LOGGER.error("Invalid TTS request: %s", err)
             return None, None
         except HomeAssistantError as err:

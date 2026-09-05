@@ -88,7 +88,9 @@
                 "reconfigure": "Riconfigurare la generazione del testo"
             },
             "abort": {
-                "reconfigure_successful": "Servizio di generazione testo aggiornato correttamente."
+                "reconfigure_successful": "Servizio di generazione testo aggiornato correttamente.",
+                "no_compatible_models": "Questo account Groq non ha modelli attivi compatibili con questo servizio. Verifica gli accessi nella console Groq e riprova.",
+                "model_unavailable": "Il modello selezionato non è più disponibile per questo servizio. Riavvia la configurazione e scegli un modello disponibile."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Riconfigura la sintesi vocale"
             },
             "abort": {
-                "reconfigure_successful": "Servizio di sintesi vocale aggiornato correttamente."
+                "reconfigure_successful": "Servizio di sintesi vocale aggiornato correttamente.",
+                "no_compatible_models": "Questo account Groq non ha modelli attivi compatibili con questo servizio. Verifica gli accessi nella console Groq e riprova.",
+                "model_unavailable": "Il modello selezionato non è più disponibile per questo servizio. Riavvia la configurazione e scegli un modello disponibile."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Riconfigura la sintesi vocale"
             },
             "abort": {
-                "reconfigure_successful": "Servizio di sintesi vocale aggiornato correttamente."
+                "reconfigure_successful": "Servizio di sintesi vocale aggiornato correttamente.",
+                "no_compatible_models": "Questo account Groq non ha modelli attivi compatibili con questo servizio. Verifica gli accessi nella console Groq e riprova.",
+                "model_unavailable": "Il modello selezionato non è più disponibile per questo servizio. Riavvia la configurazione e scegli un modello disponibile."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Riconfigura il riconoscimento delle immagini"
             },
             "abort": {
-                "reconfigure_successful": "Servizio di riconoscimento immagini aggiornato correttamente."
+                "reconfigure_successful": "Servizio di riconoscimento immagini aggiornato correttamente.",
+                "no_compatible_models": "Questo account Groq non ha modelli attivi compatibili con questo servizio. Verifica gli accessi nella console Groq e riprova.",
+                "model_unavailable": "Il modello selezionato non è più disponibile per questo servizio. Riavvia la configurazione e scegli un modello disponibile."
             },
             "step": {
                 "image_recognition": {

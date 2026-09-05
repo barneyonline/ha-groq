@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Bug fixes
+- Preserve credentials and advanced options when saving account/service forms, honor cleared Assist control, and migrate immutable HA entry data correctly.
+- Respect active/discovered models, per-service cache opt-outs, explicit reasoning overrides and configured structured-output defaults.
+- Validate all structured results and tool arguments; retain HA context consistently across AI Task paths and avoid loading discarded historic attachments.
+- Classify model-permission and streaming errors correctly, parse composite rate-limit resets and clear only matching recoverable repair issues.
+- Prevent nested cached-response mutation and clean up audio resources even when cancellation interrupts file preparation.
+
+### Improvements
+- Scope speech-cache credential fingerprints to each client with a random HMAC context while preserving credential isolation and cache reuse.
+- Bound cache content, media reads and ffmpeg output; share identical concurrent speech requests with cancellation and unload ownership.
+- Consolidate chat, schema, request-option and media helpers and remove redundant production code and obsolete tests.
+- Add real HA lifecycle, flow, registry, service and ChatLog regressions; verify both HA 2026.6.0 and 2026.9.0 with matched dependencies.
+- Check strict typing against installed HA source and provide deterministic runtime/performance measurements and current architecture documentation.
+
 ## v1.4.4 - 2026-09-03
 
 ### 🚧 Breaking changes

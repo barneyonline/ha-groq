@@ -433,11 +433,13 @@ rules:
         - tests/components/groq/test_coverage_gaps.py
   strict-typing:
     status: done
-    comment: The Docker-backed strict typing script checks every local function with the complete strict mypy rule set; the standalone Home Assistant runtime wheel requires a documented missing-import override.
+    comment: The Docker-backed strict typing script checks every local function against Home Assistant source types. Positive and negative contract probes verify immutable entry data, update callbacks, and ChatLog types on the minimum and current Core versions.
     references:
       code:
         - pyproject.toml
         - scripts/strict-typing
+        - scripts/strict_typing.py
+        - scripts/check_ha_typing.py
         - custom_components/groq/types.py
       tests:
         - tests/components/groq/test_manifest.py

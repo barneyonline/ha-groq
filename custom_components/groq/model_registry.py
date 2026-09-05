@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
-import re
-from typing import Any, Iterable
+from typing import Any
 
 from .const import PROMPT_CACHING_MODELS, REASONING_MODELS, STRUCTURED_OUTPUTS_MODELS
 from .feature_registry import GroqFeature
@@ -582,4 +583,4 @@ class GroqModelRegistry:
             if not self._allow_missing_inference:
                 return False
             return required.issubset(infer_capabilities(model_id))
-        return required.issubset(model.capabilities)
+        return model.active and required.issubset(model.capabilities)

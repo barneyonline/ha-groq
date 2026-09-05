@@ -3,4 +3,4 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
-scripts/test python -m mypy custom_components/groq
+scripts/test python scripts/strict_typing.py

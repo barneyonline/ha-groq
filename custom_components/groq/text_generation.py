@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from dataclasses import fields
+from typing import Any, TypedDict
 
 import voluptuous as vol
 
@@ -22,6 +23,7 @@ from .compound_tools import (
 )
 from .const import (
     CONF_COMPOUND_BUILTIN_TOOLS,
+    CONF_ENABLED_FEATURES,
     CONF_INCLUDE_REASONING,
     CONF_MAX_TOKENS,
     CONF_MODEL,
@@ -42,12 +44,10 @@ from .const import (
     CONF_SYSTEM_PROMPT,
     CONF_TEMPERATURE,
     CONF_TOP_P,
+    DEFAULT_PROTECT_FREE_TIER,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEXT_MODEL,
-    DEFAULT_PROTECT_FREE_TIER,
     FEATURE_TEXT_GENERATION,
-    PROMPT_CACHING_MODELS,
-    REASONING_MODELS,
     UNIQUE_ID,
 )
 from .feature_registry import GroqFeature
@@ -66,6 +66,88 @@ _REQUEST_BODY_REASONING_KEYS = frozenset(
 )
 _STRUCTURED_RESPONSE_FORMAT_TYPES = frozenset({"json_object", "json_schema"})
 _MISSING = object()
+
+
+class GenerationOptions(TypedDict):
+    """Resolved generation options shared by entities and response actions."""
+
+    temperature: float | None
+    max_tokens: int | None
+    top_p: float | None
+    stop: str | list[str] | None
+    seed: int | None
+    service_tier: str | None
+    reasoning_effort: str | None
+    reasoning_format: str | None
+    include_reasoning: bool | None
+    compound_builtin_tools: list[str] | None
+    extra_body: dict[str, Any] | None
+
+
+def generation_options(
+    values: dict[str, Any],
+    *,
+    compound_tools: list[str] | None,
+    extra_body: dict[str, Any] | None,
+) -> GenerationOptions:
+    """Resolve outgoing options once after caller/service/account precedence."""
+    return {
+        "temperature": values.get(CONF_TEMPERATURE),
+        "max_tokens": values.get(CONF_MAX_TOKENS),
+        "top_p": values.get(CONF_TOP_P),
+        "stop": values.get(CONF_STOP),
+        "seed": values.get(CONF_SEED),
+        "service_tier": values.get(CONF_SERVICE_TIER),
+        "reasoning_effort": values.get(CONF_REASONING_EFFORT),
+        "reasoning_format": values.get(CONF_REASONING_FORMAT),
+        "include_reasoning": True if values.get(CONF_INCLUDE_REASONING) else None,
+        "compound_builtin_tools": compound_tools,
+        "extra_body": extra_body,
+    }
+
+
+def service_generation_options(
+    config_entry: GroqConfigEntry,
+    service_data: dict[str, Any],
+    model_registry: GroqModelRegistry,
+) -> GenerationOptions:
+    """Resolve configured entity options with their established normalization."""
+    values = {
+        CONF_TEMPERATURE: service_temperature(config_entry, service_data),
+        CONF_MAX_TOKENS: service_max_tokens(config_entry, service_data, model_registry),
+        CONF_TOP_P: service_top_p(config_entry, service_data),
+        CONF_STOP: service_stop(config_entry, service_data),
+        CONF_SEED: service_seed(config_entry, service_data),
+        CONF_SERVICE_TIER: service_service_tier(config_entry, service_data),
+        CONF_REASONING_EFFORT: service_reasoning_effort(config_entry, service_data),
+        CONF_REASONING_FORMAT: service_reasoning_format(config_entry, service_data),
+        CONF_INCLUDE_REASONING: service_include_reasoning(config_entry, service_data),
+    }
+    return generation_options(
+        values,
+        compound_tools=service_compound_builtin_tools(
+            config_entry, service_data, model_registry
+        ),
+        extra_body=service_request_body_options(
+            config_entry, service_data, model_registry
+        ),
+    )
+
+
+def structured_generation_request(
+    request: TextGenerationRequest,
+    schema: dict[str, Any],
+    schema_name: str,
+    *,
+    strict: bool,
+) -> StructuredGenerationRequest:
+    """Extend a text request without duplicating fields or copying image data."""
+    return StructuredGenerationRequest(
+        **{item.name: getattr(request, item.name) for item in fields(request)},
+        schema=schema,
+        schema_name=schema_name,
+        strict=strict,
+    )
 
 
 def entry_value(
@@ -235,7 +317,18 @@ def service_prompt_caching(
     service_data: dict[str, Any],
 ) -> bool:
     """Return whether local response caching is enabled for the model."""
-    return bool(entry_value(config_entry, service_data, CONF_PROMPT_CACHING, False))
+    # A service preference wins over explicitly configured legacy account flags.
+    legacy_features = config_entry.options.get(
+        CONF_ENABLED_FEATURES, config_entry.data.get(CONF_ENABLED_FEATURES, [])
+    )
+    return bool(
+        entry_value(
+            config_entry,
+            service_data,
+            CONF_PROMPT_CACHING,
+            GroqFeature.PROMPT_CACHING.value in (legacy_features or []),
+        )
+    )
 
 
 def request_body_compound_builtin_tool_value(
@@ -449,16 +542,27 @@ def request_body_options_error_message(
     return None
 
 
-def _payload_token_upper_bound(value: Any) -> int:
+def _payload_token_estimate(value: Any) -> int:
     """Return a rough token estimate for request payload values."""
     if value is None:
         return 0
+    if isinstance(value, dict):
+        # Image URLs, especially base64 data, encode transport bytes rather than
+        # text tokens. The provider enforces its model-specific image budget.
+        if value.get("type") == "image_url":
+            return 0
+        return sum(_payload_token_estimate(item) for item in value.values())
+    if isinstance(value, list):
+        return sum(_payload_token_estimate(item) for item in value)
     try:
-        encoded = json.dumps(value, separators=(",", ":"), sort_keys=True)
+        encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
     except TypeError:
         return 0
-    byte_count = len(encoded.encode("utf-8"))
-    return max(1, (byte_count + _APPROX_CHARS_PER_TOKEN - 1) // _APPROX_CHARS_PER_TOKEN)
+    return max(
+        1,
+        (len(encoded.encode("utf-8")) + _APPROX_CHARS_PER_TOKEN - 1)
+        // _APPROX_CHARS_PER_TOKEN,
+    )
 
 
 def request_context_window_error(
@@ -474,7 +578,7 @@ def request_context_window_error(
         if isinstance(request, StructuredGenerationRequest)
         else build_text_generation_payload(request)
     )
-    prompt_estimate = _payload_token_upper_bound(payload)
+    prompt_estimate = _payload_token_estimate(payload)
     requested_completion = max(_completion_token_requests(request), default=0)
     estimated_total = prompt_estimate + requested_completion
     if estimated_total <= context_window:
@@ -485,16 +589,6 @@ def request_context_window_error(
         "requested completion. Shorten the prompt, schema, or request body options, "
         "or reduce max completion tokens."
     )
-
-
-def is_reasoning_model(model: str) -> bool:
-    """Return whether the selected model supports Groq reasoning options."""
-    return model in REASONING_MODELS
-
-
-def is_prompt_caching_model(model: str) -> bool:
-    """Return whether the selected model supports local response caching."""
-    return model in PROMPT_CACHING_MODELS
 
 
 def service_structured_outputs(

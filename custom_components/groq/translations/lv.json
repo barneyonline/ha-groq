@@ -88,7 +88,9 @@
                 "reconfigure": "Pārkonfigurēt teksta ģenerēšanu"
             },
             "abort": {
-                "reconfigure_successful": "Teksta ģenerēšanas pakalpojums ir veiksmīgi atjaunināts."
+                "reconfigure_successful": "Teksta ģenerēšanas pakalpojums ir veiksmīgi atjaunināts.",
+                "no_compatible_models": "Šim Groq kontam nav aktīvu modeļu, kas ir saderīgi ar šo pakalpojumu. Pārbaudiet piekļuvi modeļiem Groq konsolē un mēģiniet vēlreiz.",
+                "model_unavailable": "Atlasītais modelis šim pakalpojumam vairs nav pieejams. Sāciet konfigurēšanu no jauna un izvēlieties pieejamu modeli."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Pārkonfigurēt runas pārveidošanu tekstā"
             },
             "abort": {
-                "reconfigure_successful": "Runas pārveidošanas pakalpojums ir veiksmīgi atjaunināts."
+                "reconfigure_successful": "Runas pārveidošanas pakalpojums ir veiksmīgi atjaunināts.",
+                "no_compatible_models": "Šim Groq kontam nav aktīvu modeļu, kas ir saderīgi ar šo pakalpojumu. Pārbaudiet piekļuvi modeļiem Groq konsolē un mēģiniet vēlreiz.",
+                "model_unavailable": "Atlasītais modelis šim pakalpojumam vairs nav pieejams. Sāciet konfigurēšanu no jauna un izvēlieties pieejamu modeli."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Pārkonfigurējiet teksta pārveidi runā"
             },
             "abort": {
-                "reconfigure_successful": "Teksta pārvēršanas runā pakalpojums ir veiksmīgi atjaunināts."
+                "reconfigure_successful": "Teksta pārvēršanas runā pakalpojums ir veiksmīgi atjaunināts.",
+                "no_compatible_models": "Šim Groq kontam nav aktīvu modeļu, kas ir saderīgi ar šo pakalpojumu. Pārbaudiet piekļuvi modeļiem Groq konsolē un mēģiniet vēlreiz.",
+                "model_unavailable": "Atlasītais modelis šim pakalpojumam vairs nav pieejams. Sāciet konfigurēšanu no jauna un izvēlieties pieejamu modeli."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Pārkonfigurējiet attēla atpazīšanu"
             },
             "abort": {
-                "reconfigure_successful": "Attēlu atpazīšanas pakalpojums ir veiksmīgi atjaunināts."
+                "reconfigure_successful": "Attēlu atpazīšanas pakalpojums ir veiksmīgi atjaunināts.",
+                "no_compatible_models": "Šim Groq kontam nav aktīvu modeļu, kas ir saderīgi ar šo pakalpojumu. Pārbaudiet piekļuvi modeļiem Groq konsolē un mēģiniet vēlreiz.",
+                "model_unavailable": "Atlasītais modelis šim pakalpojumam vairs nav pieejams. Sāciet konfigurēšanu no jauna un izvēlieties pieejamu modeli."
             },
             "step": {
                 "image_recognition": {

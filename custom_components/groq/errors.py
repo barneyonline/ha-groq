@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .const import DOMAIN
+
+
+def safe_error_payload(payload: object) -> dict[str, Any]:
+    """Retain only bounded provider classification, never echoed request data."""
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(error, dict):
+        return {}
+    metadata = {
+        key: value
+        for key in ("type", "code")
+        if isinstance(value := error.get(key), str)
+        and re.fullmatch(r"[a-zA-Z0-9_]{1,64}", value)
+    }
+    return {"error": metadata} if metadata else {}
 
 
 class GroqError(HomeAssistantError):

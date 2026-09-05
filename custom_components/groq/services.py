@@ -6,7 +6,7 @@ import json
 import mimetypes
 from base64 import b64decode, b64encode
 from binascii import Error as BinasciiError
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
@@ -20,7 +20,6 @@ from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
-    ServiceResponse,
     SupportsResponse,
 )
 from homeassistant.exceptions import ServiceValidationError, Unauthorized
@@ -33,26 +32,18 @@ from .api import (
     TextGenerationRequest,
     VisionRequest,
 )
+from .attachments import read_bounded_file
 from .compound_tools import compound_builtin_tools_request_value
 from .const import (
     CONF_COMPOUND_BUILTIN_TOOLS,
-    CONF_INCLUDE_REASONING,
     CONF_LANGUAGE,
-    CONF_MAX_TOKENS,
     CONF_MODEL,
     CONF_NAME,
     CONF_PROTECT_FREE_TIER,
-    CONF_REASONING_EFFORT,
-    CONF_REASONING_FORMAT,
     CONF_REQUEST_BODY_OPTIONS,
     CONF_SCHEMA,
     CONF_SCHEMA_NAME,
-    CONF_SEED,
-    CONF_SERVICE_TIER,
-    CONF_STOP,
     CONF_STRUCTURED_OUTPUTS,
-    CONF_TEMPERATURE,
-    CONF_TOP_P,
     DEFAULT_PROTECT_FREE_TIER,
     DEFAULT_STT_LANGUAGE,
     DEFAULT_STT_MODEL,
@@ -67,14 +58,20 @@ from .const import (
 from .errors import translated_service_error
 from .feature_registry import GroqFeature
 from .model_registry import DEFAULT_VISION_MODEL, GroqCapability, GroqModelRegistry
-from .repairs import async_create_model_configuration_issue
+from .repairs import (
+    async_create_model_configuration_issue,
+    async_delete_model_configuration_issue,
+)
 from .runtime import GroqRuntimeData, async_get_runtime
 from .subentries import service_data_for_type
 from .text_generation import (
+    GenerationOptions,
     compound_builtin_tools_error_message,
+    generation_options,
     request_body_compound_builtin_tools,
     request_body_options_error_message,
     request_context_window_error,
+    service_prompt_caching,
 )
 from .types import GroqConfigEntry
 
@@ -171,18 +168,11 @@ GENERATE_TEXT_SCHEMA = vol.Schema(
     {
         **_TEXT_OPTIONS,
         vol.Optional(ATTR_SCHEMA): dict,
-        vol.Optional(ATTR_SCHEMA_NAME, default="response"): cv.string,
-        vol.Optional(ATTR_STRICT, default=False): cv.boolean,
+        vol.Optional(ATTR_SCHEMA_NAME): cv.string,
+        vol.Optional(ATTR_STRICT): cv.boolean,
     }
 )
-GENERATE_STRUCTURED_SCHEMA = vol.Schema(
-    {
-        **_TEXT_OPTIONS,
-        vol.Optional(ATTR_SCHEMA): dict,
-        vol.Optional(ATTR_SCHEMA_NAME, default="response"): cv.string,
-        vol.Optional(ATTR_STRICT, default=False): cv.boolean,
-    }
-)
+GENERATE_STRUCTURED_SCHEMA = GENERATE_TEXT_SCHEMA
 VISION_SCHEMA = vol.Schema(
     {
         **cv.TARGET_SERVICE_FIELDS,
@@ -241,7 +231,8 @@ _SERVICE_FIELD_TYPES = {
     SERVICE_TRANSCRIBE_AUDIO: FEATURE_SPEECH_TO_TEXT,
 }
 
-ServiceHandler = Callable[[ServiceCall], Awaitable[ServiceResponse]]
+GroqServiceResponse = dict[str, Any]
+ServiceHandler = Callable[[ServiceCall], Coroutine[Any, Any, GroqServiceResponse]]
 
 
 def _cache_key(namespace: str, data: dict[str, Any]) -> str:
@@ -346,9 +337,12 @@ def _entry_from_call(
             "no_loaded_config_entry",
             "No loaded Groq config entry found",
         )
-    if service_type and (requested := call.data.get(ATTR_SERVICE_ID)):
-        if entry := _entry_from_service_id(hass, service_type, requested):
-            return entry
+    if (
+        service_type
+        and (requested := call.data.get(ATTR_SERVICE_ID))
+        and (entry := _entry_from_service_id(hass, service_type, requested))
+    ):
+        return entry
     if len(entries) > 1:
         raise _service_error(
             "multiple_config_entries",
@@ -364,14 +358,7 @@ async def _runtime_from_call(
 ) -> tuple[GroqConfigEntry, GroqRuntimeData]:
     """Return entry and runtime for a service call."""
     entry = _entry_from_call(hass, call, service_type)
-    runtime = getattr(entry, "runtime_data", None)
-    if runtime is None:
-        runtime = await async_get_runtime(hass, entry)
-        try:
-            entry.runtime_data = runtime
-        except AttributeError:
-            pass
-    return entry, runtime
+    return entry, await async_get_runtime(hass, entry)
 
 
 def _service_subentries(
@@ -477,20 +464,27 @@ def _ensure_model(
             feature=feature.value,
         )
 
+    if (
+        hass is not None
+        and entry is not None
+        and service_data is not None
+        and service_data.get(ATTR_MODEL) == model
+    ):
+        async_delete_model_configuration_issue(
+            hass, entry, service_data, model, feature.value
+        )
+
 
 def _reasoning_requested(
     data: dict[str, Any],
     service_data: dict[str, Any] | None = None,
 ) -> bool:
-    """Return whether a service call requested Groq reasoning options."""
-    service_data = service_data or {}
+    """Use the outgoing request's precedence for reasoning checks."""
+    resolved = {**(service_data or {}), **data}
     return bool(
-        data.get(ATTR_REASONING_EFFORT)
-        or data.get(ATTR_REASONING_FORMAT)
-        or data.get(ATTR_INCLUDE_REASONING)
-        or service_data.get(CONF_REASONING_EFFORT)
-        or service_data.get(CONF_REASONING_FORMAT)
-        or service_data.get(CONF_INCLUDE_REASONING)
+        resolved.get(ATTR_REASONING_EFFORT)
+        or resolved.get(ATTR_REASONING_FORMAT)
+        or resolved.get(ATTR_INCLUDE_REASONING)
     )
 
 
@@ -498,44 +492,18 @@ def _request_options(
     data: dict[str, Any],
     service_data: dict[str, Any] | None = None,
     model_registry: GroqModelRegistry | None = None,
-) -> dict[str, Any]:
+) -> GenerationOptions:
     """Return shared chat completion request options."""
     service_data = service_data or {}
-    include_reasoning = data.get(
-        ATTR_INCLUDE_REASONING,
-        service_data.get(CONF_INCLUDE_REASONING),
+    return generation_options(
+        {**service_data, **data},
+        compound_tools=_compound_builtin_tools_option(
+            data, service_data, model_registry
+        ),
+        extra_body=data.get(
+            ATTR_REQUEST_BODY_OPTIONS, service_data.get(CONF_REQUEST_BODY_OPTIONS)
+        ),
     )
-    return {
-        "temperature": data.get(ATTR_TEMPERATURE, service_data.get(CONF_TEMPERATURE)),
-        "max_tokens": data.get(ATTR_MAX_TOKENS, service_data.get(CONF_MAX_TOKENS)),
-        "top_p": data.get(ATTR_TOP_P, service_data.get(CONF_TOP_P)),
-        "stop": data.get(ATTR_STOP, service_data.get(CONF_STOP)),
-        "seed": data.get(ATTR_SEED, service_data.get(CONF_SEED)),
-        "service_tier": data.get(
-            ATTR_SERVICE_TIER,
-            service_data.get(CONF_SERVICE_TIER),
-        ),
-        "reasoning_effort": data.get(
-            ATTR_REASONING_EFFORT,
-            service_data.get(CONF_REASONING_EFFORT),
-        ),
-        "reasoning_format": data.get(
-            ATTR_REASONING_FORMAT,
-            service_data.get(CONF_REASONING_FORMAT),
-        ),
-        # Only send include_reasoning when enabled. Some Groq models reject a
-        # false/null reasoning flag even though they accept omitted options.
-        "include_reasoning": True if include_reasoning else None,
-        "compound_builtin_tools": _compound_builtin_tools_option(
-            data,
-            service_data,
-            model_registry,
-        ),
-        "extra_body": data.get(
-            ATTR_REQUEST_BODY_OPTIONS,
-            service_data.get(CONF_REQUEST_BODY_OPTIONS),
-        ),
-    }
 
 
 def _compound_builtin_tools_option(
@@ -649,10 +617,10 @@ def _prompt_cache_allowed(runtime: GroqRuntimeData, model: str) -> bool:
 def _cache_get(
     runtime: GroqRuntimeData,
     model: str,
-    key: str,
-) -> ServiceResponse | None:
+    key: str | None,
+) -> GroqServiceResponse | None:
     """Return a cached response when local response caching is enabled."""
-    if not _prompt_cache_allowed(runtime, model):
+    if key is None or not _prompt_cache_allowed(runtime, model):
         return None
     cached = runtime.prompt_cache.get(key)
     if cached is None:
@@ -664,11 +632,11 @@ def _cache_get(
 def _cache_set(
     runtime: GroqRuntimeData,
     model: str,
-    key: str,
-    response: ServiceResponse,
+    key: str | None,
+    response: GroqServiceResponse,
 ) -> None:
     """Store a response when local response caching is enabled."""
-    if _prompt_cache_allowed(runtime, model):
+    if key is not None and _prompt_cache_allowed(runtime, model):
         runtime.prompt_cache.set(key, response)
 
 
@@ -710,9 +678,9 @@ async def _ensure_media_access(
         return
     user = await hass.auth.async_get_user(user_id)
     allowed = user is not None
-    if allowed and admin_only:
+    if user is not None and admin_only:
         allowed = user.is_admin
-    elif allowed and entity_id is not None:
+    elif user is not None and entity_id is not None:
         allowed = user.is_admin or user.permissions.check_entity(entity_id, POLICY_READ)
     if allowed:
         return
@@ -794,7 +762,7 @@ async def _image_from_camera_target(
         call.data.get(target_key)
         for target_key in ("device_id", "area_id", "floor_id", "label_id")
     ):
-        entity_ids = await service_helper.async_extract_entity_ids(call)
+        entity_ids = list(await service_helper.async_extract_entity_ids(call))
     else:
         return None
     camera_entities = sorted(
@@ -819,7 +787,12 @@ async def _image_from_camera_target(
         "image_too_large",
         "image",
     )
-    return _image_data_url(image.content, image.content_type)
+    return cast(
+        str,
+        await hass.async_add_executor_job(
+            _image_data_url, image.content, image.content_type
+        ),
+    )
 
 
 async def _image_from_local_path(hass: HomeAssistant, image_path: str) -> str:
@@ -849,8 +822,19 @@ async def _image_from_local_path(hass: HomeAssistant, image_path: str) -> str:
         )
     size = await hass.async_add_executor_job(lambda: path.stat().st_size)
     _ensure_size_limit(size, MAX_IMAGE_BYTES, "image_too_large", "image")
-    content = await hass.async_add_executor_job(path.read_bytes)
-    return _image_data_url(content, content_type)
+    try:
+        content = await hass.async_add_executor_job(
+            read_bounded_file, path, MAX_IMAGE_BYTES
+        )
+    except ValueError as err:
+        raise _service_error(
+            "image_too_large",
+            "Selected image is too large",
+            limit_mb=MAX_IMAGE_BYTES // 1024 // 1024,
+        ) from err
+    return cast(
+        str, await hass.async_add_executor_job(_image_data_url, content, content_type)
+    )
 
 
 async def _image_from_media_source(hass: HomeAssistant, image_file: str) -> str:
@@ -870,7 +854,7 @@ async def _image_from_media_source(hass: HomeAssistant, image_file: str) -> str:
     if media.path is not None:
         return await _image_from_local_path(hass, str(media.path))
     if media.mime_type and media.mime_type.startswith("image/"):
-        return _validate_image_url(media.url)
+        return await hass.async_add_executor_job(_validate_image_url, media.url)
     raise _service_error(
         "selected_media_not_image",
         f"Selected media is not an image: {image_file}",
@@ -889,7 +873,7 @@ async def _image_url_from_call(hass: HomeAssistant, call: ServiceCall) -> str:
         await _ensure_media_access(hass, call, admin_only=True)
         return await _image_from_local_path(hass, image_path)
     if image_url := call.data.get(ATTR_IMAGE_URL):
-        return _validate_image_url(image_url)
+        return await hass.async_add_executor_job(_validate_image_url, image_url)
     raise _service_error(
         "image_source_required",
         "Select a camera entity, image file, local image path, or image URL",
@@ -925,7 +909,16 @@ async def _audio_from_local_path(
         )
     size = await hass.async_add_executor_job(lambda: path.stat().st_size)
     _ensure_size_limit(size, MAX_AUDIO_BYTES, "audio_too_large", "audio")
-    content = await hass.async_add_executor_job(path.read_bytes)
+    try:
+        content = await hass.async_add_executor_job(
+            read_bounded_file, path, MAX_AUDIO_BYTES
+        )
+    except ValueError as err:
+        raise _service_error(
+            "audio_too_large",
+            "Selected audio is too large",
+            limit_mb=MAX_AUDIO_BYTES // 1024 // 1024,
+        ) from err
     return content, path.name
 
 
@@ -979,7 +972,7 @@ def _handle_generate_text(
 ) -> ServiceHandler:
     """Build the generate_text service handler."""
 
-    async def handler(call: ServiceCall) -> ServiceResponse:
+    async def handler(call: ServiceCall) -> GroqServiceResponse:
         entry, runtime = await _runtime_from_call(hass, call, FEATURE_TEXT_GENERATION)
         _ensure_feature(runtime, GroqFeature.TEXT_GENERATION)
         service_data = _service_from_call(entry, runtime, call, FEATURE_TEXT_GENERATION)
@@ -1068,18 +1061,23 @@ def _handle_generate_text(
         _ensure_request_body_features(runtime, request)
         if error := request_context_window_error(runtime.model_registry, request):
             raise _service_error("request_invalid", error, message=error)
-        key = _cache_key(
-            "text_generation",
-            {
-                "service_id": service_data.get(UNIQUE_ID),
-                "model": request.model,
-                "prompt": request.prompt,
-                "system_prompt": request.system_prompt,
-                **_request_cache_fields(request),
-                "schema": schema,
-                "schema_name": getattr(request, "schema_name", "response"),
-                "strict": getattr(request, "strict", False),
-            },
+        key = (
+            _cache_key(
+                "text_generation",
+                {
+                    "service_id": service_data.get(UNIQUE_ID),
+                    "model": request.model,
+                    "prompt": request.prompt,
+                    "system_prompt": request.system_prompt,
+                    **_request_cache_fields(request),
+                    "schema": schema,
+                    "schema_name": getattr(request, "schema_name", "response"),
+                    "strict": getattr(request, "strict", False),
+                },
+            )
+            if service_prompt_caching(entry, service_data)
+            and _prompt_cache_allowed(runtime, request.model)
+            else None
         )
         if cached := _cache_get(runtime, request.model, key):
             return cached
@@ -1108,10 +1106,12 @@ def _handle_generate_structured(hass: HomeAssistant) -> ServiceHandler:
     return _handle_generate_text(hass, use_service_schema=False)
 
 
-def _handle_analyze_image(hass: HomeAssistant) -> ServiceHandler:
-    """Build the analyze_image service handler."""
+def _handle_vision(
+    hass: HomeAssistant, feature: GroqFeature, namespace: str
+) -> ServiceHandler:
+    """Build a vision response action with its capability and cache namespace."""
 
-    async def handler(call: ServiceCall) -> ServiceResponse:
+    async def handler(call: ServiceCall) -> GroqServiceResponse:
         entry, runtime = await _runtime_from_call(hass, call, FEATURE_IMAGE_RECOGNITION)
         _ensure_feature(runtime, GroqFeature.VISION)
         service_data = _service_from_call(
@@ -1121,7 +1121,7 @@ def _handle_analyze_image(hass: HomeAssistant) -> ServiceHandler:
         _ensure_model(
             runtime,
             model,
-            GroqFeature.VISION,
+            feature,
             hass=hass,
             entry=entry,
             service_data=service_data,
@@ -1134,15 +1134,21 @@ def _handle_analyze_image(hass: HomeAssistant) -> ServiceHandler:
             service_id=service_data.get(UNIQUE_ID),
             protect_free_tier=_service_protect_free_tier(service_data),
         )
-        key = _cache_key(
-            "vision",
-            {
-                "service_id": service_data.get(UNIQUE_ID),
-                "model": request.model,
-                "prompt": request.prompt,
-                "system_prompt": request.system_prompt,
-                "image_url": request.image_url,
-            },
+        key = (
+            await hass.async_add_executor_job(
+                _cache_key,
+                namespace,
+                {
+                    "service_id": service_data.get(UNIQUE_ID),
+                    "model": request.model,
+                    "prompt": request.prompt,
+                    "system_prompt": request.system_prompt,
+                    "image_url": request.image_url,
+                },
+            )
+            if service_prompt_caching(entry, service_data)
+            and _prompt_cache_allowed(runtime, request.model)
+            else None
         )
         if cached := _cache_get(runtime, request.model, key):
             return cached
@@ -1158,64 +1164,22 @@ def _handle_analyze_image(hass: HomeAssistant) -> ServiceHandler:
         return response
 
     return handler
+
+
+def _handle_analyze_image(hass: HomeAssistant) -> ServiceHandler:
+    """Build the image analysis action."""
+    return _handle_vision(hass, GroqFeature.VISION, "vision")
 
 
 def _handle_extract_text_from_image(hass: HomeAssistant) -> ServiceHandler:
-    """Build the extract_text_from_image service handler."""
-
-    async def handler(call: ServiceCall) -> ServiceResponse:
-        entry, runtime = await _runtime_from_call(hass, call, FEATURE_IMAGE_RECOGNITION)
-        _ensure_feature(runtime, GroqFeature.VISION)
-        service_data = _service_from_call(
-            entry, runtime, call, FEATURE_IMAGE_RECOGNITION
-        )
-        model = _service_value(call, service_data, ATTR_MODEL, DEFAULT_VISION_MODEL)
-        _ensure_model(
-            runtime,
-            model,
-            GroqFeature.OCR,
-            hass=hass,
-            entry=entry,
-            service_data=service_data,
-        )
-        request = VisionRequest(
-            prompt=call.data[ATTR_PROMPT],
-            model=model,
-            system_prompt=_service_value(call, service_data, ATTR_SYSTEM_PROMPT),
-            image_url=await _image_url_from_call(hass, call),
-            service_id=service_data.get(UNIQUE_ID),
-            protect_free_tier=_service_protect_free_tier(service_data),
-        )
-        key = _cache_key(
-            "ocr",
-            {
-                "service_id": service_data.get(UNIQUE_ID),
-                "model": request.model,
-                "prompt": request.prompt,
-                "system_prompt": request.system_prompt,
-                "image_url": request.image_url,
-            },
-        )
-        if cached := _cache_get(runtime, request.model, key):
-            return cached
-
-        result = await runtime.client.async_analyze_image(request)
-        response = {
-            "text": result.text,
-            "model": result.model,
-            "usage": result.usage,
-            "cached": False,
-        }
-        _cache_set(runtime, request.model, key, response)
-        return response
-
-    return handler
+    """Build the OCR action, retaining its capability and cache namespace."""
+    return _handle_vision(hass, GroqFeature.OCR, "ocr")
 
 
 def _handle_transcribe_audio(hass: HomeAssistant) -> ServiceHandler:
     """Build the transcribe_audio service handler."""
 
-    async def handler(call: ServiceCall) -> ServiceResponse:
+    async def handler(call: ServiceCall) -> GroqServiceResponse:
         entry, runtime = await _runtime_from_call(hass, call, FEATURE_SPEECH_TO_TEXT)
         _ensure_feature(runtime, GroqFeature.SPEECH_TO_TEXT)
         service_data = _service_from_call(entry, runtime, call, FEATURE_SPEECH_TO_TEXT)
@@ -1355,7 +1319,7 @@ async def async_update_service_descriptions(
 def _handle_clear_cache(hass: HomeAssistant) -> ServiceHandler:
     """Build the clear_cache service handler."""
 
-    async def handler(call: ServiceCall) -> ServiceResponse:
+    async def handler(call: ServiceCall) -> GroqServiceResponse:
         _ensure_config_entry_id(call)
         _entry, runtime = await _runtime_from_call(hass, call)
         _ensure_feature(runtime, GroqFeature.PROMPT_CACHING)
@@ -1367,7 +1331,7 @@ def _handle_clear_cache(hass: HomeAssistant) -> ServiceHandler:
 def _handle_list_models(hass: HomeAssistant) -> ServiceHandler:
     """Build the list_models service handler."""
 
-    async def handler(call: ServiceCall) -> ServiceResponse:
+    async def handler(call: ServiceCall) -> GroqServiceResponse:
         _ensure_config_entry_id(call)
         _entry, runtime = await _runtime_from_call(hass, call)
         if call.data.get(ATTR_REFRESH):

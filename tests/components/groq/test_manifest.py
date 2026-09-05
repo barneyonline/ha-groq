@@ -67,9 +67,15 @@ def test_strict_typing_gate_is_not_relaxed() -> None:
         "disallow_incomplete_defs",
         "disallow_untyped_calls",
         "disallow_any_generics",
+        "disallow_subclassing_any",
         "warn_return_any",
     ):
         assert mypy.get(option, True) is not False, option
+    for override in mypy.get("overrides", []):
+        assert not (
+            any(module.startswith("homeassistant") for module in override["module"])
+            and override.get("ignore_missing_imports")
+        )
 
 
 def test_hacs_minimum_homeassistant_version_is_declared() -> None:

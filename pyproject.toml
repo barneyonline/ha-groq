@@ -19,14 +19,10 @@ files = ["custom_components/groq"]
 strict = true
 warn_unused_configs = true
 show_error_codes = true
-disallow_subclassing_any = false
 
 [[tool.mypy.overrides]]
 module = [
-  # The Home Assistant runtime wheel does not expose importable typing metadata
-  # to mypy in this standalone custom-component harness.
-  "homeassistant",
-  "homeassistant.*",
+  # These third-party validation packages do not provide complete typing metadata.
   "jsonschema",
   "referencing.*",
 ]

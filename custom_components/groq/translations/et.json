@@ -88,7 +88,9 @@
                 "reconfigure": "Teksti genereerimise uuesti seadistamine"
             },
             "abort": {
-                "reconfigure_successful": "Teksti genereerimise teenust värskendati edukalt."
+                "reconfigure_successful": "Teksti genereerimise teenust värskendati edukalt.",
+                "no_compatible_models": "Sellel Groqi kontol pole teenusega ühilduvaid aktiivseid mudeleid. Kontrolli mudelite ligipääsu Groqi konsoolis ja proovi uuesti.",
+                "model_unavailable": "Valitud mudel pole selle teenuse jaoks enam saadaval. Alusta seadistamist uuesti ja vali saadaolev mudel."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Konfigureerige kõne tekstiks ümber"
             },
             "abort": {
-                "reconfigure_successful": "Kõne-teksti teenuse värskendamine õnnestus."
+                "reconfigure_successful": "Kõne-teksti teenuse värskendamine õnnestus.",
+                "no_compatible_models": "Sellel Groqi kontol pole teenusega ühilduvaid aktiivseid mudeleid. Kontrolli mudelite ligipääsu Groqi konsoolis ja proovi uuesti.",
+                "model_unavailable": "Valitud mudel pole selle teenuse jaoks enam saadaval. Alusta seadistamist uuesti ja vali saadaolev mudel."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Konfigureerige kõnesünteesi ümber"
             },
             "abort": {
-                "reconfigure_successful": "Kõnesünteesi teenuse värskendamine õnnestus."
+                "reconfigure_successful": "Kõnesünteesi teenuse värskendamine õnnestus.",
+                "no_compatible_models": "Sellel Groqi kontol pole teenusega ühilduvaid aktiivseid mudeleid. Kontrolli mudelite ligipääsu Groqi konsoolis ja proovi uuesti.",
+                "model_unavailable": "Valitud mudel pole selle teenuse jaoks enam saadaval. Alusta seadistamist uuesti ja vali saadaolev mudel."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Seadistage pildituvastus uuesti"
             },
             "abort": {
-                "reconfigure_successful": "Pildituvastusteenuse värskendamine õnnestus."
+                "reconfigure_successful": "Pildituvastusteenuse värskendamine õnnestus.",
+                "no_compatible_models": "Sellel Groqi kontol pole teenusega ühilduvaid aktiivseid mudeleid. Kontrolli mudelite ligipääsu Groqi konsoolis ja proovi uuesti.",
+                "model_unavailable": "Valitud mudel pole selle teenuse jaoks enam saadaval. Alusta seadistamist uuesti ja vali saadaolev mudel."
             },
             "step": {
                 "image_recognition": {
