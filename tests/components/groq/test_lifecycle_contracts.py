@@ -143,10 +143,18 @@ async def test_setup_retry_recovers_through_home_assistant(hass):
         await hass.async_block_till_done(wait_background_tasks=True)
         assert entry.state is ConfigEntryState.LOADED
         assert len(entry.update_listeners) == 1
-        assert (
-            len(er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id))
-            == 2
+        entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        assert len(entities) == 9
+        sensors = [entity for entity in entities if entity.domain == "sensor"]
+        assert len(sensors) == 7
+        assert all(
+            entity.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+            for entity in sensors
         )
+        assert {entity.domain for entity in entities if not entity.disabled} == {
+            "ai_task",
+            "conversation",
+        }
         response = await entry.runtime_data.client.async_generate_text(
             TextGenerationRequest(prompt="Hello", model=TEXT_MODEL)
         )
@@ -591,7 +599,7 @@ async def test_loaded_subentry_update_reloads_once_and_retains_ownership(hass):
             entity.entity_id
             for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         }
-        assert len(initial) == 2
+        assert len(initial) == 9
         assert all(
             entity.config_subentry_id == "text-service"
             for entity in er.async_entries_for_config_entry(registry, entry.entry_id)

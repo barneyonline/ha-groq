@@ -12,6 +12,11 @@ generate_text:
         select:
           custom_value: true
           options: []
+    browser_search:
+      required: false
+      advanced: true
+      selector:
+        boolean:
     prompt:
       required: true
       example: Summarize the current home status for a notification.
@@ -167,6 +172,11 @@ generate_structured:
         select:
           custom_value: true
           options: []
+    browser_search:
+      required: false
+      advanced: true
+      selector:
+        boolean:
     prompt:
       required: true
       example: Summarize the current home status for a notification.
@@ -489,6 +499,63 @@ transcribe_audio:
               value: ko-KR
             - label: Chinese
               value: zh-CN
+    prompt:
+      required: false
+      advanced: true
+      selector:
+        text:
+          multiline: true
+
+    response_format:
+      required: false
+      selector:
+        select:
+          options:
+            - json
+            - verbose_json
+    timestamp_granularities:
+      required: false
+      selector:
+        select:
+          multiple: true
+          options:
+            - word
+            - segment
+
+translate_audio:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: groq
+    service_id:
+      required: true
+      example: Speech-to-Text
+      selector:
+        select:
+          custom_value: true
+          options: []
+    audio_file:
+      required: false
+      selector:
+        media:
+          accept:
+            - audio/*
+    audio_path:
+      required: false
+      advanced: true
+      example: /config/www/recording.wav
+      selector:
+        text:
+    model:
+      required: false
+      selector:
+        select:
+          custom_value: true
+          options:
+            - label: Whisper Large V3
+              value: whisper-large-v3
     prompt:
       required: false
       advanced: true

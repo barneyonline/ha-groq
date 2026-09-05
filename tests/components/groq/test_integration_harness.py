@@ -2364,6 +2364,31 @@ async def test_text_to_speech_subentry_reconfigure_missing_vocal_directions_clea
 
 
 @pytest.mark.asyncio
+async def test_text_generation_advanced_rejects_non_object_request_body(monkeypatch):
+    flow = config_flow.GroqServiceSubentryFlow()
+    _patch_flow_common(monkeypatch, flow)
+    advanced = await flow.async_step_text_generation(
+        {
+            "name": "Text Service",
+            "model": "openai/gpt-oss-20b",
+            "advanced_options": True,
+        }
+    )
+    data = advanced["data_schema"](
+        {"browser_search": True, "request_body_options": ["invalid"]}
+    )
+    result = await flow.async_step_text_generation_advanced(data)
+    assert result["type"] == "form"
+    assert result["step_id"] == "text_generation_advanced"
+    assert result["errors"] == {"request_body_options": "invalid_request_body_options"}
+    result = await flow.async_step_text_generation_advanced(
+        {**data, "request_body_options": {}}
+    )
+    assert result["type"] == "create_entry"
+    assert result["data"]["browser_search"] is True
+
+
+@pytest.mark.asyncio
 async def test_text_generation_subentry_flow_uses_advanced_step(monkeypatch):
     flow = config_flow.GroqServiceSubentryFlow()
     _patch_flow_common(monkeypatch, flow)

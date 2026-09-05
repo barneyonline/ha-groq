@@ -376,7 +376,14 @@ def _result_tool_calls(result: Any) -> list[llm.ToolInput]:
 def _assistant_native(result: Any) -> dict[str, Any]:
     """Return Groq metadata for Home Assistant conversation traces."""
     native: dict[str, Any] = {}
-    for attr in ("model", "usage", "usage_breakdown", "executed_tools", "tool_calls"):
+    for attr in (
+        "model",
+        "usage",
+        "usage_breakdown",
+        "executed_tools",
+        "tool_calls",
+        "citations",
+    ):
         value = getattr(result, attr, None)
         if value:
             native[attr] = value

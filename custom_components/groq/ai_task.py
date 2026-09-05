@@ -453,6 +453,17 @@ class GroqAITaskEntity(AITaskEntity):
         elif service_structured_outputs(self._config_entry, self._service_data):
             schema = service_schema(self._config_entry, self._service_data)
 
+        if (
+            schema is not None
+            and service_generation_options(
+                self._config_entry, self._service_data, self._model_registry
+            )["browser_search"]
+        ):
+            raise translated_error(
+                "Browser search cannot be combined with structured output",
+                "invalid_request_options",
+            )
+
         if tools := _chat_log_tools(chat_log):
             result = await self._async_generate_text_with_tools(
                 task,

@@ -144,7 +144,7 @@ class DummyTextClient:
         self.requests.append(request)
         return SimpleNamespace(text=self.text)
 
-    async def async_stream_text(self, request):
+    async def async_stream_chat(self, request):
         self.requests.append(request)
         for chunk in self.stream_chunks:
             yield chunk
@@ -943,6 +943,7 @@ def test_feature_registry_supports_enabled_options():
     assert set(registry.enabled_platforms()) == {
         Platform.AI_TASK,
         Platform.CONVERSATION,
+        Platform.SENSOR,
     }
 
 
@@ -2259,7 +2260,7 @@ async def test_conversation_entity_uses_home_assistant_llm_tools():
         "name": "Groq Assist",
         "model": "openai/gpt-oss-20b",
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
-        "stream": True,
+        "stream": False,
         CONF_LLM_HASS_API: ["assist"],
     }
     client = DummyToolTextClient()
@@ -2428,6 +2429,7 @@ async def test_conversation_entity_limits_unresolved_tool_iterations():
 
     entry = DummyEntry()
     service_data = {
+        "stream": False,
         "model": "openai/gpt-oss-20b",
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
     }

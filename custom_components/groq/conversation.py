@@ -169,11 +169,9 @@ class GroqConversationEntity(ConversationEntity):
                 feature="Home Assistant tool calls",
             )
         text = ""
-        use_streaming = (
-            not tools
-            and service_stream(self._config_entry, self._service_data)
-            and hasattr(chat_log, "async_add_delta_content_stream")
-        )
+        use_streaming = service_stream(
+            self._config_entry, self._service_data
+        ) and hasattr(chat_log, "async_add_delta_content_stream")
         attachment_cache: dict[tuple[str, str], Any] = {}
         for _iteration in range(MAX_TOOL_ITERATIONS):
             request = await self._async_text_generation_request(
@@ -199,7 +197,9 @@ class GroqConversationEntity(ConversationEntity):
                 raise translated_error(error, "invalid_request_options")
             if use_streaming:
                 text = await self._async_stream_message(user_input, chat_log, request)
-                break
+                if not getattr(chat_log, "unresponded_tool_results", False):
+                    break
+                continue
 
             result = await self._client.async_generate_text(request)
             text = result.text
@@ -277,9 +277,27 @@ class GroqConversationEntity(ConversationEntity):
 
         async def content_stream() -> AsyncIterator[AssistantContentDeltaDict]:
             yield {"role": "assistant"}
-            async for chunk in self._client.async_stream_text(request):
-                chunks.append(chunk)
-                yield {"content": chunk}
+            async for chunk in self._client.async_stream_chat(request):
+                if isinstance(chunk, str):
+                    chunks.append(chunk)
+                    yield {"content": chunk}
+                else:
+                    tool_calls = _result_tool_calls(chunk)
+                    allowed = {
+                        tool["function"]["name"]
+                        for tool in request.tools or []
+                        if tool.get("type") == "function"
+                    }
+                    if any(call.tool_name not in allowed for call in tool_calls):
+                        raise translated_error(
+                            "Groq returned an unexposed Home Assistant tool",
+                            "invalid_request_options",
+                        )
+                    yield {
+                        "tool_calls": tool_calls or None,
+                        "thinking_content": chunk.reasoning,
+                        "native": _assistant_native(chunk) or None,
+                    }
 
         completed: list[str] = []
         # Home Assistant yields the completed assistant content back from the

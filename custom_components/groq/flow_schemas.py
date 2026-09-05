@@ -8,6 +8,7 @@ import voluptuous as vol
 from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.helpers.selector import Selector, selector
 
+from .api import BROWSER_SEARCH_MODELS
 from .compound_tools import compound_builtin_tools_are_valid
 from .const import (
     COMPOUND_BUILTIN_TOOL_OPTIONS,
@@ -258,6 +259,9 @@ def sanitize_text_generation_service_data(
     if not _supports_model_option(model_registry, model, GroqFeature.PROMPT_CACHING):
         data.pop(CONF_PROMPT_CACHING, None)
 
+    if model not in BROWSER_SEARCH_MODELS:
+        data.pop("browser_search", None)
+
     if not _supports_model_option(model_registry, model, GroqCapability.COMPOUND):
         data.pop(CONF_COMPOUND_BUILTIN_TOOLS, None)
         if isinstance(request_body_options, dict):
@@ -313,6 +317,8 @@ def text_generation_model_capability_summary(
         supported.append("Home Assistant tool calls")
     else:
         unsupported.append("Home Assistant tool calls")
+    if model in BROWSER_SEARCH_MODELS:
+        supported.append("browser search")
     if GroqCapability.COMPOUND in capabilities:
         supported.append("Groq Compound tools")
     if GroqCapability.VISION in capabilities:
@@ -646,6 +652,10 @@ def text_generation_advanced_schema(
             {"boolean": {}}
         ),
     }
+    if model in BROWSER_SEARCH_MODELS:
+        schema[
+            vol.Optional("browser_search", default=values.get("browser_search", False))
+        ] = selector({"boolean": {}})
     if _supports_model_option(model_registry, model, GroqFeature.REASONING):
         schema.update(
             {
@@ -837,6 +847,19 @@ def validate_text_generation_input(
             )
         elif not compound_builtin_tools_are_valid(compound_builtin_tools):
             errors[CONF_COMPOUND_BUILTIN_TOOLS] = "invalid_compound_builtin_tools"
+    body = user_input.get(CONF_REQUEST_BODY_OPTIONS)
+    if body is not None and not isinstance(body, dict):
+        errors[CONF_REQUEST_BODY_OPTIONS] = "invalid_request_body_options"
+    if user_input.get("browser_search"):
+        if model not in BROWSER_SEARCH_MODELS:
+            errors["browser_search"] = "unsupported_browser_search_model"
+        elif user_input.get(CONF_STRUCTURED_OUTPUTS) or (
+            isinstance(body, dict)
+            and _response_format_requests_structured_outputs(
+                body.get("response_format")
+            )
+        ):
+            errors["browser_search"] = "browser_search_structured_output"
     active_registry = model_registry or GroqModelRegistry()
     if body_error := request_body_options_validation_error(
         active_registry,

@@ -82,6 +82,7 @@ class GenerationOptions(TypedDict):
     include_reasoning: bool | None
     compound_builtin_tools: list[str] | None
     extra_body: dict[str, Any] | None
+    browser_search: bool
 
 
 def generation_options(
@@ -103,6 +104,7 @@ def generation_options(
         "include_reasoning": True if values.get(CONF_INCLUDE_REASONING) else None,
         "compound_builtin_tools": compound_tools,
         "extra_body": extra_body,
+        "browser_search": bool(values.get("browser_search", False)),
     }
 
 
@@ -113,6 +115,9 @@ def service_generation_options(
 ) -> GenerationOptions:
     """Resolve configured entity options with their established normalization."""
     values = {
+        "browser_search": entry_value(
+            config_entry, service_data, "browser_search", False
+        ),
         CONF_TEMPERATURE: service_temperature(config_entry, service_data),
         CONF_MAX_TOKENS: service_max_tokens(config_entry, service_data, model_registry),
         CONF_TOP_P: service_top_p(config_entry, service_data),

@@ -21,6 +21,7 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
+from .citations import extract_citations
 from .compound_tools import (
     compound_builtin_tools_payload_value,
     compound_builtin_tools_require_latest,
@@ -30,7 +31,9 @@ from .errors import GroqApiError, GroqResponseError, safe_error_payload
 from .model_registry import GroqModel, model_from_api
 from .rate_limit import GroqRateLimiter
 from .repairs import async_create_model_access_issue, async_delete_model_access_issue
+from .streaming import ChatStream
 from .structured import validate_json_schema_data
+from .usage import GroqUsage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,6 +58,9 @@ GROQ_MODEL_VERSION_HEADER = "Groq-Model-Version"
 GROQ_LATEST_MODEL_VERSION = "latest"
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_DAY_SECONDS = 24 * 60 * 60
+BROWSER_SEARCH_MODELS = frozenset(
+    {"openai/gpt-oss-20b", "openai/gpt-oss-120b", "openai/gpt-oss-safeguard-20b"}
+)
 RESERVED_CHAT_BODY_OPTIONS = frozenset(
     {"messages", "model", "stream", "tool_choice", "tools"}
 )
@@ -110,6 +116,7 @@ class TextGenerationRequest:
     reasoning_format: str | None = None
     include_reasoning: bool | None = None
     stream: bool = False
+    browser_search: bool = False
     compound_builtin_tools: str | list[str] | tuple[str, ...] | set[str] | None = None
     extra_body: dict[str, Any] | None = None
     api_key: str | None = None
@@ -184,6 +191,7 @@ class ChatCompletionResult:
     tool_calls: list[dict[str, Any]] | None = None
     executed_tools: list[dict[str, Any]] | None = None
     usage_breakdown: dict[str, Any] | None = None
+    citations: list[dict[str, str]] | None = None
 
     @property
     def content(self) -> str:
@@ -326,6 +334,18 @@ def build_text_generation_payload(request: TextGenerationRequest) -> dict[str, A
         payload["tools"] = request.tools
     if request.tool_choice is not None:
         payload["tool_choice"] = request.tool_choice
+    if request.browser_search:
+        if request.model not in BROWSER_SEARCH_MODELS:
+            raise GroqResponseError("Browser search requires a supported GPT-OSS model")
+        response_format = payload.get("response_format")
+        if isinstance(request, StructuredGenerationRequest) or (
+            isinstance(response_format, dict)
+            and response_format.get("type") in {"json_schema", "json_object"}
+        ):
+            raise GroqResponseError(
+                "Browser search cannot be combined with structured output"
+            )
+        payload["tools"] = [*(request.tools or []), {"type": "browser_search"}]
     return payload
 
 
@@ -487,6 +507,7 @@ class GroqApiClient:
         entry_id: str | None = None,
     ) -> None:
         self._hass = hass
+        self.usage = GroqUsage()
         self._entry_id = entry_id
         self._closed = False
         self._api_key = api_key
@@ -526,6 +547,7 @@ class GroqApiClient:
         self._speech_cache_order.clear()
         self._speech_cache_bytes = 0
         self._tts_usage.clear()
+        self.usage.clear()
 
     def _speech_finished(
         self, request: SpeechRequest, task: asyncio.Task[bytes]
@@ -636,15 +658,24 @@ class GroqApiClient:
             guard_key=self._guard_key(request),
             repair_service_id=request.service_id,
         )
-        return self._chat_result(payload)
+        return self._chat_result(payload, request.service_id)
 
     async def async_stream_text(
         self,
         request: TextGenerationRequest,
     ) -> AsyncIterator[str]:
         """Stream generated text chunks from the chat completions API."""
+        async for chunk in self.async_stream_chat(request):
+            if isinstance(chunk, str):
+                yield chunk
+
+    async def async_stream_chat(
+        self, request: TextGenerationRequest
+    ) -> AsyncIterator[str | ChatCompletionResult]:
+        """Stream text followed by one fully assembled result with metadata."""
         payload = build_text_generation_payload(request)
         payload["stream"] = True
+        stream = ChatStream(request.model)
         async for event in self._request_stream(
             "POST",
             CHAT_COMPLETIONS_PATH,
@@ -653,20 +684,9 @@ class GroqApiClient:
             guard_key=self._guard_key(request),
             repair_service_id=request.service_id,
         ):
-            choices = event.get("choices")
-            if not isinstance(choices, list) or not choices:
-                continue
-            choice = choices[0]
-            if not isinstance(choice, dict):
-                continue
-            # Groq uses OpenAI-compatible SSE chunks, where incremental text is
-            # emitted under choices[0].delta.content.
-            delta = choice.get("delta")
-            if not isinstance(delta, dict):
-                continue
-            content = delta.get("content")
-            if isinstance(content, str) and content:
+            if content := stream.add(event):
                 yield content
+        yield self._chat_result(stream.result(), request.service_id)
 
     async def async_generate_structured(
         self,
@@ -681,7 +701,7 @@ class GroqApiClient:
             guard_key=self._guard_key(request),
             repair_service_id=request.service_id,
         )
-        result = self._chat_result(payload)
+        result = self._chat_result(payload, request.service_id)
         try:
             parsed = json.loads(result.text)
         except json.JSONDecodeError as err:
@@ -713,7 +733,7 @@ class GroqApiClient:
             guard_key=self._guard_key(request),
             repair_service_id=request.service_id,
         )
-        return self._chat_result(payload)
+        return self._chat_result(payload, request.service_id)
 
     async def async_transcribe_audio(
         self,
@@ -728,17 +748,66 @@ class GroqApiClient:
         protect_free_tier: bool = True,
     ) -> str:
         """Transcribe audio with Groq's OpenAI-compatible audio endpoint."""
+        result = await self.async_transcribe_audio_result(
+            audio=audio,
+            filename=filename,
+            model=model,
+            language=language,
+            prompt=prompt,
+            api_key=api_key,
+            service_id=service_id,
+            protect_free_tier=protect_free_tier,
+        )
+        return str(result["text"])
+
+    async def async_transcribe_audio_result(
+        self,
+        *,
+        audio: bytes,
+        filename: str,
+        model: str,
+        language: str | None = None,
+        prompt: str | None = None,
+        api_key: str | None = None,
+        service_id: str | None = None,
+        protect_free_tier: bool = True,
+        response_format: str = "json",
+        timestamp_granularities: list[str] | None = None,
+        translate: bool = False,
+    ) -> dict[str, Any]:
+        """Return transcription metadata or translate speech into English."""
+        if response_format not in {"json", "verbose_json"}:
+            raise GroqResponseError("Unsupported transcription response format")
+        if timestamp_granularities and (
+            response_format != "verbose_json"
+            or any(
+                value not in {"word", "segment"} for value in timestamp_granularities
+            )
+        ):
+            raise GroqResponseError(
+                "Timestamps require verbose_json and word or segment granularity"
+            )
+        if translate and (
+            model != "whisper-large-v3"
+            or response_format != "json"
+            or timestamp_granularities
+        ):
+            raise GroqResponseError(
+                "Translation requires whisper-large-v3 and JSON output"
+            )
         form = aiohttp.FormData()
         form.add_field("model", model)
         form.add_field("file", audio, filename=filename)
-        form.add_field("response_format", "json")
-        if language:
+        form.add_field("response_format", response_format)
+        if language and not translate:
             form.add_field("language", language.split("-")[0])
         if prompt:
             form.add_field("prompt", prompt)
+        for granularity in dict.fromkeys(timestamp_granularities or []):
+            form.add_field("timestamp_granularities[]", granularity)
         payload = await self._request_json(
             "POST",
-            AUDIO_TRANSCRIPTIONS_PATH,
+            "/audio/translations" if translate else AUDIO_TRANSCRIPTIONS_PATH,
             data=form,
             api_key=api_key,
             content_type=None,
@@ -746,10 +815,13 @@ class GroqApiClient:
             repair_service_id=service_id,
             repair_model=model,
         )
-        text = payload.get("text")
-        if not isinstance(text, str):
+        if not isinstance(payload.get("text"), str):
             raise GroqResponseError("Groq transcription response did not include text")
-        return text
+        return {
+            key: payload[key]
+            for key in ("text", "language", "duration", "segments", "words")
+            if key in payload
+        }
 
     async def async_synthesize_speech(self, request: SpeechRequest) -> bytes:
         """Coalesce identical synthesis while each caller retains cancellation."""
@@ -894,15 +966,32 @@ class GroqApiClient:
         while self._speech_cache_bytes > MAX_SPEECH_CACHE_BYTES:
             self._evict_speech(*next(iter(self._speech_cache_order)))
 
-    def _chat_result(self, payload: dict[str, Any]) -> ChatCompletionResult:
+    def _chat_result(
+        self, payload: dict[str, Any], service_id: str | None = None
+    ) -> ChatCompletionResult:
         """Normalize a chat completion response."""
         usage = payload.get("usage")
+        usage = usage if isinstance(usage, dict) else {}
+        choices = payload.get("choices")
+        message = (
+            choices[0].get("message", {})
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict)
+            else {}
+        )
+        citations = (
+            extract_citations({**payload, **message})
+            if isinstance(message, dict)
+            else []
+        )
+        text = extract_chat_text(payload)
+        self.usage.record(service_id, usage)
         return ChatCompletionResult(
-            text=extract_chat_text(payload),
+            text=text,
             model=payload.get("model"),
-            usage=usage if isinstance(usage, dict) else {},
+            usage=usage,
             raw=payload,
             reasoning=extract_chat_reasoning(payload),
+            citations=citations,
             tool_calls=extract_tool_calls(payload),
             executed_tools=extract_executed_tools(payload),
             usage_breakdown=(

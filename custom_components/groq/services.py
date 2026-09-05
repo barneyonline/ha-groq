@@ -28,6 +28,7 @@ from homeassistant.helpers import service as service_helper
 from homeassistant.util.yaml.loader import load_yaml
 
 from .api import (
+    BROWSER_SEARCH_MODELS,
     StructuredGenerationRequest,
     TextGenerationRequest,
     VisionRequest,
@@ -107,6 +108,7 @@ SERVICE_GENERATE_STRUCTURED = "generate_structured"
 SERVICE_ANALYZE_IMAGE = "analyze_image"
 SERVICE_EXTRACT_TEXT_FROM_IMAGE = "extract_text_from_image"
 SERVICE_TRANSCRIBE_AUDIO = "transcribe_audio"
+SERVICE_TRANSLATE_AUDIO = "translate_audio"
 SERVICE_CLEAR_CACHE = "clear_cache"
 SERVICE_LIST_MODELS = "list_models"
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
@@ -162,6 +164,7 @@ _TEXT_OPTIONS = {
     vol.Optional(ATTR_REASONING_FORMAT): cv.string,
     vol.Optional(ATTR_INCLUDE_REASONING): cv.boolean,
     vol.Optional(ATTR_REQUEST_BODY_OPTIONS): dict,
+    vol.Optional("browser_search"): cv.boolean,
 }
 
 GENERATE_TEXT_SCHEMA = vol.Schema(
@@ -204,7 +207,7 @@ OCR_SCHEMA = vol.Schema(
         vol.Optional(ATTR_IMAGE_URL): cv.string,
     }
 )
-TRANSCRIBE_AUDIO_SCHEMA = vol.Schema(
+_AUDIO_SCHEMA = vol.Schema(
     {
         _ENTRY_SELECTOR: cv.string,
         _SERVICE_SELECTOR: cv.string,
@@ -214,6 +217,15 @@ TRANSCRIBE_AUDIO_SCHEMA = vol.Schema(
         vol.Optional(ATTR_LANGUAGE): cv.string,
         vol.Optional(ATTR_PROMPT): cv.string,
     }
+)
+TRANSCRIBE_AUDIO_SCHEMA = _AUDIO_SCHEMA.extend(
+    {
+        vol.Optional("response_format"): vol.In({"json", "verbose_json"}),
+        vol.Optional("timestamp_granularities"): [vol.In({"word", "segment"})],
+    }
+)
+TRANSLATE_AUDIO_SCHEMA = vol.Schema(
+    {key: value for key, value in _AUDIO_SCHEMA.schema.items() if key != ATTR_LANGUAGE}
 )
 CLEAR_CACHE_SCHEMA = vol.Schema({_REQUIRED_ENTRY_SELECTOR: cv.string})
 LIST_MODELS_SCHEMA = vol.Schema(
@@ -229,6 +241,7 @@ _SERVICE_FIELD_TYPES = {
     SERVICE_ANALYZE_IMAGE: FEATURE_IMAGE_RECOGNITION,
     SERVICE_EXTRACT_TEXT_FROM_IMAGE: FEATURE_IMAGE_RECOGNITION,
     SERVICE_TRANSCRIBE_AUDIO: FEATURE_SPEECH_TO_TEXT,
+    SERVICE_TRANSLATE_AUDIO: FEATURE_SPEECH_TO_TEXT,
 }
 
 GroqServiceResponse = dict[str, Any]
@@ -576,6 +589,18 @@ def _ensure_request_body_features(
     request: TextGenerationRequest,
 ) -> None:
     """Raise when advanced body options require unsupported model features."""
+    if request.browser_search:
+        response_format = (request.extra_body or {}).get("response_format")
+        if (
+            request.model not in BROWSER_SEARCH_MODELS
+            or isinstance(request, StructuredGenerationRequest)
+            or (
+                isinstance(response_format, dict)
+                and response_format.get("type") in {"json_schema", "json_object"}
+            )
+        ):
+            message = "Browser search requires GPT-OSS without structured output"
+            raise _service_error("request_invalid", message, message=message)
     if error := compound_builtin_tools_error_message(
         runtime.model_registry,
         request.model,
@@ -604,6 +629,7 @@ def _request_cache_fields(request: TextGenerationRequest) -> dict[str, Any]:
         "include_reasoning": request.include_reasoning,
         "compound_builtin_tools": request.compound_builtin_tools,
         "extra_body": request.extra_body,
+        "browser_search": request.browser_search,
     }
 
 
@@ -1075,7 +1101,8 @@ def _handle_generate_text(
                     "strict": getattr(request, "strict", False),
                 },
             )
-            if service_prompt_caching(entry, service_data)
+            if not request.browser_search
+            and service_prompt_caching(entry, service_data)
             and _prompt_cache_allowed(runtime, request.model)
             else None
         )
@@ -1090,6 +1117,7 @@ def _handle_generate_text(
                 "text": result.text,
                 "reasoning": result.reasoning,
                 "executed_tools": result.executed_tools or [],
+                "citations": getattr(result, "citations", None) or [],
                 "usage_breakdown": result.usage_breakdown or {},
                 "model": result.model,
                 "usage": result.usage,
@@ -1176,14 +1204,34 @@ def _handle_extract_text_from_image(hass: HomeAssistant) -> ServiceHandler:
     return _handle_vision(hass, GroqFeature.OCR, "ocr")
 
 
-def _handle_transcribe_audio(hass: HomeAssistant) -> ServiceHandler:
+def _handle_transcribe_audio(
+    hass: HomeAssistant, *, translate: bool = False
+) -> ServiceHandler:
     """Build the transcribe_audio service handler."""
 
     async def handler(call: ServiceCall) -> GroqServiceResponse:
         entry, runtime = await _runtime_from_call(hass, call, FEATURE_SPEECH_TO_TEXT)
         _ensure_feature(runtime, GroqFeature.SPEECH_TO_TEXT)
         service_data = _service_from_call(entry, runtime, call, FEATURE_SPEECH_TO_TEXT)
-        model = _service_value(call, service_data, ATTR_MODEL, DEFAULT_STT_MODEL)
+        model = (
+            call.data.get(ATTR_MODEL, "whisper-large-v3")
+            if translate
+            else _service_value(call, service_data, ATTR_MODEL, DEFAULT_STT_MODEL)
+        )
+        if translate and model != "whisper-large-v3":
+            raise _service_error(
+                "request_invalid",
+                "Translation requires whisper-large-v3",
+                message="Translation requires whisper-large-v3",
+            )
+        response_format = call.data.get("response_format", "json")
+        granularities = call.data.get("timestamp_granularities")
+        if granularities and response_format != "verbose_json":
+            raise _service_error(
+                "request_invalid",
+                "Timestamps require verbose_json",
+                message="Timestamps require verbose_json",
+            )
         _ensure_model(
             runtime,
             model,
@@ -1193,31 +1241,35 @@ def _handle_transcribe_audio(hass: HomeAssistant) -> ServiceHandler:
             service_data=service_data,
         )
         audio, filename = await _audio_from_call(hass, call)
-        text = await runtime.client.async_transcribe_audio(
-            audio=audio,
-            filename=filename,
-            model=model,
-            language=_service_value(
+        language = (
+            "en"
+            if translate
+            else _service_value(
                 call,
                 service_data,
                 ATTR_LANGUAGE,
                 service_data.get(CONF_LANGUAGE, DEFAULT_STT_LANGUAGE),
-            ),
+            )
+        )
+        kwargs = dict(
+            audio=audio,
+            filename=filename,
+            model=model,
+            language=language,
             prompt=call.data.get(ATTR_PROMPT),
             service_id=service_data.get(UNIQUE_ID),
             protect_free_tier=_service_protect_free_tier(service_data),
         )
-        return {
-            "text": text,
-            "model": model,
-            "language": _service_value(
-                call,
-                service_data,
-                ATTR_LANGUAGE,
-                service_data.get(CONF_LANGUAGE, DEFAULT_STT_LANGUAGE),
-            ),
-            "filename": filename,
-        }
+        if translate or response_format == "verbose_json":
+            result = await runtime.client.async_transcribe_audio_result(
+                **kwargs,
+                response_format=response_format,
+                timestamp_granularities=granularities,
+                translate=translate,
+            )
+        else:
+            result = {"text": await runtime.client.async_transcribe_audio(**kwargs)}
+        return {"model": model, "language": language, "filename": filename, **result}
 
     return handler
 
@@ -1396,6 +1448,13 @@ async def async_register_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_TRANSLATE_AUDIO,
+        _handle_transcribe_audio(hass, translate=True),
+        schema=TRANSLATE_AUDIO_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_CLEAR_CACHE,
         _handle_clear_cache(hass),
         schema=CLEAR_CACHE_SCHEMA,
@@ -1423,6 +1482,7 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_ANALYZE_IMAGE,
         SERVICE_EXTRACT_TEXT_FROM_IMAGE,
         SERVICE_TRANSCRIBE_AUDIO,
+        SERVICE_TRANSLATE_AUDIO,
         SERVICE_CLEAR_CACHE,
         SERVICE_LIST_MODELS,
     ):
