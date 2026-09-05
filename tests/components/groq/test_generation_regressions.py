@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from threading import get_ident
 from unittest.mock import AsyncMock, Mock
@@ -36,6 +37,7 @@ from .test_foundation import (
     DummyResponse,
     DummySession,
     DummyTextClient,
+    add_text_service,
 )
 
 SCHEMA = {
@@ -44,6 +46,203 @@ SCHEMA = {
     "required": ["summary"],
     "additionalProperties": False,
 }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"seed": 2},
+        {"service_id": "other-service"},
+        {"model": "openai/gpt-oss-120b"},
+        {"prompt": "A different question"},
+        {"system_prompt": "A different instruction"},
+        {"temperature": 0.5},
+        {"max_tokens": 200},
+        {"top_p": 0.5},
+        {"stop": "STOP"},
+        {"service_tier": "flex"},
+        {"reasoning_effort": "high"},
+        {"include_reasoning": False},
+        {"request_body_options": {"user": "another-user"}},
+        {
+            "schema": {
+                **SCHEMA,
+                "properties": {"summary": {"type": "string", "minLength": 3}},
+            }
+        },
+        {"schema_name": "another_schema"},
+        {"strict": True},
+    ],
+    ids=lambda override: next(iter(override)),
+)
+async def test_response_cache_misses_when_generation_input_changes(hass, override):
+    entry = DummyEntry()
+    add_text_service(entry, model="openai/gpt-oss-20b")
+    entry.subentries["text-service"].data["prompt_caching"] = True
+    entry.subentries["other-service"] = SimpleNamespace(
+        subentry_id="other-service",
+        data=dict(entry.subentries["text-service"].data),
+    )
+
+    class ChangingSession:
+        def __init__(self):
+            self.calls = []
+
+        def request(self, *args, **kwargs):
+            self.calls.append(kwargs)
+            return DummyResponse(
+                200,
+                {},
+                {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {"summary": f"answer {len(self.calls)}"}
+                                )
+                            }
+                        }
+                    ]
+                },
+            )
+
+    from custom_components.groq.runtime import build_runtime
+
+    session = ChangingSession()
+    entry.runtime_data = build_runtime(hass, entry)
+    entry.runtime_data.client = GroqApiClient(hass, api_key="fake", session=session)
+    handler = services._handle_generate_text(DummyHass([entry]))
+    original = {
+        "service_id": "text-service",
+        "prompt": "Summarize",
+        "seed": 1,
+        "schema": SCHEMA,
+        "schema_name": "summary",
+        "strict": False,
+        "include_reasoning": True,
+    }
+    first = await handler(SimpleNamespace(data=original))
+    changed = await handler(SimpleNamespace(data={**original, **override}))
+    repeated = await handler(SimpleNamespace(data={**original, **override}))
+    original_again = await handler(SimpleNamespace(data=original))
+    assert first["data"] == original_again["data"] == {"summary": "answer 1"}
+    assert changed["data"] == repeated["data"] == {"summary": "answer 2"}
+    assert not first["cached"] and not changed["cached"]
+    assert repeated["cached"] and original_again["cached"]
+    assert len(session.calls) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", ["assist", "ai_task"])
+@pytest.mark.parametrize("arguments", [{"level": "7"}, {"level": "invalid"}])
+async def test_real_chat_log_executes_and_validates_tools(
+    hass, monkeypatch, platform, arguments
+):
+    calls = []
+
+    class LevelTool(llm.Tool):
+        name = "ReadLevel"
+        description = "Read a requested level"
+        parameters = vol.Schema({vol.Required("level"): vol.Coerce(int)})
+
+        async def async_call(self, hass, tool_input, llm_context):
+            # HA delegates validation to tools (as its intent tools do).
+            validated = self.parameters(tool_input.tool_args)
+            calls.append(validated)
+            return {"level": validated["level"]}
+
+    class LevelAPI(llm.API):
+        async def async_get_api_instance(self, llm_context):
+            return llm.APIInstance(
+                api=self,
+                api_prompt="Use ReadLevel to answer.",
+                llm_context=llm_context,
+                tools=[LevelTool()],
+            )
+
+    class ToolSession:
+        def __init__(self):
+            self.requests = []
+
+        def request(self, *args, **kwargs):
+            self.requests.append(kwargs["json"])
+            message = (
+                {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "level-call",
+                            "type": "function",
+                            "function": {
+                                "name": "ReadLevel",
+                                "arguments": json.dumps(arguments),
+                            },
+                        }
+                    ],
+                }
+                if len(self.requests) == 1
+                else {"content": "Finished"}
+            )
+            return DummyResponse(200, {}, {"choices": [{"message": message}]})
+
+    api = LevelAPI(hass=hass, id="level_api", name="Level API")
+    unregister = llm.async_register_api(hass, api)
+    session = ToolSession()
+    client = GroqApiClient(hass, api_key="fake", session=session)
+    data = {"model": "openai/gpt-oss-20b", "llm_hass_api": [api.id]}
+    try:
+        with async_get_chat_session(hass) as chat_session:
+            if platform == "assist":
+                entity = GroqConversationEntity(hass, DummyEntry(), data, client)
+                with conversation.async_get_chat_log(hass, chat_session) as log:
+                    log.async_add_user_content(conversation.UserContent("Read level"))
+                    result = await entity._async_handle_message(
+                        conversation.ConversationInput(
+                            text="Read level",
+                            context=Context(),
+                            conversation_id=chat_session.conversation_id,
+                            device_id=None,
+                            satellite_id=None,
+                            language="en",
+                            agent_id="conversation.groq",
+                        ),
+                        log,
+                    )
+                    assert result.response.speech["plain"]["speech"] == "Finished"
+            else:
+                entity = GroqAITaskEntity(hass, DummyEntry(), data, client)
+                entity.platform = SimpleNamespace(domain="groq")
+                entity.entity_id = "ai_task.groq"
+                monkeypatch.setattr(entity, "async_write_ha_state", Mock())
+                result = await entity.internal_async_generate_data(
+                    chat_session,
+                    GenDataTask(
+                        name="level",
+                        instructions="Read level",
+                        llm_api=api,
+                    ),
+                )
+                assert result.data == "Finished"
+            with conversation.async_get_chat_log(hass, chat_session) as log:
+                assert log.content[-1].content == "Finished"
+    finally:
+        unregister()
+
+    assert len(session.requests) == 2
+    tool_schema = session.requests[0]["tools"][0]["function"]
+    assert tool_schema["name"] == "ReadLevel"
+    assert tool_schema["parameters"]["properties"]["level"]["type"] == "integer"
+    assert tool_schema["parameters"]["required"] == ["level"]
+    results = [m for m in session.requests[1]["messages"] if m["role"] == "tool"]
+    assert len(results) == 1
+    assert results[0]["tool_call_id"] == "level-call"
+    if arguments["level"] == "7":
+        assert calls == [{"level": 7}]
+        assert json.loads(results[0]["content"]) == {"level": 7}
+    else:
+        assert calls == []
+        assert "error" in json.loads(results[0]["content"])
 
 
 @pytest.mark.asyncio

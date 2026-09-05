@@ -301,7 +301,11 @@ async def test_provider_content_length_is_rejected_before_reading() -> None:
 
     with (
         patch("custom_components.groq.api.MAX_JSON_RESPONSE_BYTES", 4),
-        patch.object(response, "read", side_effect=AssertionError("must not read")),
+        patch.object(
+            response.content,
+            "iter_chunked",
+            side_effect=AssertionError("must not read"),
+        ),
         pytest.raises(GroqResponseError, match="response exceeded"),
     ):
         await client._request_json("GET", "/models")

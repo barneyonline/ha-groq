@@ -22,6 +22,7 @@ from custom_components.groq import (
 from custom_components.groq.api import (
     GroqApiClient,
     SpeechRequest,
+    TextGenerationRequest,
 )
 from custom_components.groq.errors import (
     GroqApiError,
@@ -215,6 +216,54 @@ async def test_stream_finish_reason_and_matching_repair_recovery():
     with patch.object(api, "async_delete_model_access_issue") as clear:
         assert len(await perform(client, "stream")) == 1
     clear.assert_called_once_with(client._hass, "model", "service", entry_id="account")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("chunk_size", [1, 2, 7, 31, 4096])
+@pytest.mark.parametrize("ending", [b"\n", b"\r\n", b""])
+async def test_stream_reassembles_arbitrary_transport_fragments(chunk_size, ending):
+    text = "Café 🌞"
+    event = json.dumps(
+        {"choices": [{"delta": {"content": text}}]}, ensure_ascii=False
+    ).encode()
+    body = b": keepalive\r\n\r\ndata: " + event + b"\r\n\r\ndata: [DONE]" + ending
+
+    class FragmentedResponse(Response):
+        async def iter_chunked(self, _size):
+            for offset in range(0, len(self.body), chunk_size):
+                yield self.body[offset : offset + chunk_size]
+
+    response = FragmentedResponse(body=body)
+    client = GroqApiClient(Hass(), api_key="key", session=Session(response))
+    chunks = [
+        chunk
+        async for chunk in client.async_stream_text(
+            TextGenerationRequest(prompt="Hello", model="model")
+        )
+    ]
+    assert chunks == [text]
+    assert response.closed
+
+
+@pytest.mark.asyncio
+async def test_fragmented_stream_enforces_cumulative_byte_limit(monkeypatch):
+    chunks = (b":123\n", b":456\n", b"data: ", b"[DONE]\n")
+    consumed = []
+
+    class FragmentedResponse(Response):
+        async def iter_chunked(self, _size):
+            for chunk in chunks:
+                consumed.append(chunk)
+                yield chunk
+
+    response = FragmentedResponse()
+    client = GroqApiClient(Hass(), api_key="key", session=Session(response))
+    monkeypatch.setattr(api, "MAX_STREAM_RESPONSE_BYTES", 9)
+    with pytest.raises(GroqApiError, match="response byte limit"):
+        await perform(client, "stream")
+    # Every chunk is below the limit; the second takes the total to ten bytes.
+    assert consumed == list(chunks[:2])
+    assert response.closed
 
 
 @pytest.mark.parametrize(
