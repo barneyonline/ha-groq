@@ -39,6 +39,7 @@ from .test_foundation import (
     DummyTextClient,
     add_text_service,
 )
+from .test_transport_architecture import Response
 
 SCHEMA = {
     "type": "object",
@@ -134,7 +135,7 @@ async def test_response_cache_misses_when_generation_input_changes(hass, overrid
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("platform", ["assist", "ai_task"])
+@pytest.mark.parametrize("platform", ["assist", "assist_stream", "ai_task"])
 @pytest.mark.parametrize("arguments", [{"level": "7"}, {"level": "invalid"}])
 async def test_real_chat_log_executes_and_validates_tools(
     hass, monkeypatch, platform, arguments
@@ -184,6 +185,25 @@ async def test_real_chat_log_executes_and_validates_tools(
                 if len(self.requests) == 1
                 else {"content": "Finished"}
             )
+            if kwargs["json"].get("stream"):
+                calls = message.get("tool_calls", [])
+                delta = {
+                    **message,
+                    "tool_calls": [
+                        {**call, "index": index} for index, call in enumerate(calls)
+                    ],
+                }
+                event = {
+                    "choices": [
+                        {
+                            "delta": delta,
+                            "finish_reason": "tool_calls" if calls else "stop",
+                        }
+                    ]
+                }
+                return Response(
+                    body=f"data: {json.dumps(event)}\n\ndata: [DONE]\n\n".encode()
+                )
             return DummyResponse(200, {}, {"choices": [{"message": message}]})
 
     api = LevelAPI(hass=hass, id="level_api", name="Level API")
@@ -191,9 +211,11 @@ async def test_real_chat_log_executes_and_validates_tools(
     session = ToolSession()
     client = GroqApiClient(hass, api_key="fake", session=session)
     data = {"model": "openai/gpt-oss-20b", "llm_hass_api": [api.id]}
+    if platform == "assist":
+        data["stream"] = False
     try:
         with async_get_chat_session(hass) as chat_session:
-            if platform == "assist":
+            if platform in {"assist", "assist_stream"}:
                 entity = GroqConversationEntity(hass, DummyEntry(), data, client)
                 with conversation.async_get_chat_log(hass, chat_session) as log:
                     log.async_add_user_content(conversation.UserContent("Read level"))
@@ -230,6 +252,10 @@ async def test_real_chat_log_executes_and_validates_tools(
         unregister()
 
     assert len(session.requests) == 2
+    assert all(
+        bool(request.get("stream")) == (platform == "assist_stream")
+        for request in session.requests
+    )
     tool_schema = session.requests[0]["tools"][0]["function"]
     assert tool_schema["name"] == "ReadLevel"
     assert tool_schema["parameters"]["properties"]["level"]["type"] == "integer"
