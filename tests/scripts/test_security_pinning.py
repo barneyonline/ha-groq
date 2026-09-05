@@ -39,7 +39,13 @@ def test_consolidated_checks_do_not_persist_write_credentials() -> None:
     )
     checks = workflow["jobs"]["checks"]
 
-    assert checks["permissions"] == {"contents": "read"}
+    # OIDC authenticates Codecov; repository contents remain read-only.
+    assert checks["permissions"] == {"contents": "read", "id-token": "write"}
+
+    caller = yaml.safe_load((REPOSITORY_ROOT / ".github/workflows/ci.yml").read_text())[
+        "jobs"
+    ]["checks"]
+    assert caller["permissions"] == checks["permissions"]
 
     checkout = next(
         step
@@ -62,6 +68,9 @@ def test_codecov_uploads_require_completed_pytest_step() -> None:
 
     assert len(codecov_steps) == 2
     for step in codecov_steps:
+        # Dependabot runs cannot access ordinary Actions upload secrets.
+        assert step["with"]["use_oidc"] is True
+        assert "token" not in step["with"]
         condition = step["if"]
         assert "steps.pytest.outcome == 'success'" in condition
         assert "steps.pytest.outcome == 'failure'" in condition
