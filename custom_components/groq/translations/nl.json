@@ -88,7 +88,9 @@
                 "reconfigure": "Tekstgeneratie opnieuw configureren"
             },
             "abort": {
-                "reconfigure_successful": "Tekstgeneratieservice succesvol bijgewerkt."
+                "reconfigure_successful": "Tekstgeneratieservice succesvol bijgewerkt.",
+                "no_compatible_models": "Dit Groq-account heeft geen actieve modellen die bij deze dienst passen. Controleer de modeltoegang in de Groq-console en probeer het opnieuw.",
+                "model_unavailable": "Het geselecteerde model is niet meer beschikbaar voor deze dienst. Start de configuratie opnieuw en kies een beschikbaar model."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Spraak-naar-tekst opnieuw configureren"
             },
             "abort": {
-                "reconfigure_successful": "Spraak-naar-tekst-service succesvol bijgewerkt."
+                "reconfigure_successful": "Spraak-naar-tekst-service succesvol bijgewerkt.",
+                "no_compatible_models": "Dit Groq-account heeft geen actieve modellen die bij deze dienst passen. Controleer de modeltoegang in de Groq-console en probeer het opnieuw.",
+                "model_unavailable": "Het geselecteerde model is niet meer beschikbaar voor deze dienst. Start de configuratie opnieuw en kies een beschikbaar model."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Tekst-naar-spraak opnieuw configureren"
             },
             "abort": {
-                "reconfigure_successful": "Tekst-naar-spraak-service succesvol bijgewerkt."
+                "reconfigure_successful": "Tekst-naar-spraak-service succesvol bijgewerkt.",
+                "no_compatible_models": "Dit Groq-account heeft geen actieve modellen die bij deze dienst passen. Controleer de modeltoegang in de Groq-console en probeer het opnieuw.",
+                "model_unavailable": "Het geselecteerde model is niet meer beschikbaar voor deze dienst. Start de configuratie opnieuw en kies een beschikbaar model."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Beeldherkenning opnieuw configureren"
             },
             "abort": {
-                "reconfigure_successful": "Beeldherkenningsservice succesvol bijgewerkt."
+                "reconfigure_successful": "Beeldherkenningsservice succesvol bijgewerkt.",
+                "no_compatible_models": "Dit Groq-account heeft geen actieve modellen die bij deze dienst passen. Controleer de modeltoegang in de Groq-console en probeer het opnieuw.",
+                "model_unavailable": "Het geselecteerde model is niet meer beschikbaar voor deze dienst. Start de configuratie opnieuw en kies een beschikbaar model."
             },
             "step": {
                 "image_recognition": {

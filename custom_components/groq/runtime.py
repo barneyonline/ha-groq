@@ -13,6 +13,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from .api import GroqApiClient, normalize_base_url
 from .const import (
     CONF_API_KEY,
+    CONF_BASE_URL,
     CONF_CACHE_SIZE,
     CONF_ENABLED_FEATURES,
     CONF_INCLUDE_REASONING,
@@ -22,11 +23,11 @@ from .const import (
     CONF_REASONING_FORMAT,
     CONF_STRUCTURED_OUTPUTS,
     CONF_URL,
-    CONF_VOICE,
     DEFAULT_CACHE_SIZE,
-    FEATURE_TEXT_TO_SPEECH,
     FEATURE_TEXT_GENERATION,
     PROMPT_CACHING_MODELS,
+    entry_value,
+    enabled_features_from_entry,
 )
 from .errors import GroqApiError, GroqResponseError
 from .feature_registry import (
@@ -40,7 +41,6 @@ from .rate_limit import GroqRateLimiter
 from .subentries import service_data_by_type
 from .types import GroqConfigEntry
 
-CONF_BASE_URL = "base_url"
 CONF_PROMPT_CACHE_SIZE = "prompt_cache_size"
 CONF_PROMPT_CACHE_TTL = "prompt_cache_ttl"
 
@@ -66,16 +66,6 @@ class GroqRuntimeData:
     services_by_type: dict[str, tuple[dict[str, Any], ...]]
 
 
-def entry_value(entry: GroqConfigEntry, key: str, default: Any = None) -> Any:
-    """Return an effective config entry value, allowing options to override data."""
-    return entry.options.get(key, entry.data.get(key, default))
-
-
-def _has_legacy_tts_config(entry: GroqConfigEntry) -> bool:
-    """Return whether an entry contains pre-subentry TTS configuration."""
-    return all(entry_value(entry, key) for key in (CONF_URL, CONF_MODEL, CONF_VOICE))
-
-
 def build_runtime(hass: HomeAssistant, entry: GroqConfigEntry) -> GroqRuntimeData:
     """Create runtime data for a config entry."""
     base_url = entry_value(
@@ -96,19 +86,14 @@ def build_runtime(hass: HomeAssistant, entry: GroqConfigEntry) -> GroqRuntimeDat
         CONF_ENABLED_FEATURES,
         entry.data.get(CONF_ENABLED_FEATURES),
     )
-    if configured_features is None:
-        # Entries created before service subentries stored TTS settings directly
-        # on the config entry. Keep those working while account-only entries stay
-        # platform-free until the user adds a service.
-        enabled_features = (
-            {GroqFeature(FEATURE_TEXT_TO_SPEECH)}
-            if _has_legacy_tts_config(entry)
-            else set()
-        )
-    else:
-        enabled_features = set(
-            enabled_features_from_options({CONF_ENABLED_FEATURES: configured_features})
-        )
+    enabled_features = set(
+        enabled_features_from_options({CONF_ENABLED_FEATURES: configured_features})
+        if configured_features is not None
+        else ()
+    )
+    enabled_features.update(
+        GroqFeature(feature) for feature in enabled_features_from_entry(entry)
+    )
     services_by_type = service_data_by_type(entry)
     for service_type, services in services_by_type.items():
         try:
@@ -138,6 +123,7 @@ def build_runtime(hass: HomeAssistant, entry: GroqConfigEntry) -> GroqRuntimeDat
         client=GroqApiClient(
             hass,
             api_key=entry_value(entry, CONF_API_KEY),
+            entry_id=entry.entry_id,
             base_url=base_url,
             rate_limiter=rate_limiter,
             auth_failure_callback=lambda: _start_runtime_reauth(hass, entry),
@@ -184,8 +170,5 @@ async def async_get_runtime(
     if isinstance(runtime, GroqRuntimeData):
         return runtime
     runtime = build_runtime(hass, entry)
-    try:
-        entry.runtime_data = runtime
-    except AttributeError:
-        pass
+    entry.runtime_data = runtime
     return runtime

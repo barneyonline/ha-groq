@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.helpers.selector import Selector, selector
 
+from .compound_tools import compound_builtin_tools_are_valid
 from .const import (
+    COMPOUND_BUILTIN_TOOL_OPTIONS,
     CONF_ADVANCED_OPTIONS,
     CONF_API_KEY,
-    COMPOUND_BUILTIN_TOOL_OPTIONS,
     CONF_COMPOUND_BUILTIN_TOOLS,
     CONF_ENABLE_LONG_TTS,
     CONF_ENABLED_FEATURES,
@@ -32,8 +32,8 @@ from .const import (
     CONF_SCHEMA,
     CONF_SCHEMA_NAME,
     CONF_SEED,
-    CONF_SERVICE_TYPE,
     CONF_SERVICE_TIER,
+    CONF_SERVICE_TYPE,
     CONF_SPEED,
     CONF_STOP,
     CONF_STREAM,
@@ -69,11 +69,10 @@ from .const import (
     TEXT_MODELS,
     TTS_SAMPLE_RATES,
     VISION_MODELS,
-    VOCAL_DIRECTION_OPTIONS,
     VOCAL_DIRECTION_NONE,
+    VOCAL_DIRECTION_OPTIONS,
     voice_options_for_model,
 )
-from .compound_tools import compound_builtin_tools_are_valid
 from .feature_registry import GroqFeature
 from .model_registry import GroqCapability, GroqModelRegistry
 from .text_generation import request_body_options_validation_error
@@ -113,7 +112,10 @@ def _sample_rate_default(values: dict[str, Any]) -> int | None:
     if configured is None or configured == "":
         return None
     try:
-        sample_rate = int(configured)
+        number = float(configured)
+        if not number.is_integer():
+            return None
+        sample_rate = int(number)
     except (TypeError, ValueError):
         return None
     return sample_rate if sample_rate in TTS_SAMPLE_RATES else None
@@ -126,7 +128,7 @@ def _speed_default(values: dict[str, Any]) -> float:
         speed = float(configured)
     except (TypeError, ValueError):
         return DEFAULT_TTS_SPEED
-    if speed < 0.5 or speed > 5:
+    if not 0.5 <= speed <= 5:
         return DEFAULT_TTS_SPEED
     return speed
 
@@ -340,7 +342,7 @@ def text_generation_model_select_options(
     ]
 
 
-def api_key_selector() -> Selector:
+def api_key_selector() -> Selector[Any]:
     """Return a password-style selector for Groq API keys."""
     return selector({"text": {"type": "password"}})
 
@@ -612,6 +614,12 @@ def text_generation_basic_schema(
     )
 
 
+def _optional_value(values: dict[str, Any], key: str) -> vol.Optional:
+    """Omit unset optional defaults instead of validating None as selector input."""
+    value = values.get(key)
+    return vol.Optional(key, default=value if value is not None else vol.UNDEFINED)
+
+
 def text_generation_advanced_schema(
     user_input: dict[str, Any] | None = None,
     model_registry: GroqModelRegistry | None = None,
@@ -620,16 +628,14 @@ def text_generation_advanced_schema(
     values = user_input or {}
     model = str(values.get(CONF_MODEL, ""))
     schema: dict[Any, Any] = {
-        vol.Optional(CONF_MAX_TOKENS, default=values.get(CONF_MAX_TOKENS)): (
+        _optional_value(values, CONF_MAX_TOKENS): (
             selector({"number": _max_tokens_selector_config(model, model_registry)})
         ),
-        vol.Optional(CONF_TOP_P, default=values.get(CONF_TOP_P)): selector(
+        _optional_value(values, CONF_TOP_P): selector(
             {"number": {"min": 0, "max": 1, "step": 0.01, "mode": "box"}}
         ),
-        vol.Optional(CONF_STOP, default=values.get(CONF_STOP)): selector(
-            {"text": {"multiline": True}}
-        ),
-        vol.Optional(CONF_SEED, default=values.get(CONF_SEED)): selector(
+        _optional_value(values, CONF_STOP): selector({"text": {"multiline": True}}),
+        _optional_value(values, CONF_SEED): selector(
             {"number": {"min": 0, "step": 1, "mode": "box"}}
         ),
         vol.Optional(

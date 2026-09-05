@@ -22,17 +22,32 @@ from homeassistant.exceptions import (
     HomeAssistantError,
     ServiceValidationError,
 )
-from homeassistant.helpers.service import SERVICE_DESCRIPTION_CACHE
 from homeassistant.helpers.device_registry import DeviceEntryType
+from homeassistant.helpers.service import SERVICE_DESCRIPTION_CACHE
 
 import custom_components.groq as integration
 from custom_components.groq import (
     ai_task as ai_task_module,
+)
+from custom_components.groq import (
     api as api_module,
+)
+from custom_components.groq import (
+    chat as chat_module,
+)
+from custom_components.groq import (
     config_flow,
+)
+from custom_components.groq import (
     conversation as conversation_module,
+)
+from custom_components.groq import (
     model_registry as model_registry_module,
+)
+from custom_components.groq import (
     repairs as repairs_module,
+)
+from custom_components.groq import (
     text_generation as text_generation_module,
 )
 from custom_components.groq.ai_task import (
@@ -55,8 +70,8 @@ from custom_components.groq.api import (
     extract_executed_tools,
 )
 from custom_components.groq.const import (
-    CONF_COMPOUND_BUILTIN_TOOLS,
     CONF_API_KEY,
+    CONF_COMPOUND_BUILTIN_TOOLS,
     CONF_ENABLED_FEATURES,
     CONF_MODEL,
     CONF_NAME,
@@ -110,8 +125,8 @@ from custom_components.groq.model_registry import (
 )
 from custom_components.groq.prompt_cache import GroqPromptCache
 from custom_components.groq.rate_limit import (
-    GroqRateLimitInfo,
     GroqRateLimiter,
+    GroqRateLimitInfo,
     _duration_seconds,
     _guard_delay_seconds,
 )
@@ -121,9 +136,9 @@ from custom_components.groq.runtime import (
     build_runtime,
 )
 from custom_components.groq.services import (
-    ATTR_CAMERA_ENTITY_ID,
     ATTR_AUDIO_FILE,
     ATTR_AUDIO_PATH,
+    ATTR_CAMERA_ENTITY_ID,
     ATTR_CONFIG_ENTRY_ID,
     ATTR_IMAGE_FILE,
     ATTR_IMAGE_PATH,
@@ -141,16 +156,17 @@ from custom_components.groq.services import (
     SERVICE_GENERATE_TEXT,
     SERVICE_LIST_MODELS,
     SERVICE_TRANSCRIBE_AUDIO,
+    _apply_service_options,
+    _audio_from_call,
+    _audio_from_local_path,
+    _audio_from_media_source,
     _cache_get,
     _cache_key,
     _cache_set,
     _coerce_completion_tokens,
+    _ensure_completion_token_limit,
     _entry_from_call,
     _entry_from_service_id,
-    _ensure_completion_token_limit,
-    _audio_from_call,
-    _audio_from_local_path,
-    _audio_from_media_source,
     _handle_analyze_image,
     _handle_clear_cache,
     _handle_extract_text_from_image,
@@ -163,26 +179,24 @@ from custom_components.groq.services import (
     _image_from_local_path,
     _image_from_media_source,
     _image_url_from_call,
-    _apply_service_options,
     _request_options,
     _runtime_from_call,
-    _service_options,
     _service_from_call,
+    _service_options,
     _service_subentries,
-    async_resolve_media,
     async_register_services,
+    async_resolve_media,
     async_unregister_services,
     async_update_service_descriptions,
 )
-from custom_components.groq.stt import GroqSTTEntity, async_setup_entry as stt_setup
+from custom_components.groq.stt import GroqSTTEntity
+from custom_components.groq.stt import async_setup_entry as stt_setup
 from custom_components.groq.subentries import service_data_by_type
 from custom_components.groq.text_generation import (
     entry_value,
-    is_prompt_caching_model,
-    is_reasoning_model,
     selector_to_json_schema,
-    service_include_reasoning,
     service_compound_builtin_tools,
+    service_include_reasoning,
     service_request_body_options,
     service_schema,
     service_schema_name,
@@ -899,9 +913,9 @@ async def test_api_client_covers_json_stream_and_error_paths():
         await client.async_list_models()
     with pytest.raises(GroqApiError, match="non-object JSON"):
         await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
-    with pytest.raises(GroqApiError, match="server"):
+    with pytest.raises(GroqApiError, match="HTTP 500"):
         await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
-    with pytest.raises(GroqApiError, match="plain"):
+    with pytest.raises(GroqApiError, match="HTTP 500"):
         await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
     with pytest.raises(GroqRateLimitExceeded):
         await client.async_generate_text(TextGenerationRequest(prompt="p", model="m"))
@@ -1002,21 +1016,21 @@ def test_openapi_serializer_matches_schema_implementation(monkeypatch) -> None:
         to_openapi=probatio_to_openapi,
     )
     voluptuous_openapi = SimpleNamespace(convert=voluptuous_to_openapi)
-    monkeypatch.setattr(conversation_module, "_probatio", probatio)
+    monkeypatch.setattr(chat_module, "_probatio", probatio)
     monkeypatch.setattr(
-        conversation_module,
+        chat_module,
         "_voluptuous_openapi",
         voluptuous_openapi,
     )
     custom_serializer = object()
     voluptuous_schema = vol.Schema({vol.Required("entity_id"): str})
 
-    assert conversation_module._to_openapi(
+    assert chat_module._to_openapi(
         voluptuous_schema,
         custom_serializer,
     ) == {"serializer": "voluptuous"}
     probatio_schema = ProbatioSchema()
-    assert conversation_module._to_openapi(
+    assert chat_module._to_openapi(
         probatio_schema,
         custom_serializer,
     ) == {"serializer": "probatio"}
@@ -1025,34 +1039,34 @@ def test_openapi_serializer_matches_schema_implementation(monkeypatch) -> None:
         ("probatio", probatio_schema, custom_serializer),
     ]
 
-    monkeypatch.setattr(conversation_module, "_voluptuous_openapi", None)
-    assert conversation_module._to_openapi({"value": str}) == {"serializer": "probatio"}
+    monkeypatch.setattr(chat_module, "_voluptuous_openapi", None)
+    assert chat_module._to_openapi({"value": str}) == {"serializer": "probatio"}
 
-    monkeypatch.setattr(conversation_module, "_probatio", None)
+    monkeypatch.setattr(chat_module, "_probatio", None)
     with pytest.raises(ImportError, match="No supported OpenAPI"):
-        conversation_module._to_openapi({"value": str})
+        chat_module._to_openapi({"value": str})
 
 
 def test_optional_import_only_ignores_requested_module() -> None:
     """Do not hide an optional package's missing transitive dependency."""
     missing_module = ModuleNotFoundError(name="missing_module")
     with patch.object(
-        conversation_module.importlib,
+        chat_module.importlib,
         "import_module",
         side_effect=missing_module,
     ):
-        assert conversation_module._optional_import("missing_module") is None
+        assert chat_module._optional_import("missing_module") is None
 
     missing_dependency = ModuleNotFoundError(name="missing_dependency")
     with (
         patch.object(
-            conversation_module.importlib,
+            chat_module.importlib,
             "import_module",
             side_effect=missing_dependency,
         ),
         pytest.raises(ModuleNotFoundError) as err,
     ):
-        conversation_module._optional_import("installed_module")
+        chat_module._optional_import("installed_module")
     assert err.value is missing_dependency
 
 
@@ -1201,11 +1215,12 @@ async def test_api_client_creates_repair_for_model_access_error(monkeypatch):
     issues = []
     monkeypatch.setattr(
         "custom_components.groq.api.async_create_model_access_issue",
-        lambda hass, model: issues.append((hass, model)),
+        lambda hass, model, service_id=None, **kwargs: issues.append((hass, model)),
     )
     client = GroqApiClient(
         DummyHass(),
         api_key="key",
+        entry_id="entry-id",
         session=DummySession(
             JsonResponse(
                 400,
@@ -1231,7 +1246,7 @@ def test_api_client_internal_availability_and_model_access_branches(monkeypatch)
     issues = []
     monkeypatch.setattr(
         "custom_components.groq.api.async_create_model_access_issue",
-        lambda hass, model: issues.append((hass, model)),
+        lambda hass, model, service_id=None, **kwargs: issues.append((hass, model)),
     )
     client._create_model_access_issue(
         400,
@@ -1301,7 +1316,7 @@ async def test_api_client_cancel_and_transcription_shape_paths():
 
 def test_const_errors_features_cache_and_rate_limit_helpers():
     assert normalize_enabled_features("text_generation") == ["text_generation"]
-    assert normalize_enabled_features(1) == list(("text_to_speech",))
+    assert normalize_enabled_features(1) == ["text_to_speech"]
     entry = DummyEntry()
     entry.options = {CONF_ENABLED_FEATURES: ["speech_to_text"]}
     assert enabled_features_from_entry(entry) == ["speech_to_text"]
@@ -1349,7 +1364,7 @@ def test_const_errors_features_cache_and_rate_limit_helpers():
     assert runtime_error.translation_placeholders == {"limit_mb": "10"}
 
     assert coerce_feature(GroqFeature.TEXT_GENERATION) == GroqFeature.TEXT_GENERATION
-    with pytest.raises(Exception):
+    with pytest.raises(HomeAssistantError):
         GroqFeatureRegistry([]).ensure_enabled(GroqFeature.TEXT_GENERATION)
 
     cache = GroqPromptCache(max_size=0)
@@ -1549,7 +1564,7 @@ async def test_config_flow_dynamic_model_and_locale_fallback_branches(monkeypatc
         return []
 
     monkeypatch.setattr(config_flow, "async_fetch_available_models", empty_models)
-    assert (
+    assert not (
         await config_flow.async_get_model_registry(DummyHass(), "key")
     ).models_for_feature(GroqFeature.TEXT_GENERATION)
 
@@ -1959,8 +1974,8 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
         )
         is None
     )
-    assert text_generation_module._payload_token_upper_bound({"bad": object()}) == 0
-    assert text_generation_module._payload_token_upper_bound(None) == 0
+    assert text_generation_module._payload_token_estimate({"bad": object()}) == 0
+    assert text_generation_module._payload_token_estimate(None) == 0
     assert (
         text_generation_module.request_context_window_error(
             tiny_registry,
@@ -2143,8 +2158,6 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
     assert text_generation_module.service_strict(entry, service_data) is True
     assert service_unique_id(entry, {}) == "entry-id"
     assert service_unique_id(DummyEntry(), {UNIQUE_ID: "service-id"}) == "service-id"
-    assert is_reasoning_model("openai/gpt-oss-20b")
-    assert is_prompt_caching_model("openai/gpt-oss-20b")
 
     assert selector_to_json_schema(SimpleNamespace(selector_type="text")) == {
         "type": "string"
@@ -2360,38 +2373,10 @@ async def test_runtime_and_integration_lifecycle_branches(monkeypatch):
     no_legacy.unique_id = None
     no_legacy.data = {}
     assert await integration.async_migrate_entry(hass, no_legacy)
-    assert not integration._has_other_loaded_entries(
-        SimpleNamespace(config_entries=SimpleNamespace()),
-        entry,
-    )
-    assert not integration._has_other_loaded_entries(DummyHass([entry]), entry)
-    assert not integration._has_other_loaded_entries(
-        DummyHass([entry, DummyEntry("unloaded", state=ConfigEntryState.NOT_LOADED)]),
-        entry,
-    )
-    assert integration._has_other_loaded_entries(
-        DummyHass([entry, DummyEntry("loaded")]),
-        entry,
-    )
-
     no_runtime_entry = DummyEntry()
     no_runtime_entry.data = {"url": "u", "model": "m", "voice": "v"}
     runtime = build_runtime(DummyHass(), no_runtime_entry)
     assert runtime.feature_registry.is_enabled(GroqFeature.TEXT_TO_SPEECH)
-
-    class RuntimeSetterRaises(DummyEntry):
-        @property
-        def runtime_data(self):
-            return None
-
-        @runtime_data.setter
-        def runtime_data(self, value):
-            raise AttributeError
-
-    assert isinstance(
-        await async_get_runtime(DummyHass(), RuntimeSetterRaises()),
-        type(runtime),
-    )
 
     async def setup_unavailable(self, **_kwargs):
         raise GroqApiError("Network error calling Groq API: down")
@@ -2482,7 +2467,7 @@ def test_runtime_auth_failure_starts_reauth_only_after_setup():
 
 
 @pytest.mark.asyncio
-async def test_config_flow_remaining_paths(monkeypatch):
+async def test_config_flow_remaining_paths(hass, monkeypatch):
     assert config_flow.generate_entry_id()
     assert isinstance(
         config_flow.GroqConfigFlow.async_get_options_flow(DummyEntry()),
@@ -2602,37 +2587,6 @@ async def test_config_flow_remaining_paths(monkeypatch):
     assert updated["data"][CONF_API_KEY] == "updated"
     assert updated["unique_id"] == reauth_entry.unique_id
 
-    options_flow = config_flow.GroqOptionsFlow()
-    monkeypatch.setattr(
-        options_flow,
-        "async_show_form",
-        lambda **kwargs: {"type": "form", **kwargs},
-    )
-    monkeypatch.setattr(
-        options_flow,
-        "async_create_entry",
-        lambda **kwargs: {"type": "create_entry", **kwargs},
-    )
-    assert (await options_flow.async_step_init())["type"] == "form"
-    assert (await options_flow.async_step_init({CONF_API_KEY: ""}))["data"] == {}
-
-    monkeypatch.setattr(
-        config_flow,
-        "async_validate_api_key",
-        lambda hass, api_key: asyncio.sleep(0, result="unknown"),
-    )
-    assert (await options_flow.async_step_init({CONF_API_KEY: "bad"}))["errors"] == {
-        "base": "unknown"
-    }
-
-    tuple_handler_entry = DummyEntry("tuple-entry")
-    tuple_options_flow = config_flow.GroqOptionsFlow()
-    tuple_options_flow.hass = SimpleNamespace(
-        config_entries=DummyConfigEntries([tuple_handler_entry])
-    )
-    tuple_options_flow.handler = (tuple_handler_entry.entry_id, FEATURE_TEXT_GENERATION)
-    assert tuple_options_flow._current_entry() is tuple_handler_entry
-
     subflow = config_flow.GroqServiceSubentryFlow()
     assert await subflow.async_step_user() == subflow.async_show_form(
         step_id="init", data_schema=config_flow.service_type_schema()
@@ -2740,6 +2694,7 @@ async def test_config_flow_remaining_paths(monkeypatch):
     assert merged["data"][CONF_NAME] == "Text"
 
     form_flow = config_flow.GroqServiceSubentryFlow()
+    form_flow.hass = hass
     monkeypatch.setattr(
         form_flow,
         "async_show_form",
@@ -2791,9 +2746,11 @@ async def test_config_flow_remaining_paths(monkeypatch):
     )
     assert created["service_type"] == FEATURE_TEXT_GENERATION
     assert (await form_flow.async_step_speech_to_text())["step_id"] == "speech_to_text"
-    assert (await form_flow.async_step_speech_to_text({CONF_NAME: "STT"}))[
-        "service_type"
-    ] == "speech_to_text"
+    assert (
+        await form_flow.async_step_speech_to_text(
+            {CONF_NAME: "STT", CONF_MODEL: "whisper-large-v3"}
+        )
+    )["service_type"] == "speech_to_text"
     assert (
         await form_flow.async_step_text_to_speech(
             {
@@ -2806,9 +2763,14 @@ async def test_config_flow_remaining_paths(monkeypatch):
     assert (await form_flow.async_step_image_recognition())[
         "step_id"
     ] == FEATURE_IMAGE_RECOGNITION
-    assert (await form_flow.async_step_image_recognition({CONF_NAME: "Vision"}))[
-        "service_type"
-    ] == FEATURE_IMAGE_RECOGNITION
+    assert (
+        await form_flow.async_step_image_recognition(
+            {
+                CONF_NAME: "Vision",
+                CONF_MODEL: "meta-llama/llama-4-scout-17b-16e-instruct",
+            }
+        )
+    )["service_type"] == FEATURE_IMAGE_RECOGNITION
 
 
 @pytest.mark.asyncio
@@ -2836,6 +2798,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
                 "service_type": "text_generation",
                 "model": "openai/gpt-oss-20b",
                 "structured_outputs": True,
+                "prompt_caching": True,
                 "schema": {"type": "object"},
             },
         ),
@@ -2865,11 +2828,11 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
         _entry_from_call(hass, service_call({ATTR_CONFIG_ENTRY_ID: "entry-id"}))
         is entry
     )
-    with pytest.raises(Exception):
+    with pytest.raises(HomeAssistantError):
         _entry_from_call(hass, service_call({ATTR_CONFIG_ENTRY_ID: "missing"}))
-    with pytest.raises(Exception):
+    with pytest.raises(HomeAssistantError):
         _entry_from_call(DummyHass([]), service_call({}))
-    with pytest.raises(Exception):
+    with pytest.raises(HomeAssistantError):
         _entry_from_call(DummyHass([entry, DummyEntry("other")]), service_call({}))
     assert _entry_from_call(DummyHass([entry]), service_call({})) is entry
     assert await _runtime_from_call(
@@ -2888,7 +2851,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
         )["unique_id"]
         == "text-id"
     )
-    with pytest.raises(Exception):
+    with pytest.raises(HomeAssistantError):
         _service_from_call(
             entry,
             runtime,
@@ -3105,6 +3068,7 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
         ]
     )
     runtime.services_by_type["image_recognition"][0]["model"] = "vision-cache"
+    runtime.services_by_type["image_recognition"][0]["prompt_caching"] = True
     analyzed = await _handle_analyze_image(hass)(
         service_call(
             {
@@ -3194,21 +3158,6 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
         SERVICE_LIST_MODELS,
     }
     await async_unregister_services(hass)
-
-    class RuntimeSetterRaises(DummyEntry):
-        @property
-        def runtime_data(self):
-            return None
-
-        @runtime_data.setter
-        def runtime_data(self, value):
-            raise AttributeError
-
-    entry_without_runtime_setter = RuntimeSetterRaises()
-    assert await _runtime_from_call(
-        DummyHass([entry_without_runtime_setter]),
-        service_call({ATTR_CONFIG_ENTRY_ID: "entry-id"}),
-    )
 
     bad_subentry_entry = DummyEntry()
     bad_subentry_entry.subentries = {"bad": SimpleNamespace(data={})}
@@ -3429,15 +3378,17 @@ async def test_image_source_resolution_paths(tmp_path, monkeypatch):
         == "data:image/png,raw"
     )
     monkeypatch.setattr("custom_components.groq.services.MAX_IMAGE_BYTES", 4)
-    with patch(
-        "custom_components.groq.services.b64decode",
-        side_effect=AssertionError("oversized image should not be decoded"),
+    with (
+        patch(
+            "custom_components.groq.services.b64decode",
+            side_effect=AssertionError("oversized image should not be decoded"),
+        ),
+        pytest.raises(ServiceValidationError, match="too large"),
     ):
-        with pytest.raises(ServiceValidationError, match="too large"):
-            await _image_url_from_call(
-                hass,
-                service_call({ATTR_IMAGE_URL: "data:image/png;base64,YWJjZGU="}),
-            )
+        await _image_url_from_call(
+            hass,
+            service_call({ATTR_IMAGE_URL: "data:image/png;base64,YWJjZGU="}),
+        )
     with pytest.raises(ServiceValidationError, match="too large"):
         await _image_from_local_path(hass, str(image_path))
     with pytest.raises(ServiceValidationError, match="Select a camera entity"):
@@ -3687,7 +3638,11 @@ async def test_ai_task_helpers_and_fallback_paths():
         structure=None,
     )
     result = await entity._async_generate_data(
-        task, SimpleNamespace(conversation_id="c")
+        task,
+        SimpleNamespace(
+            conversation_id="c",
+            async_add_assistant_content_without_tools=lambda content: None,
+        ),
     )
     assert result.data == {"ok": True}
 
@@ -3708,19 +3663,29 @@ async def test_ai_task_helpers_and_fallback_paths():
         return_value={},
     ):
         result = await plain_entity._async_generate_data(
-            task, SimpleNamespace(conversation_id="c")
+            task,
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
     assert result.data == {"name": "Kitchen"}
 
     plain_client.text = "not json"
-    with patch(
-        "custom_components.groq.ai_task.voluptuous_schema_to_json_schema",
-        return_value={},
+    with (
+        patch(
+            "custom_components.groq.ai_task.voluptuous_schema_to_json_schema",
+            return_value={},
+        ),
+        pytest.raises(HomeAssistantError),
     ):
-        with pytest.raises(HomeAssistantError):
-            await plain_entity._async_generate_data(
-                task, SimpleNamespace(conversation_id="c")
-            )
+        await plain_entity._async_generate_data(
+            task,
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
+        )
 
     bad_structured = DummyClient()
     bad_structured.structured = {"text": "{}", "data": {}, "cached": False}
@@ -3729,7 +3694,11 @@ async def test_ai_task_helpers_and_fallback_paths():
     )
     with pytest.raises(HomeAssistantError):
         await bad_entity._async_generate_data(
-            task, SimpleNamespace(conversation_id="c")
+            task,
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
 
     class FailingStructuredClient(DummyClient):
@@ -3747,7 +3716,11 @@ async def test_ai_task_helpers_and_fallback_paths():
         DummyHass(), entry, {"model": "openai/gpt-oss-20b"}, retry_client
     )
     result = await retry_entity._async_generate_data(
-        task, SimpleNamespace(conversation_id="c")
+        task,
+        SimpleNamespace(
+            conversation_id="c",
+            async_add_assistant_content_without_tools=lambda content: None,
+        ),
     )
     assert result.data == {"name": "Fallback"}
     assert isinstance(retry_client.requests[0], StructuredGenerationRequest)
@@ -3763,7 +3736,11 @@ async def test_ai_task_helpers_and_fallback_paths():
     )
     with pytest.raises(GroqApiError):
         await fatal_entity._async_generate_data(
-            task, SimpleNamespace(conversation_id="c")
+            task,
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
     tiny_registry = GroqModelRegistry(
         [
@@ -3790,7 +3767,10 @@ async def test_ai_task_helpers_and_fallback_paths():
     with pytest.raises(HomeAssistantError, match="context window"):
         await tiny_entity._async_generate_data(
             SimpleNamespace(name="task", instructions="x" * 30, structure=None),
-            SimpleNamespace(conversation_id="c"),
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
     tiny_structured_entity = GroqAITaskEntity(
         DummyHass(),
@@ -3802,7 +3782,10 @@ async def test_ai_task_helpers_and_fallback_paths():
     with pytest.raises(HomeAssistantError, match="context window"):
         await tiny_structured_entity._async_generate_data(
             task,
-            SimpleNamespace(conversation_id="c"),
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
     body_error_entity = GroqAITaskEntity(
         DummyHass(),
@@ -3816,7 +3799,10 @@ async def test_ai_task_helpers_and_fallback_paths():
     with pytest.raises(HomeAssistantError, match="reasoning options"):
         await body_error_entity._async_generate_data(
             SimpleNamespace(name="task", instructions="Return data", structure=None),
-            SimpleNamespace(conversation_id="c"),
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
     structured_body_error_entity = GroqAITaskEntity(
         DummyHass(),
@@ -3832,7 +3818,10 @@ async def test_ai_task_helpers_and_fallback_paths():
     with pytest.raises(HomeAssistantError, match="reasoning options"):
         await structured_body_error_entity._async_generate_data(
             SimpleNamespace(name="task", instructions="Return data", structure=None),
-            SimpleNamespace(conversation_id="c"),
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
     bad_compound_tools_entity = GroqAITaskEntity(
         DummyHass(),
@@ -3846,7 +3835,10 @@ async def test_ai_task_helpers_and_fallback_paths():
     with pytest.raises(HomeAssistantError, match="unsupported tool ids"):
         await bad_compound_tools_entity._async_generate_data(
             SimpleNamespace(name="task", instructions="Return data", structure=None),
-            SimpleNamespace(conversation_id="c"),
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
 
 
@@ -3950,7 +3942,10 @@ async def test_ai_task_and_conversation_setup_properties():
                 agent_id="conversation.groq_assist",
                 extra_system_prompt=None,
             ),
-            SimpleNamespace(conversation_id="c"),
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
     body_error_conversation = conversation_module.GroqConversationEntity(
         DummyHass(),
@@ -3971,7 +3966,10 @@ async def test_ai_task_and_conversation_setup_properties():
                 agent_id="conversation.groq_assist",
                 extra_system_prompt=None,
             ),
-            SimpleNamespace(conversation_id="c"),
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
     bad_compound_tools_conversation = conversation_module.GroqConversationEntity(
         DummyHass(),
@@ -3990,7 +3988,10 @@ async def test_ai_task_and_conversation_setup_properties():
                 agent_id="conversation.groq_assist",
                 extra_system_prompt=None,
             ),
-            SimpleNamespace(conversation_id="c"),
+            SimpleNamespace(
+                conversation_id="c",
+                async_add_assistant_content_without_tools=lambda content: None,
+            ),
         )
 
 
@@ -4202,11 +4203,14 @@ async def test_tts_entity_and_api_remaining_paths(monkeypatch):
     model_access_issues = []
     monkeypatch.setattr(
         "custom_components.groq.api.async_create_model_access_issue",
-        lambda hass, model: model_access_issues.append((hass, model)),
+        lambda hass, model, service_id=None, **kwargs: model_access_issues.append(
+            (hass, model)
+        ),
     )
     model_access = GroqApiClient(
         DummyHass(),
         api_key="key",
+        entry_id="entry-id",
         session=DummyPostSession(
             PostResponse(
                 400,
@@ -4215,7 +4219,7 @@ async def test_tts_entity_and_api_remaining_paths(monkeypatch):
             )
         ),
     )
-    with pytest.raises(GroqApiError, match="not available"):
+    with pytest.raises(GroqApiError, match="HTTP 400"):
         await model_access.async_synthesize_speech(speech_request)
     assert model_access_issues == [(model_access_issues[0][0], "model")]
 

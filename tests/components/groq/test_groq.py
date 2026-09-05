@@ -1,7 +1,7 @@
 import asyncio
-from collections import OrderedDict
 import logging
 import struct
+from collections import OrderedDict
 from types import SimpleNamespace
 
 import aiohttp
@@ -20,7 +20,6 @@ from custom_components.groq.tts import (
 )
 
 validate_user_input = config_flow.validate_user_input
-get_model_options = config_flow.get_model_options
 
 ORPHEUS_ENGLISH_MODEL = "canopylabs/orpheus-v1-english"
 ORPHEUS_ENGLISH_VOICE = "troy"
@@ -79,23 +78,6 @@ async def test_validate_user_input_accepts_account_level_setup():
     )
 
 
-def test_get_model_options_filters_to_orpheus_tts_models():
-    opts = get_model_options(
-        [
-            "llama-3.3-70b-versatile",
-            "whisper-large-v3",
-            "playai-tts",
-            "canopylabs/orpheus-v1-english",
-            "canopylabs/orpheus-arabic-saudi",
-        ]
-    )
-
-    assert opts == [
-        "canopylabs/orpheus-arabic-saudi",
-        "canopylabs/orpheus-v1-english",
-    ]
-
-
 def test_normalize_enabled_features_defaults_and_preserves_explicit_empty():
     assert normalize_enabled_features(None) == ["text_to_speech"]
     assert normalize_enabled_features([]) == []
@@ -111,7 +93,7 @@ class DummySession:
 
 class DummyTimeoutResponse:
     async def __aenter__(self):
-        raise asyncio.TimeoutError
+        raise TimeoutError
 
     async def __aexit__(self, exc_type, exc, tb):
         return False
@@ -628,7 +610,7 @@ def test_tts_batch_free_tier_guard_blocks_partial_long_tts_batches(monkeypatch):
     client._record_local_tts_usage(request, 1, now=100.0)
 
     with pytest.raises(GroqApiError, match="batch usage"):
-        client._check_local_tts_free_tier_batch(
+        client.check_tts_batch(
             [
                 SpeechRequest(
                     text="hello",
@@ -644,7 +626,7 @@ def test_tts_batch_free_tier_guard_blocks_partial_long_tts_batches(monkeypatch):
             now=100.0,
         )
 
-    assert client._check_local_tts_free_tier_batch(
+    assert client.check_tts_batch(
         [
             SpeechRequest(
                 text="hello",
@@ -682,7 +664,7 @@ def test_tts_batch_free_tier_guard_ignores_cached_chunks(monkeypatch):
     )
     client._record_local_tts_usage(request, 1, now=100.0)
 
-    assert client._check_local_tts_free_tier_batch(
+    assert client.check_tts_batch(
         [
             SpeechRequest(
                 text=text,
@@ -695,7 +677,7 @@ def test_tts_batch_free_tier_guard_ignores_cached_chunks(monkeypatch):
     ) == [10, 10]
 
     with pytest.raises(GroqApiError, match="batch usage"):
-        client._check_local_tts_free_tier_batch(
+        client.check_tts_batch(
             [
                 *[
                     SpeechRequest(
@@ -744,7 +726,7 @@ def test_tts_batch_free_tier_guard_simulates_cache_evictions(monkeypatch):
     client._record_local_tts_usage(request, 1, now=100.0)
 
     with pytest.raises(GroqApiError, match="batch usage"):
-        client._check_local_tts_free_tier_batch(
+        client.check_tts_batch(
             [
                 SpeechRequest(
                     text=first_text,
@@ -778,7 +760,7 @@ def test_tts_batch_free_tier_guard_returns_when_model_has_no_limits(monkeypatch)
     client = GroqApiClient(DummyHass(), api_key="api-key")
     monkeypatch.setattr(client, "_free_tier_limits", lambda model: None)
 
-    assert client._check_local_tts_free_tier_batch(
+    assert client.check_tts_batch(
         [
             SpeechRequest(
                 text="hello",
@@ -803,7 +785,7 @@ def test_tts_batch_free_tier_guard_skips_unprotected_requests(monkeypatch):
         },
     )
 
-    assert client._check_local_tts_free_tier_batch(
+    assert client.check_tts_batch(
         [
             SpeechRequest(
                 text="hello",
@@ -836,7 +818,7 @@ def test_tts_batch_free_tier_guard_blocks_daily_requests(monkeypatch):
     client._record_local_tts_usage(request, 1, now=100.0)
 
     with pytest.raises(GroqApiError, match="requests per day"):
-        client._check_local_tts_free_tier_batch([request], now=100.0)
+        client.check_tts_batch([request], now=100.0)
 
 
 def test_tts_batch_free_tier_guard_blocks_minute_tokens(monkeypatch):
@@ -859,7 +841,7 @@ def test_tts_batch_free_tier_guard_blocks_minute_tokens(monkeypatch):
     client._record_local_tts_usage(request, 2, now=100.0)
 
     with pytest.raises(GroqApiError, match="tokens per minute"):
-        client._check_local_tts_free_tier_batch([request], now=100.0)
+        client.check_tts_batch([request], now=100.0)
 
 
 def test_tts_batch_free_tier_guard_blocks_daily_tokens(monkeypatch):
@@ -882,7 +864,7 @@ def test_tts_batch_free_tier_guard_blocks_daily_tokens(monkeypatch):
     client._record_local_tts_usage(request, 2, now=100.0)
 
     with pytest.raises(GroqApiError, match="tokens per day"):
-        client._check_local_tts_free_tier_batch([request], now=100.0)
+        client.check_tts_batch([request], now=100.0)
 
 
 def test_tts_split_helpers_handle_overlong_words_and_blank_segments(monkeypatch):
@@ -925,7 +907,7 @@ class DummyClient:
 
 
 class DummyBatchGuardClient(DummyClient):
-    def _check_local_tts_free_tier_batch(self, requests):
+    def check_tts_batch(self, requests):
         raise GroqApiError(
             "batch would exceed local free-tier usage",
             status=429,
@@ -1197,7 +1179,7 @@ async def test_tts_checks_ffmpeg_before_sending_long_tts_chunks(monkeypatch):
         client,
     )
 
-    async def missing_ffmpeg(*args, **kwargs):  # noqa: ANN001
+    async def missing_ffmpeg(*args, **kwargs):
         raise FileNotFoundError
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", missing_ffmpeg)
@@ -1227,10 +1209,6 @@ async def test_tts_checks_batch_free_tier_guard_before_long_tts_api(monkeypatch)
         DummyConfigEntry(data, {"enable_long_tts": True}),
         client,
     )
-    monkeypatch.setattr(
-        "custom_components.groq.tts.shutil.which",
-        lambda name: "/usr/bin/ffmpeg",
-    )
 
     ext, payload = await entity.async_get_tts_audio(
         f"{'A' * 198}. {'B' * 40}.",
@@ -1257,10 +1235,6 @@ async def test_tts_rejects_too_many_long_tts_chunks_before_api(monkeypatch):
         DummyConfigEntry(data, {"enable_long_tts": True}),
         client,
     )
-    monkeypatch.setattr(
-        "custom_components.groq.tts.shutil.which",
-        lambda name: "/usr/bin/ffmpeg",
-    )
 
     ext, payload = await entity.async_get_tts_audio(
         " ".join(f"{chr(65 + index) * 199}." for index in range(11)),
@@ -1276,9 +1250,17 @@ async def test_tts_rejects_too_many_long_tts_chunks_before_api(monkeypatch):
 class DummyProc:
     def __init__(self, returncode: int):
         self.returncode = returncode
+        self.stdout = asyncio.StreamReader()
+        self.stdout.feed_eof()
+        self.stderr = asyncio.StreamReader()
+        self.stderr.feed_data(b"ffmpeg error")
+        self.stderr.feed_eof()
+        self.stdin = SimpleNamespace(
+            write=lambda _: None, drain=lambda: _async_return(None), close=lambda: None
+        )
 
-    async def communicate(self, input=None):  # noqa: A002
-        return b"", b"ffmpeg error"
+    async def wait(self):
+        return self.returncode
 
 
 @pytest.mark.asyncio
@@ -1292,7 +1274,7 @@ async def test_tts_ffmpeg_failure_returns_none(monkeypatch):
     options = {"normalize_audio": True}
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, options), DummyClient())
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001, D401
+    async def fake_exec(*args, **kwargs):
         return DummyProc(returncode=1)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)

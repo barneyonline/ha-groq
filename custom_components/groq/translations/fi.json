@@ -88,7 +88,9 @@
                 "reconfigure": "Määritä tekstin luominen uudelleen"
             },
             "abort": {
-                "reconfigure_successful": "Tekstinluontipalvelu päivitetty onnistuneesti."
+                "reconfigure_successful": "Tekstinluontipalvelu päivitetty onnistuneesti.",
+                "no_compatible_models": "Tällä Groq-tilillä ei ole palvelun kanssa yhteensopivia aktiivisia malleja. Tarkista mallien käyttöoikeudet Groq-konsolista ja yritä uudelleen.",
+                "model_unavailable": "Valittu malli ei ole enää käytettävissä tässä palvelussa. Aloita määritys uudelleen ja valitse käytettävissä oleva malli."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Määritä puhe tekstiksi uudelleen"
             },
             "abort": {
-                "reconfigure_successful": "Puhe-tekstipalvelun päivitys onnistui."
+                "reconfigure_successful": "Puhe-tekstipalvelun päivitys onnistui.",
+                "no_compatible_models": "Tällä Groq-tilillä ei ole palvelun kanssa yhteensopivia aktiivisia malleja. Tarkista mallien käyttöoikeudet Groq-konsolista ja yritä uudelleen.",
+                "model_unavailable": "Valittu malli ei ole enää käytettävissä tässä palvelussa. Aloita määritys uudelleen ja valitse käytettävissä oleva malli."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Määritä tekstistä puheeksi uudelleen"
             },
             "abort": {
-                "reconfigure_successful": "Tekstistä puheeksi -palvelun päivitys onnistui."
+                "reconfigure_successful": "Tekstistä puheeksi -palvelun päivitys onnistui.",
+                "no_compatible_models": "Tällä Groq-tilillä ei ole palvelun kanssa yhteensopivia aktiivisia malleja. Tarkista mallien käyttöoikeudet Groq-konsolista ja yritä uudelleen.",
+                "model_unavailable": "Valittu malli ei ole enää käytettävissä tässä palvelussa. Aloita määritys uudelleen ja valitse käytettävissä oleva malli."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Määritä kuvantunnistus uudelleen"
             },
             "abort": {
-                "reconfigure_successful": "Kuvantunnistuspalvelun päivitys onnistui."
+                "reconfigure_successful": "Kuvantunnistuspalvelun päivitys onnistui.",
+                "no_compatible_models": "Tällä Groq-tilillä ei ole palvelun kanssa yhteensopivia aktiivisia malleja. Tarkista mallien käyttöoikeudet Groq-konsolista ja yritä uudelleen.",
+                "model_unavailable": "Valittu malli ei ole enää käytettävissä tässä palvelussa. Aloita määritys uudelleen ja valitse käytettävissä oleva malli."
             },
             "step": {
                 "image_recognition": {

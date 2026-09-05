@@ -15,6 +15,15 @@ MAX_IMAGE_ATTACHMENTS = 4
 MAX_IMAGE_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024
 
 
+def read_bounded_file(path: Path, limit: int) -> bytes:
+    """Read at most limit+1 bytes; callers translate I/O and size errors."""
+    with path.open("rb") as source:
+        content = source.read(limit + 1)
+    if len(content) > limit:
+        raise ValueError("File exceeds byte limit")
+    return content
+
+
 def attachment_mime_type(attachment: Any) -> str | None:
     """Return a resolved Home Assistant attachment MIME type."""
     if isinstance(attachment, dict):
@@ -54,13 +63,18 @@ def _read_attachment_data_url(path: Path, mime_type: str) -> tuple[str, int]:
             "attachment_too_large",
             limit_mb=MAX_IMAGE_ATTACHMENT_BYTES // 1024 // 1024,
         )
-    content = path.read_bytes()
-    if len(content) > MAX_IMAGE_ATTACHMENT_BYTES:
+    try:
+        content = read_bounded_file(path, MAX_IMAGE_ATTACHMENT_BYTES)
+    except ValueError as err:
         raise translated_error(
             "Groq image attachment exceeds the 10 MB integration limit",
             "attachment_too_large",
             limit_mb=MAX_IMAGE_ATTACHMENT_BYTES // 1024 // 1024,
-        )
+        ) from err
+    except OSError as err:
+        raise translated_error(
+            "Groq image attachment could not be read", "attachment_file_missing"
+        ) from err
     data = base64.b64encode(content).decode("ascii")
     return f"data:{mime_type};base64,{data}", len(content)
 

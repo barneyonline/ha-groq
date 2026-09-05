@@ -88,7 +88,9 @@
                 "reconfigure": "Konfigurer tekstgenerering på nytt"
             },
             "abort": {
-                "reconfigure_successful": "Tekstgenereringstjenesten ble oppdatert."
+                "reconfigure_successful": "Tekstgenereringstjenesten ble oppdatert.",
+                "no_compatible_models": "Denne Groq-kontoen har ingen aktive modeller som støtter tjenesten. Kontroller modelltilgangen i Groq-konsollen og prøv igjen.",
+                "model_unavailable": "Den valgte modellen er ikke lenger tilgjengelig for tjenesten. Start konfigurasjonen på nytt og velg en tilgjengelig modell."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Konfigurer tale-til-tekst på nytt"
             },
             "abort": {
-                "reconfigure_successful": "Tale-til-tekst-tjenesten ble oppdatert."
+                "reconfigure_successful": "Tale-til-tekst-tjenesten ble oppdatert.",
+                "no_compatible_models": "Denne Groq-kontoen har ingen aktive modeller som støtter tjenesten. Kontroller modelltilgangen i Groq-konsollen og prøv igjen.",
+                "model_unavailable": "Den valgte modellen er ikke lenger tilgjengelig for tjenesten. Start konfigurasjonen på nytt og velg en tilgjengelig modell."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Konfigurer tekst-til-tale på nytt"
             },
             "abort": {
-                "reconfigure_successful": "Tekst-til-tale-tjenesten ble oppdatert."
+                "reconfigure_successful": "Tekst-til-tale-tjenesten ble oppdatert.",
+                "no_compatible_models": "Denne Groq-kontoen har ingen aktive modeller som støtter tjenesten. Kontroller modelltilgangen i Groq-konsollen og prøv igjen.",
+                "model_unavailable": "Den valgte modellen er ikke lenger tilgjengelig for tjenesten. Start konfigurasjonen på nytt og velg en tilgjengelig modell."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Konfigurer bildegjenkjenning på nytt"
             },
             "abort": {
-                "reconfigure_successful": "Bildegjenkjenningstjenesten ble oppdatert."
+                "reconfigure_successful": "Bildegjenkjenningstjenesten ble oppdatert.",
+                "no_compatible_models": "Denne Groq-kontoen har ingen aktive modeller som støtter tjenesten. Kontroller modelltilgangen i Groq-konsollen og prøv igjen.",
+                "model_unavailable": "Den valgte modellen er ikke lenger tilgjengelig for tjenesten. Start konfigurasjonen på nytt og velg en tilgjengelig modell."
             },
             "step": {
                 "image_recognition": {

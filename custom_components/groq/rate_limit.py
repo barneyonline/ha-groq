@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+import re
 import time
-from typing import Any, Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
 
-from .errors import GroqRateLimitExceeded
+from .errors import GroqRateLimitExceeded, safe_error_payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,7 +25,7 @@ class GroqRateLimitInfo:
     reset_tokens: str | None = None
 
     @classmethod
-    def from_headers(cls, headers: Mapping[str, str]) -> "GroqRateLimitInfo":
+    def from_headers(cls, headers: Mapping[str, str]) -> GroqRateLimitInfo:
         """Build rate-limit info from response headers."""
         lowered = {key.lower(): value for key, value in headers.items()}
         return cls(
@@ -84,7 +86,7 @@ class GroqRateLimiter:
             retry_after=info.retry_after,
             reset_requests=info.reset_requests,
             reset_tokens=info.reset_tokens,
-            payload=payload,
+            payload=safe_error_payload(payload),
         )
 
     def raise_if_blocked(self, guard_key: str | None) -> None:
@@ -98,7 +100,7 @@ class GroqRateLimiter:
         if blocked_until <= now:
             self._blocked_until.pop(guard_key, None)
             return
-        retry_after = max(1, int(blocked_until - now))
+        retry_after = max(1, math.ceil(blocked_until - now))
         raise GroqRateLimitExceeded(
             "Groq free-tier guard blocked this service request before sending it: "
             f"retry after {retry_after} seconds.",
@@ -117,43 +119,39 @@ class GroqRateLimiter:
         delay = _guard_delay_seconds(info)
         if delay is None:
             return
-        self._blocked_until[guard_key] = time.monotonic() + delay
+        self._blocked_until[guard_key] = max(
+            self._blocked_until.get(guard_key, 0), time.monotonic() + delay
+        )
 
 
 def _guard_delay_seconds(info: GroqRateLimitInfo) -> int | None:
     """Return a conservative pause duration from rate-limit metadata."""
-    if info.retry_after:
-        return _duration_seconds(info.retry_after)
-    remaining = (info.remaining_requests, info.remaining_tokens)
-    if any(value == "0" for value in remaining):
-        resets = (
-            _duration_seconds(info.reset_requests),
-            _duration_seconds(info.reset_tokens),
+    if (retry := _duration_seconds(info.retry_after)) is not None:
+        return retry
+    resets = [
+        _duration_seconds(reset) or 60
+        for remaining, reset in (
+            (info.remaining_requests, info.reset_requests),
+            (info.remaining_tokens, info.reset_tokens),
         )
-        return max((value for value in resets if value is not None), default=60)
-    return None
+        if remaining == "0"
+    ]
+    return max(resets) if resets else None
 
 
 def _duration_seconds(value: str | None) -> int | None:
-    """Parse simple Groq duration header values into whole seconds."""
+    """Parse finite seconds or complete Groq compound duration headers."""
     if not value:
         return None
     duration = value.strip().lower()
     try:
-        return max(1, math.ceil(float(duration)))
+        seconds = float(duration)
     except ValueError:
-        pass
-    suffix_multipliers = {
-        "ms": 0.001,
-        "s": 1,
-        "m": 60,
-        "h": 3600,
-    }
-    for suffix, multiplier in suffix_multipliers.items():
-        if duration.endswith(suffix):
-            try:
-                amount = float(duration[: -len(suffix)])
-            except ValueError:
-                return None
-            return max(1, math.ceil(amount * multiplier))
-    return None
+        parts = re.findall(r"(\d+(?:\.\d+)?)(ms|s|m|h)", duration)
+        if not parts or "".join(amount + unit for amount, unit in parts) != duration:
+            return None
+        multipliers = {"ms": 0.001, "s": 1, "m": 60, "h": 3600}
+        seconds = sum(float(amount) * multipliers[unit] for amount, unit in parts)
+    if not math.isfinite(seconds) or seconds < 0:
+        return None
+    return max(1, math.ceil(seconds))

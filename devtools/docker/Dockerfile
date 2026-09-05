@@ -1,6 +1,8 @@
-ARG HA_IMAGE=ghcr.io/home-assistant/home-assistant:2026.7.2@sha256:1476924357b46e80735c13e94232ba5c853cac052e9df4bb28d50fa56348097b
-ARG PYTHON_VERSION=3.14
+ARG HA_IMAGE=ghcr.io/home-assistant/home-assistant:2026.9.0@sha256:372d991e58882a1d8c68c07e9aa3f3b509276e695355f73ccdb03baa70407293
 FROM ${HA_IMAGE}
+ARG PYTHON_VERSION=3.14
+ARG REQUIREMENTS_FILE=requirements-dev.txt
+ENV PYTHON_VERSION=${PYTHON_VERSION}
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_COMPILE=1 \
@@ -13,13 +15,16 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 WORKDIR /workspace
 
-COPY devtools/docker/requirements-dev.txt requirements-dev.txt
+COPY devtools/docker/requirements-*.txt /opt/groq-test/
 
 RUN python - <<'PY'
 import os
+from importlib.metadata import version
+from pathlib import Path
 import platform
 import sys
 
+Path("/opt/groq-test/image-core-version").write_text(version("homeassistant"))
 expected = tuple(int(part) for part in os.environ.get("PYTHON_VERSION", "3.14").split("."))
 actual = sys.version_info[: len(expected)]
 if actual != expected:
@@ -28,7 +33,10 @@ if actual != expected:
     )
 PY
 
-RUN python -m pip install --no-cache-dir --no-compile -r requirements-dev.txt
+RUN python -m pip install --no-cache-dir --no-compile -r "/opt/groq-test/${REQUIREMENTS_FILE}"
+COPY scripts/verify_test_environment.py /opt/groq-test/verify_test_environment.py
+RUN python /opt/groq-test/verify_test_environment.py \
+    --expected-core-file /opt/groq-test/image-core-version --check-dependencies
 
 RUN git config --global --add safe.directory /workspace \
     && git config --global --add safe.directory '/root/.cache/pre-commit/*'

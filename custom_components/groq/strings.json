@@ -88,7 +88,9 @@
                 "reconfigure": "Reconfigure Text Generation"
             },
             "abort": {
-                "reconfigure_successful": "Text Generation service updated successfully."
+                "reconfigure_successful": "Text Generation service updated successfully.",
+                "no_compatible_models": "This Groq account has no active models compatible with this service. Check model access in Groq Console, then try again.",
+                "model_unavailable": "The selected model is no longer available for this service. Start configuration again and choose an available model."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Reconfigure Speech-to-Text"
             },
             "abort": {
-                "reconfigure_successful": "Speech-to-Text service updated successfully."
+                "reconfigure_successful": "Speech-to-Text service updated successfully.",
+                "no_compatible_models": "This Groq account has no active models compatible with this service. Check model access in Groq Console, then try again.",
+                "model_unavailable": "The selected model is no longer available for this service. Start configuration again and choose an available model."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Reconfigure Text-to-Speech"
             },
             "abort": {
-                "reconfigure_successful": "Text-to-Speech service updated successfully."
+                "reconfigure_successful": "Text-to-Speech service updated successfully.",
+                "no_compatible_models": "This Groq account has no active models compatible with this service. Check model access in Groq Console, then try again.",
+                "model_unavailable": "The selected model is no longer available for this service. Start configuration again and choose an available model."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Reconfigure Image Recognition"
             },
             "abort": {
-                "reconfigure_successful": "Image Recognition service updated successfully."
+                "reconfigure_successful": "Image Recognition service updated successfully.",
+                "no_compatible_models": "This Groq account has no active models compatible with this service. Check model access in Groq Console, then try again.",
+                "model_unavailable": "The selected model is no longer available for this service. Start configuration again and choose an available model."
             },
             "step": {
                 "image_recognition": {

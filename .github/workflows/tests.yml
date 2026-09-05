@@ -41,9 +41,11 @@ jobs:
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: .test-cache/pre-commit
-          key: ${{ runner.os }}-${{ runner.arch }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml', 'devtools/docker/Dockerfile', 'devtools/docker/requirements-dev.txt') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml', 'devtools/docker/Dockerfile', 'devtools/docker/requirements-*.txt', 'scripts/verify_test_environment.py') }}
       - name: Build and start Home Assistant test environment
         run: scripts/test --prepare
+      - name: Verify Home Assistant dependencies
+        run: scripts/test python -m pip check
       - name: Run pre-commit in Home Assistant Docker
         run: scripts/test pre-commit run --all-files
       - name: Validate quality scale evidence in Home Assistant Docker
@@ -62,6 +64,8 @@ jobs:
           path: importtime-groq.log
       - name: Run strict typing in Home Assistant Docker
         run: scripts/strict-typing
+      - name: Verify real Home Assistant typing contracts
+        run: scripts/test python scripts/check_ha_typing.py
       - name: Detect changed integration modules
         if: ${{ github.event_name == 'pull_request' }}
         id: changed
@@ -122,15 +126,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: devtools/docker/requirements-min-ha.txt
-      - name: Install minimum Home Assistant test environment
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --no-deps pytest-homeassistant-custom-component==0.13.336
-          python -m pip install -r devtools/docker/requirements-min-ha.txt
+          persist-credentials: false
+      - name: Build and verify minimum Home Assistant environment
+        run: scripts/test --minimum --prepare
+      - name: Verify minimum Home Assistant dependencies
+        run: scripts/test --minimum python -m pip check
+      - name: Verify minimum Home Assistant typing contracts
+        run: scripts/test --minimum python scripts/check_ha_typing.py
       - name: Run component tests against minimum Home Assistant
-        run: python -m pytest tests/components/groq -q
+        run: scripts/test --minimum python -m pytest tests/components/groq -q

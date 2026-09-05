@@ -72,7 +72,7 @@ Each configured Groq service creates its own Home Assistant device and the relev
 
 ## Requirements
 
-- Home Assistant `2026.6.0` or newer. Local development is tested against the minimum supported version.
+- Home Assistant `2026.6.0` or newer. The primary test environment uses `2026.9.0`; a separate compatibility environment verifies `2026.6.0`.
 - A Groq API key from [Groq Console](https://console.groq.com/).
 - Network access from Home Assistant to `https://api.groq.com`.
 - Optional: `ffmpeg` on the Home Assistant host if you enable TTS audio normalization, Long TTS, or processed playback conversion.
@@ -95,6 +95,10 @@ After adding an account, open the Groq integration page and add one or more serv
 
 Additional Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, Compound built-in tool allow-lists, structured output schema, strict schema mode, and additional Groq request body options.
 
+Local response caching is opt-in per configured service. Disabling it for one service remains effective when another service enables caching. Responses expire and share a 16 MiB serialized-content budget per account. Speech audio caches share a separate 64 MiB account budget in addition to their configured item limits. These caches are local to Home Assistant and are distinct from Groq's provider-side prompt caching.
+
+Explicit action arguments override service defaults; omitted structured-output fields inherit the configured schema name and strictness. Structured results are validated locally before being returned or cached, including JSON fallback for models without native schema output. Clearing the Assist control selection disables those Home Assistant tools without discarding other advanced settings.
+
 Compound built-in tools are opt-in. For `groq/compound` and `groq/compound-mini`, the integration sends an explicit empty built-in tool allow-list unless you enable tools such as web search, visit website, browser automation, code execution, or Wolfram Alpha in the service's additional options. Enabling these tools allows Groq to run server-side tools and inspect external content for the request.
 
 You can add more than one Groq account. The integration prevents adding the same API key twice.
@@ -104,7 +108,7 @@ You can add more than one Groq account. The integration prevents adding the same
 - This is a cloud integration and will not work without internet access to Groq.
 - Groq can change model availability, limits, and request option support outside this integration.
 - Some additional options work only on models that support them. The setup flow validates known model capabilities where possible.
-- TTS input is limited by Groq Orpheus model limits. Enable the Long TTS option to split longer announcements and stitch them with `ffmpeg`; this uses more CPU and more Groq request quota. Without Long TTS, overly long requests are blocked locally.
+- TTS input is limited by Groq Orpheus model limits. Enable the Long TTS option to split longer announcements and stitch them with `ffmpeg`; this uses more CPU and more Groq request quota. Processed audio output is limited to 64 MiB. Without Long TTS, overly long requests are blocked locally.
 - Groq speech can generate WAV, MP3, FLAC, OGG, or MULAW audio. The integration sends the selected format directly to Groq for single-part announcements without audio processing. When audio normalization or Long TTS is enabled, the integration asks Groq for WAV chunks and uses `ffmpeg` to normalize, stitch, or convert the final playback output.
 - TTS sample rate and speed are optional. Leave sample rate unset to use Groq's model default or the integration's playback profile; use speed `1.0` for normal playback.
 - Long TTS, audio normalization, and playback conversion need `ffmpeg` and use extra CPU.
@@ -116,7 +120,8 @@ You can add more than one Groq account. The integration prevents adding the same
 - Cannot connect: check Home Assistant network/DNS access to `api.groq.com` and the [Groq status page](https://groqstatus.com/).
 - Model missing: use `groq.list_models` to see models visible to the selected account, or choose a known compatible model.
 - Service actions: provide `service_id` for Text Generation, Image Recognition, and Speech-to-Text actions so automations keep using the intended configured Groq service. Provide `config_entry_id` for account-level actions such as clearing the cache or listing models.
-- Rate-limit errors: wait for Groq's reset window, lower automation frequency, choose a smaller model, or use separate Groq projects/keys where appropriate.
+- Rate-limit errors: wait for Groq's reset window, lower automation frequency, choose a smaller model, or use separate Groq projects/keys where appropriate. The free-tier guard is a conservative local estimate; it does not know all organization-wide usage.
+- Model permission errors: check Groq organization/project model permissions. Known permission restrictions create a model-specific repair rather than asking you to replace a working account key. Repairs clear after matching successful requests or removal of obsolete configuration.
 - TTS audio processing fails: install `ffmpeg` on the Home Assistant host, choose direct single-part playback without audio normalization, or disable Long TTS.
 - Local image or audio file fails: direct paths and media-source inputs require an administrator, and direct paths must also be allowed by Home Assistant `allowlist_external_dirs`.
 - Diagnostics: download diagnostics from the integration page. API keys, endpoint URLs, and prompt fields are redacted.

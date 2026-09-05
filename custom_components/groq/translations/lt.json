@@ -88,7 +88,9 @@
                 "reconfigure": "Iš naujo sukonfigūruoti teksto generavimą"
             },
             "abort": {
-                "reconfigure_successful": "Teksto generavimo paslauga sėkmingai atnaujinta."
+                "reconfigure_successful": "Teksto generavimo paslauga sėkmingai atnaujinta.",
+                "no_compatible_models": "Šioje Groq paskyroje nėra aktyvių modelių, suderinamų su šia paslauga. Patikrinkite modelių prieigą Groq konsolėje ir bandykite dar kartą.",
+                "model_unavailable": "Pasirinktas modelis šiai paslaugai nebepasiekiamas. Pradėkite konfigūravimą iš naujo ir pasirinkite pasiekiamą modelį."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Iš naujo sukonfigūruoti kalbą į tekstą"
             },
             "abort": {
-                "reconfigure_successful": "Kalbos į tekstą paslauga sėkmingai atnaujinta."
+                "reconfigure_successful": "Kalbos į tekstą paslauga sėkmingai atnaujinta.",
+                "no_compatible_models": "Šioje Groq paskyroje nėra aktyvių modelių, suderinamų su šia paslauga. Patikrinkite modelių prieigą Groq konsolėje ir bandykite dar kartą.",
+                "model_unavailable": "Pasirinktas modelis šiai paslaugai nebepasiekiamas. Pradėkite konfigūravimą iš naujo ir pasirinkite pasiekiamą modelį."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Iš naujo sukonfigūruokite teksto į kalbą funkciją"
             },
             "abort": {
-                "reconfigure_successful": "Teksto į kalbą paslauga sėkmingai atnaujinta."
+                "reconfigure_successful": "Teksto į kalbą paslauga sėkmingai atnaujinta.",
+                "no_compatible_models": "Šioje Groq paskyroje nėra aktyvių modelių, suderinamų su šia paslauga. Patikrinkite modelių prieigą Groq konsolėje ir bandykite dar kartą.",
+                "model_unavailable": "Pasirinktas modelis šiai paslaugai nebepasiekiamas. Pradėkite konfigūravimą iš naujo ir pasirinkite pasiekiamą modelį."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Iš naujo sukonfigūruokite vaizdo atpažinimą"
             },
             "abort": {
-                "reconfigure_successful": "Vaizdo atpažinimo paslauga sėkmingai atnaujinta."
+                "reconfigure_successful": "Vaizdo atpažinimo paslauga sėkmingai atnaujinta.",
+                "no_compatible_models": "Šioje Groq paskyroje nėra aktyvių modelių, suderinamų su šia paslauga. Patikrinkite modelių prieigą Groq konsolėje ir bandykite dar kartą.",
+                "model_unavailable": "Pasirinktas modelis šiai paslaugai nebepasiekiamas. Pradėkite konfigūravimą iš naujo ir pasirinkite pasiekiamą modelį."
             },
             "step": {
                 "image_recognition": {

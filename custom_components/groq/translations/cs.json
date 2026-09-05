@@ -88,7 +88,9 @@
                 "reconfigure": "Překonfigurujte generování textu"
             },
             "abort": {
-                "reconfigure_successful": "Služba generování textu byla úspěšně aktualizována."
+                "reconfigure_successful": "Služba generování textu byla úspěšně aktualizována.",
+                "no_compatible_models": "Tento účet Groq nemá žádné aktivní modely kompatibilní s touto službou. Zkontrolujte přístup k modelům v konzoli Groq a zkuste to znovu.",
+                "model_unavailable": "Vybraný model již není pro tuto službu dostupný. Spusťte konfiguraci znovu a vyberte dostupný model."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Překonfigurujte převod řeči na text"
             },
             "abort": {
-                "reconfigure_successful": "Služba převodu řeči na text byla úspěšně aktualizována."
+                "reconfigure_successful": "Služba převodu řeči na text byla úspěšně aktualizována.",
+                "no_compatible_models": "Tento účet Groq nemá žádné aktivní modely kompatibilní s touto službou. Zkontrolujte přístup k modelům v konzoli Groq a zkuste to znovu.",
+                "model_unavailable": "Vybraný model již není pro tuto službu dostupný. Spusťte konfiguraci znovu a vyberte dostupný model."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Překonfigurujte převod textu na řeč"
             },
             "abort": {
-                "reconfigure_successful": "Služba Text-to-Speech byla úspěšně aktualizována."
+                "reconfigure_successful": "Služba Text-to-Speech byla úspěšně aktualizována.",
+                "no_compatible_models": "Tento účet Groq nemá žádné aktivní modely kompatibilní s touto službou. Zkontrolujte přístup k modelům v konzoli Groq a zkuste to znovu.",
+                "model_unavailable": "Vybraný model již není pro tuto službu dostupný. Spusťte konfiguraci znovu a vyberte dostupný model."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Překonfigurujte rozpoznávání obrázků"
             },
             "abort": {
-                "reconfigure_successful": "Služba rozpoznávání obrázků byla úspěšně aktualizována."
+                "reconfigure_successful": "Služba rozpoznávání obrázků byla úspěšně aktualizována.",
+                "no_compatible_models": "Tento účet Groq nemá žádné aktivní modely kompatibilní s touto službou. Zkontrolujte přístup k modelům v konzoli Groq a zkuste to znovu.",
+                "model_unavailable": "Vybraný model již není pro tuto službu dostupný. Spusťte konfiguraci znovu a vyberte dostupný model."
             },
             "step": {
                 "image_recognition": {

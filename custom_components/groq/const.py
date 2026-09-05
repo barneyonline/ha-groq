@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 DOMAIN = "groq"
@@ -300,24 +301,26 @@ def normalize_enabled_features(
     return [feature for feature in SUPPORTED_FEATURES if feature in requested]
 
 
+def entry_value(entry: Any, key: str, default: Any = None) -> Any:
+    """Return effective account configuration with options taking precedence."""
+    return entry.options.get(key, entry.data.get(key, default))
+
+
 def enabled_features_from_entry(entry: Any) -> list[str]:
-    """Return effective enabled features from config entry options/data."""
-    if CONF_ENABLED_FEATURES in entry.options:
-        return normalize_enabled_features(entry.options.get(CONF_ENABLED_FEATURES))
-    if CONF_ENABLED_FEATURES in entry.data:
-        return normalize_enabled_features(entry.data.get(CONF_ENABLED_FEATURES))
-
-    enabled = {
-        data.get(CONF_SERVICE_TYPE)
+    """Return primary features enabled by effective options and service subentries."""
+    configured = entry_value(entry, CONF_ENABLED_FEATURES)
+    enabled = set(normalize_enabled_features(configured, default=()))
+    enabled.update(
+        service_type
         for subentry in (getattr(entry, "subentries", None) or {}).values()
-        if isinstance((data := getattr(subentry, "data", {})), dict)
-    }
-    if enabled:
-        return [feature for feature in SUPPORTED_FEATURES if feature in enabled]
-
-    if all(entry.data.get(key) for key in (CONF_URL, CONF_MODEL, CONF_VOICE)):
-        return [FEATURE_TEXT_TO_SPEECH]
-    return []
+        if isinstance((data := getattr(subentry, "data", {})), Mapping)
+        and isinstance((service_type := data.get(CONF_SERVICE_TYPE)), str)
+    )
+    if configured is None and all(
+        entry_value(entry, key) for key in (CONF_URL, CONF_MODEL, CONF_VOICE)
+    ):
+        enabled.add(FEATURE_TEXT_TO_SPEECH)
+    return [feature for feature in SUPPORTED_FEATURES if feature in enabled]
 
 
 def voice_options_for_model(model: str | None) -> list[str]:

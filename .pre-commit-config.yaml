@@ -4,12 +4,12 @@ repos:
     hooks:
       - id: black
         args: [--check]
-        files: "^((custom_components/groq|tests/components/groq)/.*|scripts/(benchmark_tts_rate_limit|importtime_profile|issue_labeling|validate_quality_scale)|tests/scripts/.*)\\.py$"
+        files: "^((custom_components/groq|tests/components/groq)/.*|scripts/.*|tests/scripts/.*)\\.py$"
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
     hooks:
       - id: ruff
-        files: "^((custom_components/groq|tests/components/groq)/.*|scripts/(benchmark_tts_rate_limit|importtime_profile|issue_labeling|validate_quality_scale)|tests/scripts/.*)\\.py$"
+        files: "^((custom_components/groq|tests/components/groq)/.*|scripts/.*|tests/scripts/.*)\\.py$"
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.2
     hooks:

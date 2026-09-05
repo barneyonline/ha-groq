@@ -5,6 +5,12 @@ cd "$(dirname "$0")/.."
 
 compose_file=devtools/docker/docker-compose.yml
 project_hash=$(printf '%s\n' "$(pwd -P)" | git hash-object --stdin | cut -c1-12)
+if [ "${1:-}" = "--minimum" ]; then
+  shift
+  project_hash="$project_hash-minimum"
+  export HA_IMAGE=${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.6.0@sha256:60af7f5d4d13368c86c73611e4a3ce32534eb573bce09f26b98d647291c3df8c}
+  export HA_GROQ_REQUIREMENTS_FILE=requirements-min-ha.txt
+fi
 compose_project="ha-groq-$project_hash"
 git_common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 
@@ -28,7 +34,9 @@ environment_hash=$(
       .dockerignore \
       devtools/docker/Dockerfile \
       devtools/docker/docker-compose.yml \
-      devtools/docker/requirements-dev.txt
+      devtools/docker/requirements-dev.txt \
+      devtools/docker/requirements-min-ha.txt \
+      scripts/verify_test_environment.py
     printf '%s\n' "$resolved_compose_config"
   } | git hash-object --stdin
 )
@@ -53,6 +61,10 @@ current_image_id=$(docker image inspect --format '{{.Id}}' "$HA_GROQ_TEST_IMAGE"
 if [ -n "$previous_image_id" ] && [ "$previous_image_id" != "$current_image_id" ]; then
   docker image rm "$previous_image_id" >/dev/null 2>&1 || true
 fi
+
+docker compose -f "$compose_file" exec -T ha-dev python \
+  /opt/groq-test/verify_test_environment.py \
+  --expected-core-file /opt/groq-test/image-core-version
 
 if [ "${1:-}" = "--prepare" ]; then
   exit 0

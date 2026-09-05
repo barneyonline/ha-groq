@@ -67,6 +67,18 @@ scripts/test python -m pytest tests/components/groq -q
 scripts/test python -m pytest -q
 ```
 
+The primary harness uses Home Assistant 2026.9.0. Verify the advertised minimum
+separately with `scripts/test --minimum python -m pytest tests/components/groq -q`.
+Both environments verify the actual Core/helper versions and run dependency checks
+when built. `HA_IMAGE` overrides must match the helper dependency; incompatible
+images fail before tests. Stop the minimum container with `scripts/test --minimum --stop`.
+
+`scripts/strict-typing` discovers the installed HA source for actual interface checks.
+Run `scripts/test python scripts/check_ha_typing.py` for positive and negative typing
+controls. Keep the 100% integration and changed-module coverage gates. The optional
+`python -m pytest scripts/benchmark_runtime.py -q -s` command inside the harness
+measures warmed local overhead with mocked provider I/O; it is not live latency.
+
 ## Coding Standards And Tooling
 
 Home Assistant integrations must follow the [core development guidelines](https://developers.home-assistant.io/docs/development_guidelines/). Key points:
@@ -110,7 +122,7 @@ The `ha-runtime` service is for manual verification only. Keep automated checks 
 
 - Add or update tests in `tests/components/groq/` for new functionality or bug fixes.
 - Add or update tests in `tests/scripts/` for repository maintenance scripts.
-- Prefer mocks for Groq network calls, camera captures, media-source resolution, subprocesses, and Home Assistant service boundaries.
+- Mock Groq network calls, camera captures and subprocesses. For integration behavior, exercise real HA config entries, flow managers, registries, service dispatch and ChatLog instead of mocking those boundaries.
 - Keep pytest fast and deterministic. Do not require a real Groq API key for automated tests.
 - For touched Python modules, run focused tests first, then the full suite when practical.
 

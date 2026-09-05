@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path(__file__).parents[2]
 
 
@@ -15,6 +14,8 @@ def test_environment_fingerprint_covers_docker_build_inputs() -> None:
         "devtools/docker/Dockerfile",
         "devtools/docker/docker-compose.yml",
         "devtools/docker/requirements-dev.txt",
+        "devtools/docker/requirements-min-ha.txt",
+        "scripts/verify_test_environment.py",
     ):
         assert build_input in runner
 

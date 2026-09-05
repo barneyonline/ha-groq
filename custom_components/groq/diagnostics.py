@@ -47,6 +47,7 @@ from .const import (
     FEATURE_TEXT_TO_SPEECH,
     SUPPORTED_FEATURES,
     enabled_features_from_entry,
+    entry_value,
 )
 from .types import GroqConfigEntry
 
@@ -84,28 +85,23 @@ SERVICE_SUMMARY_KEYS = (
 )
 
 
-def _entry_value(entry: GroqConfigEntry, key: str, default: Any = None) -> Any:
-    """Return effective value, allowing options to override setup data."""
-    return entry.options.get(key, entry.data.get(key, default))
-
-
 def _default_summary(entry: GroqConfigEntry) -> dict[str, Any]:
     """Return legacy account-level defaults without exposing generated content."""
     return {
         "text_to_speech": {
-            "model": _entry_value(entry, CONF_MODEL),
-            "voice": _entry_value(entry, CONF_VOICE),
-            "response_format": _entry_value(
+            "model": entry_value(entry, CONF_MODEL),
+            "voice": entry_value(entry, CONF_VOICE),
+            "response_format": entry_value(
                 entry, CONF_RESPONSE_FORMAT, DEFAULT_RESPONSE_FORMAT
             ),
-            "sample_rate": _entry_value(entry, CONF_SAMPLE_RATE),
-            "speed": _entry_value(entry, CONF_SPEED),
+            "sample_rate": entry_value(entry, CONF_SAMPLE_RATE),
+            "speed": entry_value(entry, CONF_SPEED),
             "vocal_directions_configured": bool(
-                _entry_value(entry, CONF_VOCAL_DIRECTIONS, "")
+                entry_value(entry, CONF_VOCAL_DIRECTIONS, "")
             ),
-            "normalize_audio": _entry_value(entry, CONF_NORMALIZE_AUDIO, False),
-            "enable_long_tts": _entry_value(entry, CONF_ENABLE_LONG_TTS, False),
-            "cache_size": _entry_value(entry, CONF_CACHE_SIZE, DEFAULT_CACHE_SIZE),
+            "normalize_audio": entry_value(entry, CONF_NORMALIZE_AUDIO, False),
+            "enable_long_tts": entry_value(entry, CONF_ENABLE_LONG_TTS, False),
+            "cache_size": entry_value(entry, CONF_CACHE_SIZE, DEFAULT_CACHE_SIZE),
         }
     }
 

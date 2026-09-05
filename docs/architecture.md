@@ -1,455 +1,192 @@
-# Groq Integration Architecture
+# Groq integration architecture
 
-This document defines the target architecture for expanding the Groq Home
-Assistant integration beyond the current text-to-speech implementation. It uses
-`api_spec.md` as the baseline API contract and follows current Home Assistant
-developer guidance for config entries, typed runtime data, platform forwarding,
-entity properties, response services, diagnostics, and conversation/LLM support.
+The integration exposes Groq cloud capabilities through Home Assistant config
+entries, service subentries, native voice/AI platforms and response actions. It
+makes requests on demand; it has no periodic polling coordinator.
 
-The requested feature set is:
+## Account, service and runtime ownership
 
-- Text generation
-- Speech-to-text
-- Text-to-speech
-- OCR and image recognition
-- Reasoning
-- Structured outputs
-- Local response caching
+One config entry stores account credentials and an API base URL. Users add
+service subentries for text generation, speech-to-text, text-to-speech or image
+recognition. A text-generation subentry supplies both a conversation entity for
+Assist and an AI Task entity. Image recognition/OCR uses response actions.
 
-## Design Goals
+`types.GroqConfigEntry` binds the entry to `runtime.GroqRuntimeData`. That runtime
+owns one shared `GroqApiClient`, model/feature registries, cooldown tracking,
+response cache and indexed service configuration. Services select their target by
+subentry identity; account actions select the config entry. Entity/device IDs are
+stable and associated with the matching HA config subentry.
 
-- One Groq config entry represents a Groq account/project and API base URL, not
-  one model or one feature.
-- Features are opt-in modules that can be enabled, disabled, added, or removed
-  without rewriting the whole integration.
-- Home Assistant-native surfaces are used where they exist: `tts`, `stt`, and
-  `conversation` entities. Non-entity operations use response services.
-- API transport, authentication, error handling, rate limits, diagnostics, and
-  model discovery are shared across all features.
-- Prompt text, image bytes, audio bytes, and API keys are never logged or exposed
-  in diagnostics.
-- Existing TTS behavior remains compatible while being moved behind the shared
-  client and feature registry.
+Account option values override entry data. Service settings override account
+settings, and explicitly supplied action fields override service defaults. An
+explicit false or empty selection is different from an omitted field. Clearing
+Assist's selected API disables that control capability while preserving hidden
+advanced settings. A blank account API-key submission preserves effective
+credentials and unrelated options.
 
-## Home Assistant Fit
+Legacy account-level TTS settings remain supported. Entry minor version 2 migrates
+legacy stable identifiers using HA's immutable data mapping contract, without
+changing an existing identifier or trying to downgrade a newer schema version.
 
-Current Home Assistant guidance affects the architecture in these ways:
+## Module boundaries
 
-- Store shared runtime objects in typed `ConfigEntry.runtime_data`.
-- Use `async_forward_entry_setups` and `async_unload_platforms` for platform
-  setup and teardown.
-- Keep entity properties memory-only; network I/O belongs in async action
-  methods such as TTS generation, STT stream processing, and conversation
-  handling.
-- Use `ConversationEntity` and the Home Assistant LLM API for Assist/text
-  generation that may control Home Assistant.
-- Use `SpeechToTextEntity` for streaming speech-to-text.
-- Use `TextToSpeechEntity` for `tts.speak` and support streaming TTS later when
-  the Groq API and Home Assistant API shape make that practical.
-- Use response services with `SupportsResponse.ONLY` for direct automation calls
-  that return generated text, structured JSON, OCR results, or image analysis.
-- Use repairs for user-actionable setup issues such as revoked credentials,
-  disabled models, deprecated model IDs, or features enabled without a capable
-  model.
-
-## Proposed File Layout
-
-```text
-custom_components/groq/
-  __init__.py
-  api.py
-  capabilities.py
-  config_flow.py
-  const.py
-  diagnostics.py
-  errors.py
-  feature_registry.py
-  model_registry.py
-  prompt_cache.py
-  rate_limit.py
-  runtime.py
-  services.py
-  services.yaml
-  tts.py
-  stt.py
-  conversation.py
-  vision.py
-  structured.py
-  translations/
+```mermaid
+flowchart TD
+    F[config_flow and flow_schemas] --> M[model_registry and feature_registry]
+    E[Config entry lifecycle] --> R[Typed entry runtime]
+    R --> A[Groq API client]
+    R --> M
+    R --> C[Response cache and rate limiter]
+    P[Conversation, AI Task, STT, TTS] --> R
+    S[Response services] --> R
+    P --> H[Chat, text options, schema and media helpers]
+    S --> H
+    A --> G[Groq HTTPS API]
+    E --> I[Owned repair issues]
+    A --> I
 ```
 
-## Runtime Model
+| Module | Responsibility |
+| --- | --- |
+| `__init__.py` | Integration services, entry setup, platform forwarding, reload, unload and migration |
+| `config_flow.py`, `flow_schemas.py` | Account/subentry forms, input preservation and model-aware validation |
+| `const.py`, `subentries.py` | Shared constants, value precedence and service identity extraction |
+| `runtime.py`, `types.py` | Typed entry runtime and shared object construction |
+| `model_registry.py`, `feature_registry.py` | Model activity/capabilities and enabled HA platforms/actions |
+| `api.py` | Async HTTP, payload models, response normalization and speech request ownership |
+| `rate_limit.py`, `prompt_cache.py` | Provider cooldowns and bounded local response storage |
+| `conversation.py`, `ai_task.py` | HA platform entrypoints and platform-specific result handling |
+| `chat.py` | Shared ChatLog, attachment/history and tool-call adaptation |
+| `text_generation.py`, `structured.py` | Effective generation options, request checks and local schema validation |
+| `services.py` | Authorized action target resolution, response actions and dynamic descriptions |
+| `attachments.py` | Authorized bounded media reads and attachment conversion |
+| `stt.py`, `tts.py`, `audio_files.py` | Speech platforms and cancellation-safe bounded ffmpeg I/O/files |
+| `entity.py`, `diagnostics.py`, `repairs.py` | Device identity, redacted diagnostics and recoverable owned issues |
 
-`__init__.py` should create one runtime object per config entry:
+## Lifecycle
 
-```python
-@dataclass(slots=True)
-class GroqRuntimeData:
-    client: GroqApiClient
-    model_registry: GroqModelRegistry
-    feature_registry: GroqFeatureRegistry
-    rate_limiter: GroqRateLimiter
-    prompt_cache: GroqPromptCache
+`async_setup` registers integration-level response actions once. Entry setup creates
+runtime objects, validates credentials/connectivity by discovering models, then
+forwards only the platforms required by configured services. An account without
+services creates no service entities. Authentication failure raises the HA auth
+exception; temporary setup connectivity failure raises `ConfigEntryNotReady`.
+
+An unload-bound entry update listener reloads changed configuration. Unload first
+unloads the platforms, then drains owned speech tasks and refreshes service target
+descriptions. Shared HA aiohttp sessions belong to HA and are never closed by this
+integration. Account removal and service changes reconcile owned repair issues.
+
+Successful discovery is authoritative for the local catalogue: inactive models and
+features with no matching models are not offered as if discovery failed. Built-in
+metadata remains the fallback when discovery is unavailable. Catalogue visibility
+does not prove permission to execute a model; inference access is checked by actual
+requests.
+
+## Generation and tool execution
+
+Assist and AI Task consume HA ChatLog through the shared adapter. History is
+trimmed before loading attachments, keeping complete tool exchanges, and converted
+attachments are reused within one turn. Tool argument JSON must be an object and
+call IDs must be valid before dispatch through HA's LLM API. Invalid arguments are
+not silently turned into a default operation. Tool iterations remain capped.
+
+No-tool AI Task calls also use the prepared HA context and record final assistant
+content. Task-provided structure takes precedence over a configured service schema.
+Native structured output, tool-assisted generation and JSON fallback share local
+schema validation before a result is returned or cached. The validator does not
+fetch remote schema references.
+
+Request options and capability checks use the same resolved precedence. Context
+estimation considers text, tools and schemas without treating base64 image bytes
+as text tokens. It is a heuristic; provider context enforcement remains authoritative.
+Image count and byte limits apply independently.
+
+Keep the schema-type-aware Probatio/Voluptuous OpenAPI adapter while the supported
+HA range needs both. Package availability alone is insufficient in mixed upgrade
+environments.
+
+## Network failures and repairs
+
+The shared client uses HA's aiohttp session, bounded response reads, explicit
+request/stream timeouts and disabled redirect following. JSON, SSE and binary-audio
+paths share HTTP error classification while retaining their different successful
+response formats. Non-JSON HTTP failures still preserve rate-limit and availability
+behavior; invalid stream content becomes a controlled integration error.
+
+HTTP 401 initiates reauthentication. Documented organization/project model
+permission errors use a scoped model-access issue instead of account reauth.
+Unexpected 403 responses follow the client's explicit authentication fallback.
+Only bounded classification metadata is retained in API errors; arbitrary provider
+messages or payloads are not copied into routine logs.
+
+Repairs carry account/service/model ownership. Success clears the matching access
+issue, and changing/removing configuration clears obsolete issues without clearing
+another account's active failure. Listing models alone does not clear inference
+permission failures. Availability logging describes recovery on the next request;
+it does not promise replay of arbitrary failed generation/tool operations.
+
+## Resource and cancellation limits
+
+Local response caching is opt-in for each eligible service. An explicit service
+opt-out wins over another service enabling the feature. Cached JSON is serialized
+so a caller cannot mutate a future response through nested dictionaries or lists.
+TTL expiry occurs before capacity eviction. Item limits are supplemented by a
+16 MiB budget for serialized responses and keys per account runtime. This bounds
+stored content; it is not a precise limit on Python object/process memory.
+
+Speech caching preserves per-service namespaces and item settings, with a 64 MiB
+account-wide budget for audio and keys. Oversized items are returned without being
+cached. Identical concurrent speech requests share a bounded owned task; cancellation
+of one waiter leaves another waiter intact, while the last cancellation or entry
+unload cancels and drains the work. Unrelated speech requests may run concurrently,
+up to eight owned synthesis tasks.
+
+Provider rate headers support numeric and composite durations. The local guard
+uses exhausted quota windows rather than unrelated healthy windows. The existing
+TTS free-tier counter is conservative per-service accounting, not authoritative
+organization-wide usage: request text is estimated locally and transport retries
+are not individually charged by that counter.
+
+Disk reads request at most the allowed byte limit plus one overflow byte. Permission
+and HA path-allowlist checks remain in place. File work and image encoding use the
+executor. Temporary ffmpeg files have one owner through creation, writing and
+cleanup, including cancellation while executor work is still running. Process I/O
+bounds audio output to 64 MiB and retained stderr to 64 KiB while draining pipes;
+cancellation and timeout kill/reap the process.
+
+STT still packages permitted input as WAV in memory. Small voice clips make this
+cheap; measurements for large inputs and cache limits are recorded separately from
+claims about actual device or provider performance.
+
+## Validation and performance evidence
+
+The primary Docker harness runs HA 2026.9.0 with pytest helper 0.13.363; the minimum
+harness runs HA 2026.6.0 with helper 0.13.336. Image digests are pinned. Both verify
+the original image's Core version after dependency installation and check package
+consistency. An incompatible `HA_IMAGE` override fails instead of silently testing
+a downgraded Core. `scripts/test --minimum` selects the separate minimum container.
+
+Tests combine pure unit cases with real HA config entries, immutable subentries,
+flow managers, entity/issue registries, service dispatch and ChatLog. Outbound Groq
+I/O and external process boundaries are mocked. Every integration module and each
+changed module must retain 100% statement coverage. Branch coverage is additional
+evidence for error/cancellation paths, not a replacement for behavior tests.
+
+Strict typing locates the exact installed HA source and checks the integration
+against its real interfaces. Imported dependency internals are not themselves
+checked as this integration's code. A separate positive/negative control confirms
+that immutable data mutation and invalid callbacks/content are rejected.
+
+To measure local runtime overhead independently of network latency:
+
+```bash
+scripts/test python -m pytest scripts/benchmark_runtime.py -q -s
+scripts/test python scripts/importtime_profile.py --preload-home-assistant --runs 3
+scripts/test python scripts/benchmark_tts_rate_limit.py
 ```
 
-The config entry data should contain durable setup data:
-
-- API key
-- Base URL, defaulting to `https://api.groq.com/openai/v1`
-- Entry/account label when no account identity endpoint is available
-- Entry schema version
-
-The config entry options should contain changeable behavior:
-
-- Enabled features
-- Default models per feature
-- Default TTS voice/format/vocal directions/normalization
-- Default STT language/model
-- Default conversation model, system prompt, and Home Assistant LLM API setting
-- Vision/OCR model defaults
-- Reasoning settings
-- Structured output defaults
-- Prompt cache settings
-- Local free-tier guard settings
-
-`PLATFORMS` should become dynamic:
-
-```python
-FEATURE_PLATFORMS = {
-    GroqFeature.TEXT_TO_SPEECH: {Platform.TTS},
-    GroqFeature.SPEECH_TO_TEXT: {Platform.STT},
-    GroqFeature.TEXT_GENERATION: {Platform.CONVERSATION},
-}
-```
-
-OCR/image recognition, structured outputs, local response cache administration, and
-one-shot text generation should be services because they return data and do not
-map cleanly to long-lived Home Assistant state. If an image preview is later
-useful, add an optional `image` platform entity for the last generated/analyzed
-image metadata only; do not make OCR itself an entity.
-
-## Feature Registry
-
-Define feature IDs once:
-
-```python
-class GroqFeature(StrEnum):
-    TEXT_GENERATION = "text_generation"
-    SPEECH_TO_TEXT = "speech_to_text"
-    TEXT_TO_SPEECH = "text_to_speech"
-    VISION = "vision"
-    OCR = "ocr"
-    REASONING = "reasoning"
-    STRUCTURED_OUTPUTS = "structured_outputs"
-    PROMPT_CACHING = "prompt_caching"
-```
-
-Each feature descriptor should include:
-
-- Feature ID and display translation key
-- Required model capabilities
-- Home Assistant platform, if any
-- Services to register, if any
-- Options schema fragment
-- Validation callback
-- Diagnostics summary callback
-
-This lets the options flow render a multi-select "enabled features" field and
-only show feature-specific options when that feature is enabled. On options
-change, reload the entry. Reloading unloads disabled platforms and services,
-then forwards setup only for the currently enabled platforms.
-
-## Shared API Client
-
-`GroqApiClient` should be the only module that performs Groq HTTP calls.
-
-Responsibilities:
-
-- Use Home Assistant's shared aiohttp session.
-- Apply bearer-token authentication and the integration user agent.
-- Build endpoint URLs from the base URL plus endpoint paths.
-- Provide `_request_json` and `_request_bytes` helpers.
-- Preserve cancellation.
-- Map 401/403 to `ConfigEntryAuthFailed` when credentials are invalid.
-- Map 429 to a Groq rate-limit exception with `retry-after` and reset headers.
-- Parse JSON error bodies without logging secrets or user content.
-- Emit structured response metadata for diagnostics without storing payloads.
-
-Recommended public methods:
-
-```python
-async def async_list_models() -> list[GroqModel]
-async def async_generate_text(request: TextGenerationRequest) -> TextGenerationResult
-async def async_transcribe(request: TranscriptionRequest) -> TranscriptionResult
-async def async_speech(request: SpeechRequest) -> bytes
-async def async_analyze_image(request: VisionRequest) -> VisionResult
-```
-
-Before implementing features beyond TTS, extend `api_spec.md` with the exact
-Groq endpoint, request fields, response fields, rate-limit dimensions, supported
-models, and error behavior for that feature. The architecture should not encode
-undocumented payload fields directly into platform code.
-
-## Model And Capability Registry
-
-Model discovery should become capability-aware:
-
-```python
-@dataclass(frozen=True, slots=True)
-class GroqModel:
-    model_id: str
-    active: bool
-    owned_by: str | None
-    context_window: int | None
-    max_completion_tokens: int | None
-    capabilities: frozenset[GroqCapability]
-```
-
-Capabilities should be inferred from:
-
-- Built-in capability tables from `api_spec.md`
-- `/models` discovery response
-- Future Groq model metadata, if it exposes modalities or capabilities
-
-Built-in models remain available when discovery fails. Discovered models should
-not be offered for a feature unless they are known or inferred to support that
-feature.
-
-## Feature Surfaces
-
-### Text Generation
-
-Expose text generation in two ways:
-
-- `conversation.py`: a `ConversationEntity` for Assist and chat-style use.
-- `groq.generate_text`: a response service for automations/scripts that need a
-  generated text value.
-
-The conversation entity should support Home Assistant's LLM API tools when the
-user explicitly enables control. The direct service should not control Home
-Assistant; it should only return generated content.
-
-### Speech-To-Text
-
-Add `stt.py` with `SpeechToTextEntity`.
-
-The entity should advertise supported languages, audio formats, codecs, bit
-rates, sample rates, and channels from memory. `async_process_audio_stream`
-should stream or upload audio according to the Groq API contract once documented
-in `api_spec.md`.
-
-### Text-To-Speech
-
-Keep `tts.py` as the Home Assistant TTS platform and migrate request execution
-to `GroqApiClient.async_speech`.
-
-Current Orpheus-specific behavior remains a TTS feature option:
-
-- Voice
-- Response format
-- Vocal directions
-- Audio normalization
-- Audio cache size
-- Free-tier guard
-
-The current 200-character Orpheus limit should move into model capability data
-so future TTS models can use their own limits.
-
-### OCR And Image Recognition
-
-Expose OCR/image recognition as response services:
-
-- `groq.analyze_image`
-- `groq.extract_text_from_image`
-
-Inputs should use Home Assistant-friendly selectors and references, such as
-media source IDs, URLs, or camera/image entity IDs. The service layer resolves
-those references into bytes or URLs, then calls `GroqApiClient.async_analyze_image`.
-
-Responses should include:
-
-- Extracted text, if requested
-- Summary/description
-- Detected objects or labels when the model returns them
-- Confidence or raw model metadata only when documented and useful
-
-Do not persist analyzed images by default.
-
-### Reasoning
-
-Reasoning is a model capability and request mode, not a separate platform.
-
-Expose it as options on:
-
-- Conversation entity
-- `groq.generate_text`
-- `groq.generate_structured`
-
-Reasoning configuration should be explicit and model-gated. If a non-reasoning
-model is selected with reasoning enabled, validation should block setup/options
-or the service call before sending the API request.
-
-### Structured Outputs
-
-Expose structured outputs as:
-
-- `groq.generate_structured` response service
-- Optional schema mode on `groq.generate_text`
-
-The service accepts a JSON schema and returns validated JSON. Validation should
-happen both before the request and after the response:
-
-- Reject invalid schemas locally.
-- Parse the model response as JSON.
-- Validate the parsed result against the requested schema.
-- Return a clear Home Assistant error if validation fails.
-
-Use structured parsing libraries instead of ad hoc string extraction.
-
-### Prompt Caching
-
-Prompt caching has two layers and the UI must name them clearly:
-
-- Groq prompt caching: provider-side behavior and usage metadata documented by
-  Groq. The integration should surface cached-token metadata when the API returns
-  it and only send cache-control fields if `api_spec.md` documents them.
-- Local response cache: optional Home Assistant memory cache for deterministic
-  calls. This is not the same as Groq prompt caching and should remain disabled
-  by default for text generation unless the user opts in.
-
-`prompt_cache.py` should provide shared key normalization and cache namespaces:
-
-- `tts_audio`
-- `text_generation`
-- `structured_outputs`
-- `vision`
-
-Cache keys must include model, feature, relevant options, prompt hash, and input
-hashes. Never include raw API keys, raw prompt text, audio bytes, or image bytes
-in keys exposed to logs or diagnostics.
-
-## Services
-
-Register services from `services.py` during `async_setup_entry`, using
-`SupportsResponse.ONLY` for services that return generated data.
-
-Proposed service set:
-
-- `groq.generate_text`
-- `groq.generate_structured`
-- `groq.analyze_image`
-- `groq.extract_text_from_image`
-- `groq.clear_cache`
-- `groq.list_models`
-
-Service handlers should locate the target config entry, verify the required
-feature is enabled, validate the selected model capability, call the shared
-client, and return a typed response dictionary.
-
-`services.yaml` should define selectors for model, feature, schema, prompt,
-image source, and target entry. Prefer service responses over writing generated
-content into entity state.
-
-## Options Flow
-
-Use a staged options flow instead of one large form:
-
-1. Feature selection
-2. Text generation/conversation options
-3. Speech-to-text options
-4. Text-to-speech options
-5. Vision/OCR options
-6. Caching and rate-limit options
-
-Only show steps for enabled features. The final options payload should include
-all feature defaults so disabling and re-enabling a feature can preserve the
-user's previous settings.
-
-## Diagnostics And Repairs
-
-Diagnostics should include:
-
-- Enabled features
-- Base URL with API key redacted
-- Selected models per feature
-- Cache sizes and hit/miss counters
-- Rate-limit guard configuration
-- Last API error class/status per feature
-
-Diagnostics must not include:
-
-- API keys
-- Prompt text
-- Conversation history
-- Structured output payloads
-- Image/audio bytes
-- OCR extracted text unless the user explicitly attaches it to an issue
-
-Repairs should be created for:
-
-- Authentication failure
-- Enabled feature has no capable model
-- Selected model is no longer returned by discovery
-- Deprecated model ID when a replacement is known
-- Invalid feature combination, such as reasoning enabled on a non-reasoning model
-
-## Error Handling
-
-All feature code should raise integration-specific exceptions from `errors.py`:
-
-- `GroqAuthError`
-- `GroqRateLimitExceeded`
-- `GroqModelAccessError`
-- `GroqFeatureNotEnabled`
-- `GroqUnsupportedCapability`
-- `GroqResponseValidationError`
-- `GroqTransientError`
-
-Platform/service handlers translate these into Home Assistant exceptions or
-conversation errors. Error messages should be actionable and should never contain
-secrets or full user payloads.
-
-## Migration Plan
-
-1. Add shared runtime scaffolding, feature registry, and config constants while
-   keeping TTS behavior unchanged.
-2. Migrate TTS HTTP logic into `GroqApiClient.async_synthesize_speech`.
-3. Change config entry semantics from TTS-specific to account/project-specific,
-   preserving existing entries with a migration that enables only TTS.
-4. Add response service registration and service tests.
-5. Add text generation and structured output services.
-6. Add conversation entity with optional Home Assistant LLM API tools.
-7. Add speech-to-text entity.
-8. Add vision/OCR services.
-9. Add provider prompt-cache metadata and optional local response cache.
-10. Expand diagnostics, repairs, and quality-scale coverage.
-
-## Test Strategy
-
-For each feature:
-
-- Unit-test request payload construction.
-- Unit-test response parsing and validation.
-- Unit-test model capability gating.
-- Unit-test config/options flow validation.
-- Unit-test service response shape.
-- Unit-test diagnostics redaction.
-- Unit-test authentication and rate-limit handling.
-
-For the shared client:
-
-- Verify headers and user agent.
-- Verify cancellation is preserved.
-- Verify JSON error parsing.
-- Verify binary response handling for TTS.
-- Verify 401/403 reauth behavior.
-- Verify 429 retry/reset details.
-
-Use the existing `scripts/test` Docker harness for Home Assistant parity.
-
-## References
-
-- `api_spec.md`
-- Home Assistant developer docs: config entries, runtime data, platform
-  forwarding/unloading, TTS entity, STT entity, conversation entity, LLM API,
-  image entity, response services, diagnostics, and repairs.
+The runtime benchmark reports warmed setup, uncached service-dispatch latency and
+maximum event-loop tick interval using real HA with deterministic fake provider I/O.
+No absolute benchmark threshold is enforced across different hardware. Cold import
+cost includes dependency initialization and is reported separately. The quality
+label remains a repository self-assessment, not official Home Assistant approval.

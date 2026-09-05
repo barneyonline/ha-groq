@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterable
 import io
 import logging
-from typing import Any
 import wave
+from collections.abc import AsyncIterable
+from typing import Any
 
 from homeassistant.components import stt
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .api import GroqApiClient
 from .const import (
     CONF_LANGUAGE,
     CONF_MODEL,
@@ -21,15 +22,14 @@ from .const import (
     CONF_PROTECT_FREE_TIER,
     CONF_SERVICE_TYPE,
     CONF_SUBENTRY_ID,
-    DEFAULT_STT_MODEL,
     DEFAULT_PROTECT_FREE_TIER,
+    DEFAULT_STT_MODEL,
     FEATURE_SPEECH_TO_TEXT,
     STT_LANGUAGES,
     UNIQUE_ID,
 )
-from .api import GroqApiClient
-from .errors import GroqApiError
 from .entity import service_device_info
+from .errors import GroqApiError
 from .runtime import async_get_runtime
 from .types import GroqConfigEntry
 

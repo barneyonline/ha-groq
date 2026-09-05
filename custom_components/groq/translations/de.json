@@ -88,7 +88,9 @@
                 "reconfigure": "Textgenerierung neu konfigurieren"
             },
             "abort": {
-                "reconfigure_successful": "Textgenerierungsdienst erfolgreich aktualisiert."
+                "reconfigure_successful": "Textgenerierungsdienst erfolgreich aktualisiert.",
+                "no_compatible_models": "Dieses Groq-Konto hat keine aktiven Modelle für diesen Dienst. Prüfe den Modellzugriff in der Groq-Konsole und versuche es erneut.",
+                "model_unavailable": "Das ausgewählte Modell ist für diesen Dienst nicht mehr verfügbar. Starte die Konfiguration erneut und wähle ein verfügbares Modell."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Speech-to-Text neu konfigurieren"
             },
             "abort": {
-                "reconfigure_successful": "Speech-to-Text-Dienst erfolgreich aktualisiert."
+                "reconfigure_successful": "Speech-to-Text-Dienst erfolgreich aktualisiert.",
+                "no_compatible_models": "Dieses Groq-Konto hat keine aktiven Modelle für diesen Dienst. Prüfe den Modellzugriff in der Groq-Konsole und versuche es erneut.",
+                "model_unavailable": "Das ausgewählte Modell ist für diesen Dienst nicht mehr verfügbar. Starte die Konfiguration erneut und wähle ein verfügbares Modell."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Text-to-Speech neu konfigurieren"
             },
             "abort": {
-                "reconfigure_successful": "Text-to-Speech-Dienst erfolgreich aktualisiert."
+                "reconfigure_successful": "Text-to-Speech-Dienst erfolgreich aktualisiert.",
+                "no_compatible_models": "Dieses Groq-Konto hat keine aktiven Modelle für diesen Dienst. Prüfe den Modellzugriff in der Groq-Konsole und versuche es erneut.",
+                "model_unavailable": "Das ausgewählte Modell ist für diesen Dienst nicht mehr verfügbar. Starte die Konfiguration erneut und wähle ein verfügbares Modell."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Bilderkennung neu konfigurieren"
             },
             "abort": {
-                "reconfigure_successful": "Bilderkennungsdienst erfolgreich aktualisiert."
+                "reconfigure_successful": "Bilderkennungsdienst erfolgreich aktualisiert.",
+                "no_compatible_models": "Dieses Groq-Konto hat keine aktiven Modelle für diesen Dienst. Prüfe den Modellzugriff in der Groq-Konsole und versuche es erneut.",
+                "model_unavailable": "Das ausgewählte Modell ist für diesen Dienst nicht mehr verfügbar. Starte die Konfiguration erneut und wähle ein verfügbares Modell."
             },
             "step": {
                 "image_recognition": {

@@ -88,7 +88,9 @@
                 "reconfigure": "Reconfigurați generarea textului"
             },
             "abort": {
-                "reconfigure_successful": "Serviciul de generare de text a fost actualizat cu succes."
+                "reconfigure_successful": "Serviciul de generare de text a fost actualizat cu succes.",
+                "no_compatible_models": "Acest cont Groq nu are modele active compatibile cu acest serviciu. Verifică accesul la modele în consola Groq și încearcă din nou.",
+                "model_unavailable": "Modelul selectat nu mai este disponibil pentru acest serviciu. Repornește configurarea și alege un model disponibil."
             },
             "step": {
                 "text_generation": {
@@ -161,7 +163,9 @@
                 "reconfigure": "Reconfigurați Speech-to-Text"
             },
             "abort": {
-                "reconfigure_successful": "Serviciul Speech-to-Text a fost actualizat cu succes."
+                "reconfigure_successful": "Serviciul Speech-to-Text a fost actualizat cu succes.",
+                "no_compatible_models": "Acest cont Groq nu are modele active compatibile cu acest serviciu. Verifică accesul la modele în consola Groq și încearcă din nou.",
+                "model_unavailable": "Modelul selectat nu mai este disponibil pentru acest serviciu. Repornește configurarea și alege un model disponibil."
             },
             "step": {
                 "speech_to_text": {
@@ -188,7 +192,9 @@
                 "reconfigure": "Reconfigurați text-to-speech"
             },
             "abort": {
-                "reconfigure_successful": "Serviciul Text-to-Speech a fost actualizat cu succes."
+                "reconfigure_successful": "Serviciul Text-to-Speech a fost actualizat cu succes.",
+                "no_compatible_models": "Acest cont Groq nu are modele active compatibile cu acest serviciu. Verifică accesul la modele în consola Groq și încearcă din nou.",
+                "model_unavailable": "Modelul selectat nu mai este disponibil pentru acest serviciu. Repornește configurarea și alege un model disponibil."
             },
             "step": {
                 "text_to_speech": {
@@ -227,7 +233,9 @@
                 "reconfigure": "Reconfigurați Recunoașterea imaginii"
             },
             "abort": {
-                "reconfigure_successful": "Serviciul de recunoaștere a imaginii a fost actualizat cu succes."
+                "reconfigure_successful": "Serviciul de recunoaștere a imaginii a fost actualizat cu succes.",
+                "no_compatible_models": "Acest cont Groq nu are modele active compatibile cu acest serviciu. Verifică accesul la modele în consola Groq și încearcă din nou.",
+                "model_unavailable": "Modelul selectat nu mai este disponibil pentru acest serviciu. Repornește configurarea și alege un model disponibil."
             },
             "step": {
                 "image_recognition": {

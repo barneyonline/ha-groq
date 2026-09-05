@@ -8,7 +8,7 @@ import logging
 import time
 from asyncio import CancelledError
 from collections import OrderedDict, deque
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from hashlib import sha256
@@ -24,10 +24,11 @@ from .compound_tools import (
     compound_builtin_tools_require_latest,
 )
 from .const import GROQ_FREE_TIER_LIMITS
-from .errors import GroqApiError, GroqResponseError
+from .errors import GroqApiError, GroqResponseError, safe_error_payload
 from .model_registry import GroqModel, model_from_api
 from .rate_limit import GroqRateLimiter
-from .repairs import async_create_model_access_issue
+from .repairs import async_create_model_access_issue, async_delete_model_access_issue
+from .structured import validate_json_schema_data
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +43,8 @@ TTS_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 AUDIO_REQUEST_RETRIES = 1
 AUDIO_RETRY_DELAY_SECONDS = 1
 MODEL_DETAIL_CONCURRENCY = 5
+MAX_SPEECH_CACHE_BYTES = 64 * 1024 * 1024
+MAX_SPEECH_INFLIGHT = 8
 MAX_JSON_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_STREAM_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_AUDIO_RESPONSE_BYTES = 25 * 1024 * 1024
@@ -104,7 +107,6 @@ class TextGenerationRequest:
     reasoning_effort: str | None = None
     reasoning_format: str | None = None
     include_reasoning: bool | None = None
-    reasoning: bool = False
     stream: bool = False
     compound_builtin_tools: str | list[str] | tuple[str, ...] | set[str] | None = None
     extra_body: dict[str, Any] | None = None
@@ -157,6 +159,17 @@ class _TTSUsageState:
     minute_token_total: int = 0
 
 
+@dataclass(slots=True)
+class _SpeechFlight:
+    """One shared synthesis task and the callers that still need its result."""
+
+    task: asyncio.Task[bytes]
+    waiters: int = 0
+
+
+SpeechCacheKey = tuple[str, str, str, int | None, float | None, str]
+
+
 @dataclass(frozen=True, slots=True)
 class ChatCompletionResult:
     """Normalized chat completion response."""
@@ -174,9 +187,6 @@ class ChatCompletionResult:
     def content(self) -> str:
         """Return generated text content."""
         return self.text
-
-
-StructuredOutputRequest = StructuredGenerationRequest
 
 
 def normalize_base_url(url: str | None) -> str:
@@ -472,8 +482,11 @@ class GroqApiClient:
         request_timeout: aiohttp.ClientTimeout | None = None,
         stream_timeout: aiohttp.ClientTimeout | None = None,
         auth_failure_callback: Callable[[], None] | None = None,
+        entry_id: str | None = None,
     ) -> None:
         self._hass = hass
+        self._entry_id = entry_id
+        self._closed = False
         self._api_key = api_key
         self._base_url = normalize_base_url(base_url)
         self._session = session
@@ -491,6 +504,32 @@ class GroqApiClient:
             ],
         ] = {}
         self._tts_usage: dict[str, _TTSUsageState] = {}
+        self._speech_cache_order: OrderedDict[tuple[str, SpeechCacheKey], int] = (
+            OrderedDict()
+        )
+        self._speech_cache_bytes = 0
+        self._speech_inflight: dict[SpeechRequest, _SpeechFlight] = {}
+        self._speech_slots = asyncio.Semaphore(MAX_SPEECH_INFLIGHT)
+
+    async def async_shutdown(self) -> None:
+        """Cancel owned synthesis work and release caches when the entry unloads."""
+        self._closed = True
+        tasks = [flight.task for flight in self._speech_inflight.values()]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._speech_caches.clear()
+        self._speech_cache_order.clear()
+        self._speech_cache_bytes = 0
+        self._tts_usage.clear()
+
+    def _speech_finished(
+        self, request: SpeechRequest, task: asyncio.Task[bytes]
+    ) -> None:
+        """Release a bounded worker slot and remove the completed task."""
+        self._speech_inflight.pop(request, None)
+        self._speech_slots.release()
 
     def _authentication_failed(self) -> ConfigEntryAuthFailed:
         """Notify the config entry and return an authentication failure."""
@@ -545,7 +584,7 @@ class GroqApiClient:
         try:
             detail = await self.async_retrieve_model(model.model_id)
             return detail if detail.model_id == model.model_id else model
-        except (GroqApiError, GroqResponseError, ConfigEntryAuthFailed) as err:
+        except (GroqApiError, ConfigEntryAuthFailed) as err:
             _LOGGER.debug(
                 "Could not fetch Groq model detail for %s: %s", model.model_id, err
             )
@@ -592,6 +631,7 @@ class GroqApiClient:
             json_payload=build_text_generation_payload(request),
             api_key=request.api_key,
             guard_key=self._guard_key(request),
+            repair_service_id=request.service_id,
         )
         return self._chat_result(payload)
 
@@ -608,6 +648,7 @@ class GroqApiClient:
             json_payload=payload,
             api_key=request.api_key,
             guard_key=self._guard_key(request),
+            repair_service_id=request.service_id,
         ):
             choices = event.get("choices")
             if not isinstance(choices, list) or not choices:
@@ -635,6 +676,7 @@ class GroqApiClient:
             json_payload=build_structured_generation_payload(request),
             api_key=request.api_key,
             guard_key=self._guard_key(request),
+            repair_service_id=request.service_id,
         )
         result = self._chat_result(payload)
         try:
@@ -643,6 +685,10 @@ class GroqApiClient:
             raise GroqResponseError(
                 "Groq structured response was not valid JSON"
             ) from err
+        if request.schema is not None:
+            await self._hass.async_add_executor_job(
+                validate_json_schema_data, parsed, request.schema
+            )
         return {
             "text": result.text,
             "data": parsed,
@@ -662,6 +708,7 @@ class GroqApiClient:
             json_payload=build_vision_payload(request),
             api_key=request.api_key,
             guard_key=self._guard_key(request),
+            repair_service_id=request.service_id,
         )
         return self._chat_result(payload)
 
@@ -693,6 +740,8 @@ class GroqApiClient:
             api_key=api_key,
             content_type=None,
             guard_key=service_id if protect_free_tier else None,
+            repair_service_id=service_id,
+            repair_model=model,
         )
         text = payload.get("text")
         if not isinstance(text, str):
@@ -700,6 +749,45 @@ class GroqApiClient:
         return text
 
     async def async_synthesize_speech(self, request: SpeechRequest) -> bytes:
+        """Coalesce identical synthesis while each caller retains cancellation."""
+        while True:
+            if self._closed:
+                raise GroqApiError("Groq config entry has been unloaded")
+            flight = self._speech_inflight.get(request)
+            if flight is not None:
+                if flight.task.cancelling():
+                    # A previous caller cancelled the last waiter. Keep owning
+                    # its cleanup, but never attach a new caller to cancelled work.
+                    await asyncio.shield(
+                        asyncio.gather(flight.task, return_exceptions=True)
+                    )
+                    continue
+                break
+            await self._speech_slots.acquire()
+            if self._closed:
+                self._speech_slots.release()
+                raise GroqApiError("Groq config entry has been unloaded")
+            flight = self._speech_inflight.get(request)
+            if flight is None:
+                task = asyncio.create_task(self._async_synthesize_speech(request))
+                flight = _SpeechFlight(task)
+                self._speech_inflight[request] = flight
+                task.add_done_callback(
+                    lambda task: self._speech_finished(request, task)
+                )
+                break
+            else:
+                self._speech_slots.release()
+        flight.waiters += 1
+        try:
+            return await asyncio.shield(flight.task)
+        finally:
+            flight.waiters -= 1
+            if flight.waiters == 0 and not flight.task.done():
+                flight.task.cancel()
+                await asyncio.gather(flight.task, return_exceptions=True)
+
+    async def _async_synthesize_speech(self, request: SpeechRequest) -> bytes:
         """Generate speech audio with Groq's OpenAI-compatible speech endpoint."""
         cache_key = (
             request.model,
@@ -720,6 +808,9 @@ class GroqApiClient:
                 text_hash,
             )
             cache.move_to_end(cache_key)
+            global_key = (self._speech_namespace(request), cache_key)
+            if global_key in self._speech_cache_order:
+                self._speech_cache_order.move_to_end(global_key)
             return cache[cache_key]
 
         guard_key = self._tts_guard_key(request)
@@ -743,6 +834,7 @@ class GroqApiClient:
             json_payload=payload,
             api_key=request.api_key,
             guard_key=guard_key,
+            repair_service_id=request.service_id,
         )
         api_duration = (time.monotonic() - api_start) * 1000
         _LOGGER.debug(
@@ -750,10 +842,46 @@ class GroqApiClient:
             api_duration,
         )
         if cache is not None:
-            cache[cache_key] = audio
-            while len(cache) > request.cache_max:
-                cache.popitem(last=False)
+            self._store_speech(request, cache_key, audio)
         return audio
+
+    @staticmethod
+    def _speech_namespace(request: SpeechRequest) -> str:
+        """Keep service and explicit credential overrides in separate caches."""
+        namespace = request.service_id or f"{request.model}:{request.voice}"
+        if request.api_key:
+            namespace += ":" + sha256(request.api_key.encode()).hexdigest()
+        return namespace
+
+    def _evict_speech(self, namespace: str, key: SpeechCacheKey) -> None:
+        """Remove one audio item from namespace and account-wide accounting."""
+        if (cache := self._speech_caches.get(namespace)) is not None:
+            cache.pop(key, None)
+            if not cache:
+                self._speech_caches.pop(namespace)
+        self._speech_cache_bytes -= self._speech_cache_order.pop((namespace, key), 0)
+
+    def _store_speech(
+        self, request: SpeechRequest, key: SpeechCacheKey, audio: bytes
+    ) -> None:
+        """Apply both per-service item and account-wide retained byte limits."""
+        namespace = self._speech_namespace(request)
+        self._evict_speech(namespace, key)
+        size = (
+            len(audio)
+            + len(namespace.encode())
+            + sum(len(str(part).encode()) for part in key if part is not None)
+        )
+        if size > MAX_SPEECH_CACHE_BYTES:
+            return
+        cache = self._speech_caches.setdefault(namespace, OrderedDict())
+        cache[key] = audio
+        self._speech_cache_order[(namespace, key)] = size
+        self._speech_cache_bytes += size
+        while len(cache) > request.cache_max:
+            self._evict_speech(namespace, next(iter(cache)))
+        while self._speech_cache_bytes > MAX_SPEECH_CACHE_BYTES:
+            self._evict_speech(*next(iter(self._speech_cache_order)))
 
     def _chat_result(self, payload: dict[str, Any]) -> ChatCompletionResult:
         """Normalize a chat completion response."""
@@ -783,6 +911,8 @@ class GroqApiClient:
         api_key: str | None = None,
         content_type: str | None = "application/json",
         guard_key: str | None = None,
+        repair_service_id: str | None = None,
+        repair_model: str | None = None,
     ) -> dict[str, Any]:
         """Perform a JSON request and return a JSON object."""
         session = self._session or async_get_clientsession(self._hass)
@@ -801,6 +931,9 @@ class GroqApiClient:
             request_kwargs["json"] = json_payload
         if data is not None:
             request_kwargs["data"] = data
+        repair_payload = json_payload
+        if repair_payload is None and repair_model is not None:
+            repair_payload = {"model": repair_model}
 
         try:
             async with session.request(
@@ -809,29 +942,24 @@ class GroqApiClient:
                 **request_kwargs,
             ) as response:
                 self._rate_limiter.update_from_headers(guard_key, response.headers)
-                if response.status in (401, 403):
+                if response.status == 401:
                     raise self._authentication_failed()
                 body = await _read_limited_response(
                     response, MAX_JSON_RESPONSE_BYTES, "API"
                 )
-                if response.status == 429:
-                    payload = self._try_decode_json(body)
-                    GroqRateLimiter.raise_for_headers(
-                        response.headers,
-                        payload if isinstance(payload, dict) else None,
-                    )
-                if response.status < 200 or response.status >= 300:
-                    payload = self._try_decode_json(body) or {}
-                    self._handle_http_unavailable(response.status, payload)
-                    self._create_model_access_issue(
-                        response.status, payload, json_payload
-                    )
-                    raise self._api_error(response.status, payload)
+                self._raise_http_error(
+                    response.status,
+                    response.headers,
+                    body,
+                    repair_payload,
+                    repair_service_id,
+                )
                 payload = self._decode_json(body)
                 if not isinstance(payload, dict):
                     self._mark_unavailable("Groq API returned non-object JSON")
                     raise GroqResponseError("Groq API returned non-object JSON")
                 self._mark_available()
+                self._clear_model_access_issue(repair_payload, repair_service_id)
                 return payload
         except CancelledError:
             raise
@@ -839,7 +967,7 @@ class GroqApiClient:
             raise
         except (aiohttp.ClientError, TimeoutError) as err:
             self._mark_unavailable("Network error calling Groq API")
-            raise GroqApiError(f"Network error calling Groq API: {err}") from err
+            raise GroqApiError("Network error calling Groq API") from err
 
     async def _request_stream(
         self,
@@ -849,6 +977,7 @@ class GroqApiClient:
         json_payload: dict[str, Any],
         api_key: str | None = None,
         guard_key: str | None = None,
+        repair_service_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Perform an SSE request and yield decoded JSON events."""
         session = self._session or async_get_clientsession(self._hass)
@@ -868,30 +997,36 @@ class GroqApiClient:
                 allow_redirects=False,
             ) as response:
                 self._rate_limiter.update_from_headers(guard_key, response.headers)
-                if response.status in (401, 403):
+                if response.status == 401:
                     raise self._authentication_failed()
                 if response.status < 200 or response.status >= 300:
                     body = await _read_limited_response(
                         response, MAX_JSON_RESPONSE_BYTES, "API"
                     )
-                    payload = self._decode_json(body)
-                    if response.status == 429 and isinstance(payload, dict):
-                        GroqRateLimiter.raise_for_headers(response.headers, payload)
-                    self._handle_http_unavailable(response.status, payload)
-                    self._create_model_access_issue(
-                        response.status, payload, json_payload
+                    self._raise_http_error(
+                        response.status,
+                        response.headers,
+                        body,
+                        json_payload,
+                        repair_service_id,
                     )
-                    raise self._api_error(response.status, payload)
 
                 self._mark_available()
+                completed = False
                 async for raw_line in _iter_limited_response_lines(
                     response, MAX_STREAM_RESPONSE_BYTES, "stream"
                 ):
-                    line = raw_line.decode("utf-8").strip()
+                    try:
+                        line = raw_line.decode("utf-8").strip()
+                    except UnicodeDecodeError as err:
+                        raise GroqResponseError(
+                            "Groq stream returned invalid UTF-8"
+                        ) from err
                     if not line or not line.startswith("data:"):
                         continue
                     data = line.removeprefix("data:").strip()
                     if data == "[DONE]":
+                        completed = True
                         break
                     # Each data line is a standalone JSON event; do not buffer
                     # across lines because SSE framing has already done that.
@@ -902,14 +1037,26 @@ class GroqApiClient:
                             "Groq stream returned invalid JSON"
                         ) from err
                     if isinstance(event, dict):
+                        if "error" in event:
+                            raise self._api_error(200, event)
+                        choices = event.get("choices")
+                        if isinstance(choices, list) and any(
+                            isinstance(choice, dict)
+                            and choice.get("finish_reason") is not None
+                            for choice in choices
+                        ):
+                            completed = True
                         yield event
+                if not completed:
+                    raise GroqResponseError("Groq stream ended before completion")
+                self._clear_model_access_issue(json_payload, repair_service_id)
         except CancelledError:
             raise
         except (GroqApiError, ConfigEntryAuthFailed):
             raise
         except (aiohttp.ClientError, TimeoutError) as err:
             self._mark_unavailable("Network error calling Groq API")
-            raise GroqApiError(f"Network error calling Groq API: {err}") from err
+            raise GroqApiError("Network error calling Groq API") from err
 
     async def _request_audio(
         self,
@@ -919,6 +1066,7 @@ class GroqApiClient:
         json_payload: dict[str, Any],
         api_key: str | None = None,
         guard_key: str | None = None,
+        repair_service_id: str | None = None,
     ) -> bytes:
         """Perform an audio request and return audio bytes."""
         session = self._session or async_get_clientsession(self._hass)
@@ -936,24 +1084,18 @@ class GroqApiClient:
                 ) as response:
                     content_type = response.headers.get("content-type", "").lower()
                     self._rate_limiter.update_from_headers(guard_key, response.headers)
-                    if response.status in (401, 403):
+                    if response.status == 401:
                         raise self._authentication_failed()
                     body = await _read_limited_response(
                         response, MAX_AUDIO_RESPONSE_BYTES, "audio"
                     )
-                    if response.status == 429:
-                        payload = self._try_decode_json(body)
-                        GroqRateLimiter.raise_for_headers(
-                            response.headers,
-                            payload if isinstance(payload, dict) else None,
-                        )
-                    if response.status < 200 or response.status >= 300:
-                        payload = self._try_decode_json(body) or {}
-                        self._handle_http_unavailable(response.status, payload)
-                        self._create_model_access_issue(
-                            response.status, payload, json_payload
-                        )
-                        raise self._api_error(response.status, payload)
+                    self._raise_http_error(
+                        response.status,
+                        response.headers,
+                        body,
+                        json_payload,
+                        repair_service_id,
+                    )
 
                     if content_type.startswith("application/json"):
                         payload = self._try_decode_json(body)
@@ -963,13 +1105,13 @@ class GroqApiClient:
                             "Groq API returned JSON but no audio content"
                         )
                     if not (
-                        content_type.startswith("audio/")
-                        or content_type.startswith("application/octet-stream")
+                        content_type.startswith(("audio/", "application/octet-stream"))
                     ):
                         raise GroqResponseError(
                             f"Unexpected content-type from Groq API: {content_type}"
                         )
                     self._mark_available()
+                    self._clear_model_access_issue(json_payload, repair_service_id)
                     return body
             except CancelledError:
                 raise
@@ -987,7 +1129,39 @@ class GroqApiClient:
                     else "Network error calling Groq API"
                 )
                 self._mark_unavailable(reason)
-                raise GroqApiError(f"{reason}: {err}") from err
+                raise GroqApiError(reason) from err
+
+    def _raise_http_error(
+        self,
+        status: int,
+        headers: Mapping[str, str],
+        body: bytes,
+        json_payload: dict[str, Any] | None,
+        service_id: str | None,
+    ) -> None:
+        """Classify bounded error responses consistently across transports."""
+        if 200 <= status < 300:
+            return
+        payload = self._try_decode_json(body) or {}
+        if status == 429:
+            GroqRateLimiter.raise_for_headers(
+                headers, payload if isinstance(payload, dict) else None
+            )
+        if status == 403 and not _payload_mentions_model_access(payload):
+            raise self._authentication_failed()
+        self._handle_http_unavailable(status, payload)
+        self._create_model_access_issue(status, payload, json_payload, service_id)
+        raise self._api_error(status, payload)
+
+    def _clear_model_access_issue(
+        self, json_payload: dict[str, Any] | None, service_id: str | None
+    ) -> None:
+        """Clear only the issue associated with a successful inference model."""
+        model = json_payload.get("model") if json_payload else None
+        if isinstance(model, str):
+            async_delete_model_access_issue(
+                self._hass, model, service_id, entry_id=self._entry_id
+            )
 
     def _handle_http_unavailable(
         self,
@@ -1006,7 +1180,7 @@ class GroqApiClient:
             return
         self._available = False
         self._unavailable_reason = reason
-        _LOGGER.warning("%s; Groq API calls will be retried by Home Assistant", reason)
+        _LOGGER.warning("%s; the next request will check connectivity again", reason)
 
     def _mark_available(self) -> None:
         """Log recovery once after an outage."""
@@ -1021,15 +1195,21 @@ class GroqApiClient:
         status: int,
         payload: dict[str, Any] | list[Any],
         json_payload: dict[str, Any] | None,
+        service_id: str | None = None,
     ) -> None:
         """Create a repair for model errors that require user action."""
-        if status not in (400, 404):
+        if status not in (400, 403, 404):
             return
         model = json_payload.get("model") if isinstance(json_payload, dict) else None
         if not isinstance(model, str) or not _payload_mentions_model_access(payload):
             return
-        with suppress(Exception):
-            async_create_model_access_issue(self._hass, model)
+        async_create_model_access_issue(
+            self._hass,
+            model,
+            service_id,
+            entry_id=self._entry_id,
+            reason="permissions" if status == 403 else None,
+        )
 
     def _headers(
         self,
@@ -1073,8 +1253,8 @@ class GroqApiClient:
         """Return the per-service speech cache, if caching is enabled."""
         if request.cache_max <= 0:
             return None
-        namespace = request.service_id or f"{request.model}:{request.voice}"
-        return self._speech_caches.setdefault(namespace, OrderedDict())
+        namespace = self._speech_namespace(request)
+        return self._speech_caches.get(namespace, OrderedDict())
 
     @staticmethod
     def _estimate_tts_token_usage(text: str) -> int:
@@ -1169,7 +1349,7 @@ class GroqApiClient:
             )
         return token_estimate
 
-    def _check_local_tts_free_tier_batch(
+    def check_tts_batch(
         self,
         requests: list[SpeechRequest],
         *,
@@ -1191,7 +1371,7 @@ class GroqApiClient:
 
         for request, token_estimate in zip(requests, token_estimates, strict=True):
             if request.cache_max > 0:
-                namespace = request.service_id or f"{request.model}:{request.voice}"
+                namespace = self._speech_namespace(request)
                 cache = simulated_caches.get(namespace)
                 if cache is None:
                     cache = OrderedDict.fromkeys(
@@ -1313,22 +1493,14 @@ class GroqApiClient:
     @staticmethod
     def _api_error(status: int, payload: dict[str, Any] | list[Any]) -> GroqApiError:
         """Build a sanitized API error from a Groq error response."""
-        if isinstance(payload, dict):
-            error = payload.get("error")
-            if isinstance(error, dict):
-                message = error.get("message") or f"Groq API error HTTP {status}"
-                error_type = error.get("type")
-            else:
-                message = str(error or payload)
-                error_type = None
-            return GroqApiError(
-                f"Groq API error (HTTP {status}): {message}",
-                status=status,
-                error_type=error_type,
-                payload=payload,
-            )
-        _LOGGER.debug("Unexpected Groq error payload type: %s", type(payload))
-        return GroqApiError(f"Groq API error (HTTP {status})", status=status)
+        safe_payload = safe_error_payload(payload)
+        metadata = safe_payload.get("error", {})
+        return GroqApiError(
+            f"Groq API error (HTTP {status})",
+            status=status,
+            error_type=metadata.get("type"),
+            payload=safe_payload,
+        )
 
 
 def _payload_mentions_model_access(payload: dict[str, Any] | list[Any]) -> bool:
@@ -1337,6 +1509,11 @@ def _payload_mentions_model_access(payload: dict[str, Any] | list[Any]) -> bool:
         return False
     error = payload.get("error")
     if isinstance(error, dict):
+        if error.get("code") in (
+            "model_permission_blocked_org",
+            "model_permission_blocked_project",
+        ):
+            return True
         message = str(error.get("message", ""))
         error_type = str(error.get("type", ""))
     else:
@@ -1346,6 +1523,7 @@ def _payload_mentions_model_access(payload: dict[str, Any] | list[Any]) -> bool:
     return "model" in text and any(
         phrase in text
         for phrase in (
+            "blocked",
             "not found",
             "does not exist",
             "not available",

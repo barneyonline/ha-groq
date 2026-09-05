@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-from collections import OrderedDict
 import json
 import logging
 import struct
+from collections import OrderedDict
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import aiohttp
 import pytest
 from homeassistant import data_entry_flow
-from homeassistant.const import CONF_LLM_HASS_API, Platform
+from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.exceptions import HomeAssistantError
 
 import custom_components.groq as integration
@@ -29,8 +29,11 @@ from custom_components.groq.const import (
     VOCAL_DIRECTION_NONE,
 )
 from custom_components.groq.errors import GroqApiError
-from custom_components.groq.model_registry import model_from_api
-from custom_components.groq.tts import FFMPEG_OUTPUT_ARGS, GroqTTSEntity
+from custom_components.groq.tts import (
+    FFMPEG_DEFAULT_SAMPLE_RATES,
+    GroqTTSEntity,
+    _ffmpeg_output_args,
+)
 from custom_components.groq.vocal_directions import (
     normalize_vocal_directions,
     vocal_directions_validation_error,
@@ -52,7 +55,8 @@ PCM_WAV_BYTES = (
 
 
 class DummyHass:
-    pass
+    async def async_add_executor_job(self, func, *args):
+        return func(*args)
 
 
 class DummyContent:
@@ -113,6 +117,9 @@ class DummyConfigEntry:
 
 
 class DummyClient:
+    def check_tts_batch(self, requests):
+        pass
+
     def __init__(self):
         self.calls = []
 
@@ -205,33 +212,6 @@ class DummyGetSession:
 
 
 @pytest.mark.asyncio
-async def test_fetch_available_extracts_models_and_auth_header():
-    session = DummyGetSession()
-
-    with patch.object(config_flow, "async_get_clientsession", return_value=session):
-        models = await config_flow.fetch_available(
-            DummyHass(), "https://api.groq.com/openai/v1/models", "api-key"
-        )
-
-    assert models == ["model-a", "model-b", "model-c"]
-    assert session.calls[0]["kwargs"]["headers"]["Authorization"] == "Bearer api-key"
-
-
-@pytest.mark.asyncio
-async def test_fetch_available_returns_empty_on_client_error():
-    class ErrorSession:
-        def get(self, *args, **kwargs):
-            raise aiohttp.ClientError("boom")
-
-    with patch.object(
-        config_flow, "async_get_clientsession", return_value=ErrorSession()
-    ):
-        assert (
-            await config_flow.fetch_available(DummyHass(), "https://example.com") == []
-        )
-
-
-@pytest.mark.asyncio
 async def test_async_validate_api_key_accepts_valid_key():
     session = DummyGetSession()
 
@@ -280,29 +260,6 @@ async def test_async_validate_api_key_maps_connection_errors():
             await config_flow.async_validate_api_key(DummyHass(), "api-key")
             == "cannot_connect"
         )
-
-
-@pytest.mark.asyncio
-async def test_get_dynamic_options_filters_discovered_models(monkeypatch):
-    async def fake_fetch_available_models(hass, api_key):
-        return [
-            model_from_api({"id": "llama-3.3-70b-versatile"}),
-            model_from_api({"id": "playai-tts"}),
-            model_from_api({"id": "canopylabs/orpheus-custom"}),
-        ]
-
-    monkeypatch.setattr(
-        config_flow,
-        "async_fetch_available_models",
-        fake_fetch_available_models,
-    )
-
-    models, voices = await config_flow.get_dynamic_options(DummyHass(), "api-key")
-
-    assert "canopylabs/orpheus-custom" in models
-    assert "playai-tts" not in models
-    assert "llama-3.3-70b-versatile" not in models
-    assert ORPHEUS_ENGLISH_VOICE in voices
 
 
 @pytest.mark.asyncio
@@ -457,11 +414,11 @@ def test_vocal_directions_helpers_reject_non_string_values():
 
 
 def test_tts_supported_formats_match_conversion_formats():
-    assert set(RESPONSE_FORMATS) == set(FFMPEG_OUTPUT_ARGS)
+    assert set(RESPONSE_FORMATS) == set(FFMPEG_DEFAULT_SAMPLE_RATES)
 
 
 def test_tts_mp3_conversion_uses_homepod_safe_profile():
-    assert FFMPEG_OUTPUT_ARGS["mp3"] == [
+    assert _ffmpeg_output_args("mp3", None) == [
         "-ac",
         "1",
         "-ar",
@@ -473,14 +430,35 @@ def test_tts_mp3_conversion_uses_homepod_safe_profile():
     ]
 
 
+class ProcessOutput:
+    def __init__(self, body):
+        self.body = body
+
+    async def read(self, size):
+        body, self.body = self.body[:size], self.body[size:]
+        return body
+
+
+class ProcessInput:
+    def write(self, data):
+        pass
+
+    async def drain(self):
+        pass
+
+    def close(self):
+        pass
+
+
 class DummyProc:
     def __init__(self, returncode: int):
         self.returncode = returncode
+        self.stdout = ProcessOutput(b"processed-audio" if returncode == 0 else b"")
+        self.stderr = ProcessOutput(b"" if returncode == 0 else b"ffmpeg error")
+        self.stdin = ProcessInput()
 
-    async def communicate(self, input=None):  # noqa: A002
-        if self.returncode == 0:
-            return b"processed-audio", b""
-        return b"", b"ffmpeg error"
+    async def wait(self):
+        return self.returncode
 
 
 class CancelledProc:
@@ -489,8 +467,11 @@ class CancelledProc:
     def __init__(self):
         self.killed = False
         self.waited = False
+        self.stdout = self
+        self.stderr = ProcessOutput(b"")
+        self.stdin = ProcessInput()
 
-    async def communicate(self, input=None):  # noqa: A002
+    async def read(self, size):
         raise asyncio.CancelledError
 
     def kill(self):
@@ -502,7 +483,7 @@ class CancelledProc:
 
 
 class HangingProc(CancelledProc):
-    async def communicate(self, input=None):  # noqa: A002
+    async def read(self, size):
         await asyncio.Event().wait()
 
 
@@ -517,11 +498,10 @@ async def test_tts_normalize_runs_ffmpeg_and_keeps_selected_format(monkeypatch):
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
     commands = []
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         commands.append(args)
         return DummyProc(returncode=0)
 
-    monkeypatch.setattr(tts.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     ext, payload = await entity.async_get_tts_audio(
@@ -548,7 +528,7 @@ async def test_tts_cancelled_ffmpeg_process_is_stopped(monkeypatch):
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
     process = CancelledProc()
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         return process
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
@@ -572,7 +552,7 @@ async def test_tts_timed_out_ffmpeg_process_is_stopped(monkeypatch):
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), DummyClient())
     process = HangingProc()
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         return process
 
     repair_calls = []
@@ -607,7 +587,7 @@ async def test_tts_normalizes_to_selected_playback_format(monkeypatch):
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
     commands = []
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         commands.append(args)
         return DummyProc(returncode=0)
 
@@ -638,7 +618,7 @@ async def test_tts_normalizes_service_response_format_text(monkeypatch):
     client = DummyClient()
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         return DummyProc(returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
@@ -753,7 +733,7 @@ async def test_tts_normalizes_false_string_normalize_option_without_ffmpeg(monke
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
     ffmpeg_calls = []
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         ffmpeg_calls.append(args)
         return DummyProc(returncode=0)
 
@@ -777,7 +757,7 @@ async def test_tts_empty_normalize_option_skips_ffmpeg(monkeypatch):
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
     ffmpeg_calls = []
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         ffmpeg_calls.append(args)
         return DummyProc(returncode=0)
 
@@ -800,7 +780,7 @@ async def test_tts_normalizes_true_string_normalize_option(monkeypatch):
     client = DummyClient()
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         return DummyProc(returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
@@ -837,7 +817,7 @@ async def test_tts_unknown_error_returns_none():
     }
 
     class BrokenClient:
-        async def async_synthesize_speech(self, request):  # noqa: ANN001
+        async def async_synthesize_speech(self, request):
             raise RuntimeError("boom")
 
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), BrokenClient())
@@ -972,7 +952,7 @@ async def test_tts_ffmpeg_preflight_is_cached_for_conversion(monkeypatch):
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
     commands = []
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         commands.append(args)
         return DummyProc(returncode=0)
 
@@ -1003,7 +983,7 @@ async def test_tts_normalized_preflight_is_separate_from_conversion_cache(
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
     commands = []
 
-    async def fail_loudnorm_preflight(*args, **kwargs):  # noqa: ANN001
+    async def fail_loudnorm_preflight(*args, **kwargs):
         commands.append(args)
         is_loudnorm_preflight = "lavfi" in args and "-af" in args
         return DummyProc(returncode=1 if is_loudnorm_preflight else 0)
@@ -1036,7 +1016,7 @@ async def test_tts_conversion_unsupported_output_skips_groq_call(monkeypatch):
     ffmpeg_issues = []
     commands = []
 
-    async def unsupported_output(*args, **kwargs):  # noqa: ANN001
+    async def unsupported_output(*args, **kwargs):
         commands.append(args)
         return DummyProc(returncode=0 if args == ("ffmpeg", "-version") else 1)
 
@@ -1074,7 +1054,7 @@ async def test_tts_conversion_missing_ffmpeg_skips_groq_call(monkeypatch):
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
     ffmpeg_issues = []
 
-    async def missing_ffmpeg(*args, **kwargs):  # noqa: ANN001
+    async def missing_ffmpeg(*args, **kwargs):
         raise FileNotFoundError
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", missing_ffmpeg)
@@ -1108,7 +1088,7 @@ async def test_tts_conversion_ffmpeg_start_error_skips_groq_call(monkeypatch):
     entity = GroqTTSEntity(DummyHass(), DummyConfigEntry(data, {}), client)
     ffmpeg_issues = []
 
-    async def ffmpeg_start_error(*args, **kwargs):  # noqa: ANN001
+    async def ffmpeg_start_error(*args, **kwargs):
         raise PermissionError("not executable")
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", ffmpeg_start_error)
@@ -1140,7 +1120,7 @@ async def test_tts_conversion_failure_invalidates_ffmpeg_cache(monkeypatch):
     ffmpeg_issues = []
     commands = []
 
-    async def fail_after_preflight(*args, **kwargs):  # noqa: ANN001
+    async def fail_after_preflight(*args, **kwargs):
         commands.append(args)
         is_preflight = (
             args == ("ffmpeg", "-version") or "-f" in args and "lavfi" in args
@@ -1187,11 +1167,10 @@ async def test_tts_normalize_splits_and_stitches_long_announcements(monkeypatch)
     first_sentence = f"{'A' * 198}."
     second_sentence = f"{'B' * 40}."
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         commands.append(args)
         return DummyProc(returncode=0)
 
-    monkeypatch.setattr(tts.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     ext, payload = await entity.async_get_tts_audio(
@@ -1231,11 +1210,10 @@ async def test_tts_long_announcements_can_stitch_without_normalization(monkeypat
     first_sentence = f"{'A' * 198}."
     second_sentence = f"{'B' * 40}."
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         commands.append(args)
         return DummyProc(returncode=0)
 
-    monkeypatch.setattr(tts.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     ext, payload = await entity.async_get_tts_audio(
@@ -1314,10 +1292,9 @@ async def test_tts_long_cached_chunks_bypass_batch_free_tier_guard(monkeypatch):
         client,
     )
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         return DummyProc(returncode=0)
 
-    monkeypatch.setattr(tts.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     ext, payload = await entity.async_get_tts_audio(
@@ -1385,7 +1362,6 @@ async def test_tts_long_batch_guard_blocks_eviction_misses_before_api(monkeypatc
         DummyConfigEntry(data, {"enable_long_tts": True, "cache_size": 2}),
         client,
     )
-    monkeypatch.setattr(tts.shutil, "which", lambda name: "/usr/bin/ffmpeg")
 
     ext, payload = await entity.async_get_tts_audio(
         f"{first_sentence} {second_sentence} {third_sentence}",
@@ -1419,10 +1395,9 @@ async def test_tts_long_stitching_temp_file_work_uses_executor(monkeypatch, capl
         DummyClient(),
     )
 
-    async def fake_exec(*args, **kwargs):  # noqa: ANN001
+    async def fake_exec(*args, **kwargs):
         return DummyProc(returncode=0)
 
-    monkeypatch.setattr(tts.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     caplog.set_level(logging.DEBUG, logger="custom_components.groq.tts")
 
@@ -1434,8 +1409,7 @@ async def test_tts_long_stitching_temp_file_work_uses_executor(monkeypatch, capl
 
     assert ext == "wav"
     assert payload == b"processed-audio"
-    assert "mkdtemp" in calls
-    assert "_write_audio_chunks" in calls
+    assert "_prepare_audio_chunks" in calls
     assert "rmtree" in calls
     assert "TTS synthesis chunk 1/2 completed" in caplog.text
     assert "TTS synthesis chunk 2/2 completed" in caplog.text
@@ -1713,49 +1687,6 @@ class DummyConfigEntries:
         return self.entry
 
 
-@pytest.mark.asyncio
-async def test_integration_setup_unload_update_and_migration():
-    config_entries = DummyConfigEntries()
-    hass = SimpleNamespace(config_entries=config_entries)
-    entry = DummyConfigEntry(
-        {
-            "unique_id": "legacy-id",
-            "url": "https://api.groq.com/openai/v1/audio/speech",
-            "model": "model",
-            "voice": "voice",
-        },
-        {},
-        unique_id=None,
-    )
-
-    assert await integration.async_setup_entry(hass, entry) is True
-    assert config_entries.forwarded == [(entry, [Platform.TTS])]
-    assert entry.listener is integration._async_update_listener
-    assert entry.update_listeners == [integration._async_update_listener]
-    assert entry.unsub == "unsub"
-
-    await entry.listener(hass, entry)
-    assert config_entries.reloaded == [entry.entry_id]
-
-    assert await integration.async_unload_entry(hass, entry) is True
-    assert config_entries.unloaded == [(entry, [Platform.TTS])]
-
-    assert await integration.async_migrate_entry(hass, entry) is True
-    assert config_entries.updated == [
-        (
-            entry,
-            {
-                "data": {
-                    "url": "https://api.groq.com/openai/v1/audio/speech",
-                    "model": "model",
-                    "voice": "voice",
-                },
-                "unique_id": "legacy-id",
-            },
-        )
-    ]
-
-
 def _patch_flow_common(monkeypatch, flow, hass=None):
     flow.hass = hass or DummyHass()
 
@@ -1794,10 +1725,6 @@ def _patch_flow_common(monkeypatch, flow, hass=None):
 
 @pytest.mark.asyncio
 async def test_config_flow_user_success_and_error(monkeypatch):
-    async def fake_dynamic_options(hass, api_key):
-        return [ORPHEUS_ENGLISH_MODEL], [ORPHEUS_ENGLISH_VOICE]
-
-    monkeypatch.setattr(config_flow, "get_dynamic_options", fake_dynamic_options)
     flow = config_flow.GroqConfigFlow()
     _patch_flow_common(monkeypatch, flow)
     unique_ids = []
@@ -1831,10 +1758,6 @@ async def test_config_flow_user_success_and_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_config_flow_user_aborts_duplicate(monkeypatch):
-    async def fake_dynamic_options(hass, api_key):
-        return [ORPHEUS_ENGLISH_MODEL], [ORPHEUS_ENGLISH_VOICE]
-
-    monkeypatch.setattr(config_flow, "get_dynamic_options", fake_dynamic_options)
     flow = config_flow.GroqConfigFlow()
     _patch_flow_common(monkeypatch, flow)
 
@@ -2835,10 +2758,6 @@ async def test_config_flow_reconfigure_updates_account(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_options_flow_shows_schema_and_saves(monkeypatch):
-    async def fake_dynamic_options(hass, api_key):
-        return [ORPHEUS_ENGLISH_MODEL], [ORPHEUS_ENGLISH_VOICE]
-
-    monkeypatch.setattr(config_flow, "get_dynamic_options", fake_dynamic_options)
     flow = config_flow.GroqOptionsFlow()
     entry = DummyConfigEntry(
         {"api_key": "data-key", "model": ORPHEUS_ENGLISH_MODEL}, {}
@@ -2917,6 +2836,9 @@ async def test_options_flow_rejects_duplicate_api_key(monkeypatch):
     other_entry.entry_id = "other-entry"
 
     class DuplicateConfigEntries:
+        def async_get_known_entry(self, entry_id):
+            return current_entry
+
         def async_entries(self, _domain):
             return [current_entry, other_entry]
 
