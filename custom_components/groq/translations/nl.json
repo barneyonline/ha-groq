@@ -321,6 +321,9 @@
         }
     },
     "exceptions": {
+        "unsupported_config_version": {
+            "message": "Deze Groq-configuratie gebruikt versie {version}, maar de geïnstalleerde integratie ondersteunt maximaal versie {supported_version}. Werk de Groq-integratie bij naar een versie die deze configuratie ondersteunt."
+        },
         "multiple_services_match": {
             "message": "Meerdere Groq-services komen overeen met service_id: {service_id}"
         },

@@ -160,8 +160,8 @@ claims about actual device or provider performance.
 
 ## Validation and performance evidence
 
-The primary Docker harness runs HA 2026.9.0 with pytest helper 0.13.363; the minimum
-harness runs HA 2026.6.0 with helper 0.13.336. Image digests are pinned. Both verify
+The primary and minimum Docker harnesses currently run HA 2026.9.0 with pytest
+helper 0.13.363. Image digests are pinned. Both verify
 the original image's Core version after dependency installation and check package
 consistency. An incompatible `HA_IMAGE` override fails instead of silently testing
 a downgraded Core. `scripts/test --minimum` selects the separate minimum container.

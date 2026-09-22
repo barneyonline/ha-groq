@@ -321,6 +321,9 @@
         }
     },
     "exceptions": {
+        "unsupported_config_version": {
+            "message": "Tämä Groq-määritys käyttää versiota {version}, mutta asennettu integraatio tukee enintään versiota {supported_version}. Päivitä Groq-integraatio versioon, joka tukee tätä määritystä."
+        },
         "multiple_services_match": {
             "message": "Useita Groq-palveluita vastaavat service_id: {service_id}"
         },

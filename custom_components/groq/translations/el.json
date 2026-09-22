@@ -321,6 +321,9 @@
         }
     },
     "exceptions": {
+        "unsupported_config_version": {
+            "message": "Αυτή η διαμόρφωση Groq χρησιμοποιεί την έκδοση {version}, αλλά η εγκατεστημένη ενσωμάτωση υποστηρίζει έως την έκδοση {supported_version}. Ενημερώστε την ενσωμάτωση Groq σε μια έκδοση που υποστηρίζει αυτή τη διαμόρφωση."
+        },
         "multiple_services_match": {
             "message": "Πολλαπλές υπηρεσίες Groq ταιριάζουν με service_id: {service_id}"
         },

@@ -321,6 +321,9 @@
         }
     },
     "exceptions": {
+        "unsupported_config_version": {
+            "message": "Esta configuración de Groq utiliza la versión {version}, pero la integración instalada admite hasta la versión {supported_version}. Actualiza la integración de Groq a una versión compatible con esta configuración."
+        },
         "multiple_services_match": {
             "message": "Múltiples servicios Groq coinciden con service_id: {service_id}"
         },

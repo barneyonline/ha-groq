@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.data_entry_flow import InvalidData
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
@@ -284,7 +284,7 @@ async def test_real_entry_mapping_diagnostics(hass):
     assert diagnostics["summary"]["service_counts"] == {"text_generation": 1}
 
 
-async def test_legacy_mapping_migration_and_version_guard(hass):
+async def test_legacy_mapping_migration_is_idempotent(hass):
     entry = MockConfigEntry(
         domain="groq",
         unique_id=None,
@@ -296,8 +296,73 @@ async def test_legacy_mapping_migration_and_version_guard(hass):
     assert entry.minor_version == 2
     assert dict(entry.data) == {"api_key": "test-key"}
     assert await async_migrate_entry(hass, entry)
-    future = MockConfigEntry(domain="groq", version=2)
-    assert not await async_migrate_entry(hass, future)
+
+
+@pytest.mark.parametrize("version", [2, 99])
+async def test_future_major_migration_explains_rejection_without_changes(hass, version):
+    entry = MockConfigEntry(
+        domain="groq",
+        version=version,
+        minor_version=7,
+        unique_id="account-id",
+        data={"api_key": "test-key", "unique_id": "legacy-id"},
+        options={"name": "Groq account"},
+    )
+    entry.add_to_hass(hass)
+    before = deepcopy(entry.as_dict())
+    with (
+        patch.object(hass.config_entries, "async_update_entry") as update,
+        pytest.raises(ConfigEntryError) as raised,
+    ):
+        await async_migrate_entry(hass, entry)
+    update.assert_not_called()
+    assert entry.as_dict() == before
+    error = raised.value
+    assert error.translation_domain == "groq"
+    assert error.translation_key == "unsupported_config_version"
+    assert error.translation_placeholders == {
+        "version": str(version),
+        "supported_version": "1",
+    }
+    assert str(error) == (
+        f"This Groq configuration uses version {version}, but the installed "
+        "integration supports up to version 1. Update the Groq integration "
+        "to a version that supports this configuration."
+    )
+
+
+async def test_newer_minor_migration_is_accepted_without_changes(hass):
+    entry = MockConfigEntry(domain="groq", version=1, minor_version=99)
+    entry.add_to_hass(hass)
+    before = deepcopy(entry.as_dict())
+    with patch.object(hass.config_entries, "async_update_entry") as update:
+        assert await async_migrate_entry(hass, entry)
+    update.assert_not_called()
+    assert entry.as_dict() == before
+
+
+async def test_future_major_blocks_setup_without_retry_or_platforms(hass):
+    entry = MockConfigEntry(domain="groq", version=2, data={"api_key": "test-key"})
+    entry.add_to_hass(hass)
+    with (
+        patch("custom_components.groq.async_setup_entry") as setup,
+        patch.object(hass.config_entries, "async_forward_entry_setups") as forward,
+        patch(
+            "custom_components.groq.async_migrate_entry", wraps=async_migrate_entry
+        ) as migrate,
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        assert entry.state is ConfigEntryState.MIGRATION_ERROR
+        # Newer HA rejects future major versions before invoking the integration.
+        migration_calls = migrate.await_count
+        assert migration_calls <= 1
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=1))
+        await hass.async_block_till_done()
+        assert migrate.await_count == migration_calls
+        setup.assert_not_called()
+        forward.assert_not_called()
+        assert entry.state is ConfigEntryState.MIGRATION_ERROR
 
 
 async def test_legacy_tts_options_have_consistent_diagnostics(hass):

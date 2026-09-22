@@ -321,6 +321,9 @@
         }
     },
     "exceptions": {
+        "unsupported_config_version": {
+            "message": "Šī Groq konfigurācija izmanto versiju {version}, bet instalētā integrācija atbalsta tikai versijas līdz {supported_version}. Atjauniniet Groq integrāciju uz versiju, kas atbalsta šo konfigurāciju."
+        },
         "multiple_services_match": {
             "message": "Vairāki Groq pakalpojumi atbilst service_id: {service_id}"
         },
