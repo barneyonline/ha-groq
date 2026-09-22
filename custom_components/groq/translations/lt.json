@@ -321,6 +321,9 @@
         }
     },
     "exceptions": {
+        "unsupported_config_version": {
+            "message": "Ši Groq konfigūracija naudoja {version} versiją, tačiau įdiegta integracija palaiko tik iki {supported_version} versijos. Atnaujinkite Groq integraciją į versiją, kuri palaiko šią konfigūraciją."
+        },
         "multiple_services_match": {
             "message": "Kelios Groq paslaugos atitinka service_id: {service_id}"
         },

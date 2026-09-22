@@ -6,6 +6,7 @@ from typing import Any
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryError
 
 from .api import async_preload_clientsession_helper
 from .const import DOMAIN, UNIQUE_ID
@@ -72,8 +73,18 @@ async def async_unload_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> boo
 
 async def async_migrate_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool:
     """Migrate legacy stable IDs using Home Assistant's immutable data mappings."""
-    if getattr(entry, "version", 1) > 1:
-        return False
+    if (version := getattr(entry, "version", 1)) > 1:
+        raise ConfigEntryError(
+            f"This Groq configuration uses version {version}, but the installed "
+            "integration supports up to version 1. Update the Groq integration "
+            "to a version that supports this configuration.",
+            translation_domain=DOMAIN,
+            translation_key="unsupported_config_version",
+            translation_placeholders={
+                "version": str(version),
+                "supported_version": "1",
+            },
+        )
     if getattr(entry, "minor_version", 1) >= 2:
         return True
     updates: dict[str, Any] = {"minor_version": 2}

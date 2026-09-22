@@ -321,6 +321,9 @@
         }
     },
     "exceptions": {
+        "unsupported_config_version": {
+            "message": "See Groqi konfiguratsioon kasutab versiooni {version}, kuid installitud integratsioon toetab kuni versiooni {supported_version}. Uuendage Groqi integratsioon versioonile, mis toetab seda konfiguratsiooni."
+        },
         "multiple_services_match": {
             "message": "Mitu Groq teenust vastab service_id: {service_id}"
         },

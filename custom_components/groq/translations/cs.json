@@ -321,6 +321,9 @@
         }
     },
     "exceptions": {
+        "unsupported_config_version": {
+            "message": "Tato konfigurace Groq používá verzi {version}, ale nainstalovaná integrace podporuje nejvýše verzi {supported_version}. Aktualizujte integraci Groq na verzi, která tuto konfiguraci podporuje."
+        },
         "multiple_services_match": {
             "message": "Více služeb Groq odpovídá service_id: {service_id}"
         },

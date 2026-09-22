@@ -321,6 +321,9 @@
         }
     },
     "exceptions": {
+        "unsupported_config_version": {
+            "message": "Ez a Groq-konfiguráció a(z) {version} verziót használja, de a telepített integráció legfeljebb a(z) {supported_version} verziót támogatja. Frissítse a Groq-integrációt egy olyan verzióra, amely támogatja ezt a konfigurációt."
+        },
         "multiple_services_match": {
             "message": "Több Groq szolgáltatás megfelel a service_id: {service_id}"
         },

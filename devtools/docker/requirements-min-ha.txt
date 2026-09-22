@@ -1,10 +1,9 @@
 # Exact helper/Core pair for the advertised minimum. Install with dependencies.
-homeassistant==2026.6.0
-pytest-homeassistant-custom-component==0.13.336
+homeassistant==2026.9.0
+pytest-homeassistant-custom-component==0.13.363
 jsonschema==4.26.0
 PyYAML
-# Match the helper's ast-serialize==0.3.0 dependency.
-mypy==2.1.0
+mypy==2.3.1
 ruff==0.6.9
 black==26.3.1
 pre-commit
