@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - "release/**"
     paths:
       - "custom_components/groq/manifest.json"
       - "hacs.json"
