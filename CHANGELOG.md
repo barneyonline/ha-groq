@@ -4,22 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-### Breaking changes
+## v2.0.1 - 2026-09-27
+
+### 🚧 Breaking changes
 - Raise the minimum supported Home Assistant version to `2026.9.0`.
 
-### Improvements
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- None
+
+### 🔧 Improvements
 - Support Home Assistant 2026.10 tool results in Assist and AI tasks, preserving tool failure status without accessing deprecated chat-log properties. Retain Home Assistant 2026.9 compatibility.
 - Add a translated defensive error to Groq's migration handler for unsupported configuration versions. Home Assistant 2026.9 rejects these versions before calling the handler, so normal setup continues to show Home Assistant's own error.
 
+### 🔄 Other changes
+- Bumped the integration manifest version to `2.0.1`.
+
 ## v2.0.0 - 2026-09-05
 
-### New features
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
 - Add optional transcription timestamps and speech-quality metadata, plus a separate English audio translation action using Whisper Large V3.
 - Add disabled-by-default diagnostic sensors for generation request counts, token usage, response time, and provider cache hits.
 - Stream Assist responses with Home Assistant tools enabled, validating complete calls before execution.
 - Add opt-in GPT-OSS browser search and normalized source citations in text actions and Assist traces.
 
-### Bug fixes
+### 🐛 Bug fixes
 - Accept nullable streamed tool fragments, retain browser source URLs and Compound usage breakdowns, and report invalid request-body values in the configuration form.
 - Preserve credentials and advanced options when saving account/service forms, honor cleared Assist control, and migrate immutable HA entry data correctly.
 - Respect active/discovered models, per-service cache opt-outs, explicit reasoning overrides and configured structured-output defaults.
@@ -27,14 +41,14 @@ All notable changes to this project will be documented in this file.
 - Classify model-permission and streaming errors correctly, parse composite rate-limit resets and clear only matching recoverable repair issues.
 - Prevent nested cached-response mutation and clean up audio resources even when cancellation interrupts file preparation.
 
-### Improvements
+### 🔧 Improvements
 - Scope speech-cache credential fingerprints to each client with a random HMAC context while preserving credential isolation and cache reuse.
 - Bound cache content, media reads and ffmpeg output; share identical concurrent speech requests with cancellation and unload ownership.
 - Consolidate chat, schema, request-option and media helpers and remove redundant production code and obsolete tests.
 - Add real HA lifecycle, flow, registry, service and ChatLog regressions; verify both HA 2026.6.0 and 2026.9.0 with matched dependencies.
 - Check strict typing against installed HA source and provide deterministic runtime/performance measurements and current architecture documentation.
 
-### Other changes
+### 🔄 Other changes
 - Bumped the integration manifest version to `2.0.0`.
 
 ## v1.4.4 - 2026-09-03
