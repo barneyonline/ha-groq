@@ -13,7 +13,6 @@ on:
   push:
     branches:
       - main
-      - "release/**"
     paths:
       - "custom_components/groq/**"
       - "quality_scale.yaml"
