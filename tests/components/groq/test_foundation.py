@@ -367,12 +367,16 @@ class DummyToolChatLog(DummyChatLog):
 
 
 class DummyStateTool(llm.Tool):
+    integration = "groq"
     name = "GetState"
     description = "Get an entity state"
     parameters = vol.Schema({vol.Required("entity_id"): str})
 
     async def async_call(self, hass, tool_input, llm_context):
-        return {"entity_id": tool_input.tool_args["entity_id"], "state": "on"}
+        data = {"entity_id": tool_input.tool_args["entity_id"], "state": "on"}
+        if result_type := getattr(llm, "ToolResult", None):
+            return result_type(data=data)
+        return data
 
 
 class DummyToolAPI(llm.API):

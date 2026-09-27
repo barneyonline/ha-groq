@@ -75,6 +75,7 @@ Each configured Groq service creates its own Home Assistant device and the relev
 ## Requirements
 
 - Home Assistant `2026.9.0` or newer. Both the primary and minimum-version test environments currently verify `2026.9.0`.
+  Assist and AI tasks also handle the new Home Assistant `2026.10` tool-result format, including its error flag. Full validation against a published `2026.10` package is pending its availability.
 - A Groq API key from [Groq Console](https://console.groq.com/).
 - Network access from Home Assistant to `https://api.groq.com`.
 - Optional: `ffmpeg` on the Home Assistant host if you enable TTS audio normalization, Long TTS, or processed playback conversion.

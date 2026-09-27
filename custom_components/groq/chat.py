@@ -175,11 +175,27 @@ def _tool_result_message(content: Any) -> dict[str, str] | None:
     """Return an OpenAI-compatible tool result message from chat-log content."""
     tool_call_id = getattr(content, "tool_call_id", None)
     tool_name = getattr(content, "tool_name", None)
-    tool_result = getattr(content, "tool_result", None)
     if isinstance(content, dict):
         tool_call_id = content.get("tool_call_id", tool_call_id)
         tool_name = content.get("tool_name", tool_name)
-        tool_result = content.get("tool_result", tool_result)
+        result = content.get("result")
+    else:
+        result = getattr(content, "result", None)
+    if result is not None:
+        # HA 2026.10 carries failure status separately from the result data.
+        # Do not read the deprecated tool_result property on these objects.
+        tool_result: Any = (
+            {"data": result["data"], "error": result.get("error", False)}
+            if isinstance(result, dict)
+            else {"data": result.data, "error": result.error}
+        )
+    else:
+        # Keep compatibility with Home Assistant 2026.9 chat logs.
+        tool_result = (
+            content.get("tool_result")
+            if isinstance(content, dict)
+            else getattr(content, "tool_result", None)
+        )
     if not isinstance(tool_call_id, str) or not isinstance(tool_name, str):
         return None
     return {
