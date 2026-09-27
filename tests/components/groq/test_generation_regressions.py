@@ -143,15 +143,23 @@ async def test_real_chat_log_executes_and_validates_tools(
     calls = []
 
     class LevelTool(llm.Tool):
+        integration = "groq"
         name = "ReadLevel"
         description = "Read a requested level"
         parameters = vol.Schema({vol.Required("level"): vol.Coerce(int)})
 
         async def async_call(self, hass, tool_input, llm_context):
             # HA delegates validation to tools (as its intent tools do).
-            validated = self.parameters(tool_input.tool_args)
+            try:
+                validated = self.parameters(tool_input.tool_args)
+            except vol.Invalid as err:
+                # HA 2026.10 catches Probatio errors, not Voluptuous errors.
+                raise HomeAssistantError(str(err)) from err
             calls.append(validated)
-            return {"level": validated["level"]}
+            data = {"level": validated["level"]}
+            if result_type := getattr(llm, "ToolResult", None):
+                return result_type(data=data)
+            return data
 
     class LevelAPI(llm.API):
         async def async_get_api_instance(self, llm_context):
@@ -263,12 +271,16 @@ async def test_real_chat_log_executes_and_validates_tools(
     results = [m for m in session.requests[1]["messages"] if m["role"] == "tool"]
     assert len(results) == 1
     assert results[0]["tool_call_id"] == "level-call"
+    payload = json.loads(results[0]["content"])
+    if hasattr(llm, "ToolResult"):
+        assert payload["error"] is (arguments["level"] != "7")
+        payload = payload["data"]
     if arguments["level"] == "7":
         assert calls == [{"level": 7}]
-        assert json.loads(results[0]["content"]) == {"level": 7}
+        assert payload == {"level": 7}
     else:
         assert calls == []
-        assert "error" in json.loads(results[0]["content"])
+        assert "error" in payload
 
 
 @pytest.mark.asyncio

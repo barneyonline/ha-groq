@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Raise the minimum supported Home Assistant version to `2026.9.0`.
 
 ### Improvements
+- Support Home Assistant 2026.10 tool results in Assist and AI tasks, preserving tool failure status without accessing deprecated chat-log properties. Retain Home Assistant 2026.9 compatibility.
 - Add a translated defensive error to Groq's migration handler for unsupported configuration versions. Home Assistant 2026.9 rejects these versions before calling the handler, so normal setup continues to show Home Assistant's own error.
 
 ## v2.0.0 - 2026-09-05
