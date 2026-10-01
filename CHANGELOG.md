@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v2.0.2 - 2026-10-01
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- None
+
+### 🔧 Improvements
+- Match the streaming test double to Home Assistant's tool-result contract, restoring compatibility checks against Home Assistant 2026.10. (#57)
+- Avoid duplicate GitHub Actions checks for release pull requests while retaining pull-request and main-branch checks. (#56)
+
+### 🔄 Other changes
+- Bumped the integration manifest version to `2.0.2`.
+
 ## v2.0.1 - 2026-09-27
 
 ### 🚧 Breaking changes
