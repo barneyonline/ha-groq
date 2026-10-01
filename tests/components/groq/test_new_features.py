@@ -12,6 +12,7 @@ import voluptuous as vol
 from homeassistant.components import conversation
 from homeassistant.core import Context, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import llm
 
 from custom_components.groq import api, flow_schemas, sensor, services
 from custom_components.groq.api import (
@@ -557,10 +558,12 @@ async def test_real_chat_log_streams_and_executes_only_completed_exposed_tools(
     hass, monkeypatch, bad
 ):
     called = []
+    result_type = getattr(llm, "ToolResult", None)
+    tool_data = {"success": True}
 
     async def operate(tool):
         called.append(tool.tool_args)
-        return {"success": True}
+        return result_type(data=tool_data) if result_type else tool_data
 
     log = conversation.ChatLog(hass, "stream-tools")
     log.async_add_user_content(conversation.UserContent("Turn on the light"))
@@ -687,7 +690,12 @@ async def test_real_chat_log_streams_and_executes_only_completed_exposed_tools(
     assert client.usage.values["text"]["total_tokens"] == 8
     assert all(payload["stream"] for payload in client._session.calls)
     assert client._session.calls[0]["tools"][-1] == {"type": "browser_search"}
-    assert any(item["role"] == "tool" for item in client._session.calls[1]["messages"])
+    tool_message = next(
+        item for item in client._session.calls[1]["messages"] if item["role"] == "tool"
+    )
+    assert json.loads(tool_message["content"]) == (
+        {"data": tool_data, "error": False} if result_type else tool_data
+    )
 
 
 @pytest.mark.asyncio
