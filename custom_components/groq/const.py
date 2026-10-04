@@ -221,6 +221,7 @@ STT_LANGUAGE_OPTIONS = [
     {"value": "fr-FR", "label": "French"},
     {"value": "it-IT", "label": "Italian"},
     {"value": "pt-PT", "label": "Portuguese"},
+    {"value": "ro-RO", "label": "Romanian"},
     {"value": "nl-NL", "label": "Dutch"},
     {"value": "id-ID", "label": "Indonesian"},
     {"value": "ja-JP", "label": "Japanese"},
