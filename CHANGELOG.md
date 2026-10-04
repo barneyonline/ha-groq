@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v2.0.3 - 2026-10-04
+
+### 🚧 Breaking changes
+- None
+
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- Add Romanian (`ro-RO`) to Speech-to-Text configuration and action language options so Groq can be selected in Romanian Assist pipelines. Preserve Romanian locale defaults and send the `ro` language hint to Groq. (#60, fixes #59)
+
+### 🔧 Improvements
+- None
+
+### 🔄 Other changes
+- Bumped the integration manifest version to `2.0.3`.
+
 ## v2.0.2 - 2026-10-01
 
 ### 🚧 Breaking changes
