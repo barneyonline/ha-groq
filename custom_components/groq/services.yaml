@@ -489,6 +489,8 @@ transcribe_audio:
               value: it-IT
             - label: Portuguese
               value: pt-PT
+            - label: Romanian
+              value: ro-RO
             - label: Dutch
               value: nl-NL
             - label: Indonesian
