@@ -108,6 +108,10 @@ You can add more than one Groq account. The integration prevents adding the same
 
 ## Speech transcription and translation
 
+For Romanian Assist pipelines, select **Romanian** (`ro-RO`) in the Groq
+Speech-to-Text service. Romanian is also available in `groq.transcribe_audio`;
+the integration sends the ISO language hint `ro` to Groq.
+
 Existing `groq.transcribe_audio` calls keep their text response. Select
 `response_format: verbose_json` to also return the provider's detected language,
 duration, segments, and words when supplied. `timestamp_granularities` accepts
