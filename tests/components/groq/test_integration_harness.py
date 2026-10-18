@@ -140,7 +140,7 @@ class DummyClient:
 
 
 def _selector_config(schema, field):
-    """Return the selector config for a voluptuous schema field."""
+    """Return the selector config for a Probatio schema field."""
     for key, value in schema.schema.items():
         if getattr(key, "schema", key) == field:
             return value.config

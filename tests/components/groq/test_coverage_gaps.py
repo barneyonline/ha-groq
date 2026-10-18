@@ -4,14 +4,15 @@ import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import aiohttp
 import pytest
-import voluptuous as vol
+import probatio
 import yaml
 from homeassistant import data_entry_flow
 from homeassistant.components import stt
+from homeassistant.components.ai_task import GenDataTask
 from homeassistant.components.media_source import Unresolvable
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_LLM_HASS_API
@@ -33,9 +34,6 @@ from custom_components.groq import (
     api as api_module,
 )
 from custom_components.groq import (
-    chat as chat_module,
-)
-from custom_components.groq import (
     config_flow,
 )
 from custom_components.groq import (
@@ -47,6 +45,7 @@ from custom_components.groq import (
 from custom_components.groq import (
     repairs as repairs_module,
 )
+from custom_components.groq import services as services_module
 from custom_components.groq import (
     text_generation as text_generation_module,
 )
@@ -202,9 +201,11 @@ from custom_components.groq.text_generation import (
     service_schema_name,
     service_stop,
     service_unique_id,
-    voluptuous_schema_to_json_schema,
+    schema_to_json_schema,
 )
 from custom_components.groq.tts import GroqTTSEntity
+
+from .test_foundation import DummyChatLog, DummyConversationInput
 
 PCM_WAV_BYTES = (
     b"RIFF"
@@ -537,7 +538,11 @@ def test_services_yaml_guides_action_inputs():
 
 @pytest.mark.asyncio
 async def test_service_descriptions_include_dynamic_groq_service_options(monkeypatch):
-    """Ensure action UI selectors list configured Groq service subentries."""
+    """Refresh selectors without reparsing or mutating packaged descriptions."""
+    load = Mock(wraps=services_module.load_yaml)
+    options = Mock(wraps=services_module._service_options)
+    monkeypatch.setattr(services_module, "load_yaml", load)
+    monkeypatch.setattr(services_module, "_service_options", options)
     entry = DummyEntry("entry-id")
     entry.title = "Primary Groq"
     entry.subentries = {
@@ -613,6 +618,15 @@ async def test_service_descriptions_include_dynamic_groq_service_options(monkeyp
     ]
 
     await async_update_service_descriptions(hass, exclude_entry_id="entry-id")
+    assert load.call_count == 1
+    assert options.call_count == 6  # Three service types for each refresh.
+    original = hass.data[DOMAIN]["service_descriptions"]
+    assert (
+        original[SERVICE_GENERATE_TEXT]["fields"][ATTR_SERVICE_ID]["selector"][
+            "select"
+        ]["options"]
+        == []
+    )
     text_selector = cache[(DOMAIN, SERVICE_GENERATE_TEXT)]["fields"][ATTR_SERVICE_ID][
         "selector"
     ]["select"]
@@ -674,27 +688,6 @@ async def test_service_descriptions_include_dynamic_groq_service_options(monkeyp
     assert err.value.translation_domain == DOMAIN
     assert err.value.translation_key == "multiple_services_match"
     assert _apply_service_options({"fields": {}}, []) == {"fields": {}}
-
-    # The updater exits quietly when service descriptions are unavailable or
-    # the loaded metadata is not shaped like services.yaml.
-    await async_update_service_descriptions(SimpleNamespace())
-    await async_update_service_descriptions(
-        SimpleNamespace(
-            data={},
-            config_entries=DummyConfigEntries(),
-            services=DummyServices(),
-        )
-    )
-    monkeypatch.setattr(
-        "custom_components.groq.services.load_yaml",
-        lambda path: None,
-    )
-    await async_update_service_descriptions(hass)
-    monkeypatch.setattr(
-        "custom_components.groq.services.load_yaml",
-        lambda path: {SERVICE_GENERATE_TEXT: None},
-    )
-    await async_update_service_descriptions(hass)
 
 
 def test_free_tier_toggle_strings_are_user_facing():
@@ -994,80 +987,6 @@ def test_selected_llm_api_narrows_framework_values() -> None:
         is None
     )
     assert conversation_module._selected_llm_api(entry, {CONF_LLM_HASS_API: 42}) is None
-
-
-def test_openapi_serializer_matches_schema_implementation(monkeypatch) -> None:
-    """Use the serializer that matches the schema, even when both are installed."""
-    calls = []
-
-    class ProbatioSchema:
-        pass
-
-    def probatio_to_openapi(schema, *, custom_serializer=None):
-        calls.append(("probatio", schema, custom_serializer))
-        return {"serializer": "probatio"}
-
-    def voluptuous_to_openapi(schema, *, custom_serializer=None):
-        calls.append(("voluptuous", schema, custom_serializer))
-        return {"serializer": "voluptuous"}
-
-    probatio = SimpleNamespace(
-        Schema=ProbatioSchema,
-        to_openapi=probatio_to_openapi,
-    )
-    voluptuous_openapi = SimpleNamespace(convert=voluptuous_to_openapi)
-    monkeypatch.setattr(chat_module, "_probatio", probatio)
-    monkeypatch.setattr(
-        chat_module,
-        "_voluptuous_openapi",
-        voluptuous_openapi,
-    )
-    custom_serializer = object()
-    voluptuous_schema = vol.Schema({vol.Required("entity_id"): str})
-
-    assert chat_module._to_openapi(
-        voluptuous_schema,
-        custom_serializer,
-    ) == {"serializer": "voluptuous"}
-    probatio_schema = ProbatioSchema()
-    assert chat_module._to_openapi(
-        probatio_schema,
-        custom_serializer,
-    ) == {"serializer": "probatio"}
-    assert calls == [
-        ("voluptuous", voluptuous_schema, custom_serializer),
-        ("probatio", probatio_schema, custom_serializer),
-    ]
-
-    monkeypatch.setattr(chat_module, "_voluptuous_openapi", None)
-    assert chat_module._to_openapi({"value": str}) == {"serializer": "probatio"}
-
-    monkeypatch.setattr(chat_module, "_probatio", None)
-    with pytest.raises(ImportError, match="No supported OpenAPI"):
-        chat_module._to_openapi({"value": str})
-
-
-def test_optional_import_only_ignores_requested_module() -> None:
-    """Do not hide an optional package's missing transitive dependency."""
-    missing_module = ModuleNotFoundError(name="missing_module")
-    with patch.object(
-        chat_module.importlib,
-        "import_module",
-        side_effect=missing_module,
-    ):
-        assert chat_module._optional_import("missing_module") is None
-
-    missing_dependency = ModuleNotFoundError(name="missing_dependency")
-    with (
-        patch.object(
-            chat_module.importlib,
-            "import_module",
-            side_effect=missing_dependency,
-        ),
-        pytest.raises(ModuleNotFoundError) as err,
-    ):
-        chat_module._optional_import("installed_module")
-    assert err.value is missing_dependency
 
 
 @pytest.mark.asyncio
@@ -2185,19 +2104,19 @@ def test_flow_schema_and_text_generation_helpers_cover_branches():
     assert selector_to_json_schema(bool) == {"type": "boolean"}
     assert selector_to_json_schema(int) == {"type": "integer"}
     assert selector_to_json_schema(float) == {"type": "number"}
-    assert selector_to_json_schema(vol.Schema({vol.Required("a"): str})) == {
+    assert selector_to_json_schema(probatio.Schema({probatio.Required("a"): str})) == {
         "type": "object",
         "properties": {"a": {"type": "string"}},
         "additionalProperties": False,
         "required": ["a"],
     }
     assert (
-        voluptuous_schema_to_json_schema(
-            vol.Schema({vol.Required("a", description="A value"): str})
+        schema_to_json_schema(
+            probatio.Schema({probatio.Required("a", description="A value"): str})
         )["properties"]["a"]["description"]
         == "A value"
     )
-    assert voluptuous_schema_to_json_schema(vol.Schema(str)) == {}
+    assert schema_to_json_schema(probatio.Schema(str)) == {}
 
 
 def test_model_registry_branches():
@@ -3615,9 +3534,9 @@ async def test_stt_setup_properties_wav_error_and_empty_results(monkeypatch):
 async def test_ai_task_helpers_and_fallback_paths():
     assert _strip_json_fence('```json\n{"a": 1}\n```') == '{"a": 1}'
     assert "- name (required)" in _structure_description(
-        vol.Schema({vol.Required("name", description="Name"): str})
+        probatio.Schema({probatio.Required("name", description="Name"): str})
     )
-    assert _structure_description(vol.Schema(str))
+    assert _structure_description(probatio.Schema(str))
 
     entry = DummyEntry()
     service_data = {
@@ -3633,17 +3552,14 @@ async def test_ai_task_helpers_and_fallback_paths():
     assert entity.device_info["entry_type"] is DeviceEntryType.SERVICE
     assert entity.has_entity_name is True
     assert entity.translation_key == "data_generation_tasks"
-    task = SimpleNamespace(
+    task = GenDataTask(
         name="task",
         instructions="Return data",
         structure=None,
     )
     result = await entity._async_generate_data(
         task,
-        SimpleNamespace(
-            conversation_id="c",
-            async_add_assistant_content_without_tools=lambda content: None,
-        ),
+        DummyChatLog(),
     )
     assert result.data == {"ok": True}
 
@@ -3652,40 +3568,34 @@ async def test_ai_task_helpers_and_fallback_paths():
     plain_entity = GroqAITaskEntity(
         DummyHass(), entry, {"model": "llama-3.1-8b-instant"}, plain_client
     )
-    task = SimpleNamespace(
+    task = GenDataTask(
         name="task",
         instructions="Return data",
-        structure=vol.Schema({vol.Required("name"): str}),
+        structure=probatio.Schema({probatio.Required("name"): str}),
     )
     # Force fallback by disabling service-level structured outputs and monkeypatching
     # the imported converter to return no schema for this specific branch.
     with patch(
-        "custom_components.groq.ai_task.voluptuous_schema_to_json_schema",
+        "custom_components.groq.ai_task.schema_to_json_schema",
         return_value={},
     ):
         result = await plain_entity._async_generate_data(
             task,
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            DummyChatLog(),
         )
     assert result.data == {"name": "Kitchen"}
 
     plain_client.text = "not json"
     with (
         patch(
-            "custom_components.groq.ai_task.voluptuous_schema_to_json_schema",
+            "custom_components.groq.ai_task.schema_to_json_schema",
             return_value={},
         ),
         pytest.raises(HomeAssistantError),
     ):
         await plain_entity._async_generate_data(
             task,
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            DummyChatLog(),
         )
 
     bad_structured = DummyClient()
@@ -3696,10 +3606,7 @@ async def test_ai_task_helpers_and_fallback_paths():
     with pytest.raises(HomeAssistantError):
         await bad_entity._async_generate_data(
             task,
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            DummyChatLog(),
         )
 
     class FailingStructuredClient(DummyClient):
@@ -3718,10 +3625,7 @@ async def test_ai_task_helpers_and_fallback_paths():
     )
     result = await retry_entity._async_generate_data(
         task,
-        SimpleNamespace(
-            conversation_id="c",
-            async_add_assistant_content_without_tools=lambda content: None,
-        ),
+        DummyChatLog(),
     )
     assert result.data == {"name": "Fallback"}
     assert isinstance(retry_client.requests[0], StructuredGenerationRequest)
@@ -3738,10 +3642,7 @@ async def test_ai_task_helpers_and_fallback_paths():
     with pytest.raises(GroqApiError):
         await fatal_entity._async_generate_data(
             task,
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            DummyChatLog(),
         )
     tiny_registry = GroqModelRegistry(
         [
@@ -3767,11 +3668,8 @@ async def test_ai_task_helpers_and_fallback_paths():
     )
     with pytest.raises(HomeAssistantError, match="context window"):
         await tiny_entity._async_generate_data(
-            SimpleNamespace(name="task", instructions="x" * 30, structure=None),
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            GenDataTask(name="task", instructions="x" * 30, structure=None),
+            DummyChatLog(),
         )
     tiny_structured_entity = GroqAITaskEntity(
         DummyHass(),
@@ -3783,10 +3681,7 @@ async def test_ai_task_helpers_and_fallback_paths():
     with pytest.raises(HomeAssistantError, match="context window"):
         await tiny_structured_entity._async_generate_data(
             task,
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            DummyChatLog(),
         )
     body_error_entity = GroqAITaskEntity(
         DummyHass(),
@@ -3799,11 +3694,8 @@ async def test_ai_task_helpers_and_fallback_paths():
     )
     with pytest.raises(HomeAssistantError, match="reasoning options"):
         await body_error_entity._async_generate_data(
-            SimpleNamespace(name="task", instructions="Return data", structure=None),
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            GenDataTask(name="task", instructions="Return data", structure=None),
+            DummyChatLog(),
         )
     structured_body_error_entity = GroqAITaskEntity(
         DummyHass(),
@@ -3818,11 +3710,8 @@ async def test_ai_task_helpers_and_fallback_paths():
     )
     with pytest.raises(HomeAssistantError, match="reasoning options"):
         await structured_body_error_entity._async_generate_data(
-            SimpleNamespace(name="task", instructions="Return data", structure=None),
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            GenDataTask(name="task", instructions="Return data", structure=None),
+            DummyChatLog(),
         )
     bad_compound_tools_entity = GroqAITaskEntity(
         DummyHass(),
@@ -3835,11 +3724,8 @@ async def test_ai_task_helpers_and_fallback_paths():
     )
     with pytest.raises(HomeAssistantError, match="unsupported tool ids"):
         await bad_compound_tools_entity._async_generate_data(
-            SimpleNamespace(name="task", instructions="Return data", structure=None),
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            GenDataTask(name="task", instructions="Return data", structure=None),
+            DummyChatLog(),
         )
 
 
@@ -3937,16 +3823,13 @@ async def test_ai_task_and_conversation_setup_properties():
     )
     with pytest.raises(HomeAssistantError, match="context window"):
         await tiny_conversation._async_handle_message(
-            SimpleNamespace(
+            DummyConversationInput(
                 text="x" * 30,
                 language="en",
                 agent_id="conversation.groq_assist",
                 extra_system_prompt=None,
             ),
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            DummyChatLog(),
         )
     body_error_conversation = conversation_module.GroqConversationEntity(
         DummyHass(),
@@ -3961,16 +3844,13 @@ async def test_ai_task_and_conversation_setup_properties():
     )
     with pytest.raises(HomeAssistantError, match="response_format"):
         await body_error_conversation._async_handle_message(
-            SimpleNamespace(
+            DummyConversationInput(
                 text="hello",
                 language="en",
                 agent_id="conversation.groq_assist",
                 extra_system_prompt=None,
             ),
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            DummyChatLog(),
         )
     bad_compound_tools_conversation = conversation_module.GroqConversationEntity(
         DummyHass(),
@@ -3983,16 +3863,13 @@ async def test_ai_task_and_conversation_setup_properties():
     )
     with pytest.raises(HomeAssistantError, match="unsupported tool ids"):
         await bad_compound_tools_conversation._async_handle_message(
-            SimpleNamespace(
+            DummyConversationInput(
                 text="hello",
                 language="en",
                 agent_id="conversation.groq_assist",
                 extra_system_prompt=None,
             ),
-            SimpleNamespace(
-                conversation_id="c",
-                async_add_assistant_content_without_tools=lambda content: None,
-            ),
+            DummyChatLog(),
         )
 
 

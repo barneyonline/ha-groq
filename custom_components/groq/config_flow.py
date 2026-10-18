@@ -10,7 +10,7 @@ import uuid
 from typing import Any, cast
 
 import aiohttp
-import voluptuous as vol
+import probatio
 from homeassistant import data_entry_flow
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
@@ -329,16 +329,16 @@ class GroqConfigFlow(ConfigFlow, domain=DOMAIN):
                     reason="reconfigure_successful",
                 )
 
-        schema = vol.Schema(
+        schema = probatio.Schema(
             {
-                vol.Required(
+                probatio.Required(
                     CONF_NAME,
                     default=entry.data.get(
                         CONF_NAME,
                         getattr(entry, "title", None) or "Groq",
                     ),
                 ): str,
-                vol.Optional(CONF_API_KEY): api_key_selector(),
+                probatio.Optional(CONF_API_KEY): api_key_selector(),
             }
         )
         return self.async_show_form(
@@ -414,7 +414,7 @@ class GroqConfigFlow(ConfigFlow, domain=DOMAIN):
                         reason="reauth_successful",
                     )
 
-        schema = vol.Schema({vol.Required(CONF_API_KEY): api_key_selector()})
+        schema = probatio.Schema({probatio.Required(CONF_API_KEY): api_key_selector()})
         return self.async_show_form(
             step_id="reauth_confirm", data_schema=schema, errors=errors
         )
@@ -468,9 +468,9 @@ class GroqOptionsFlow(OptionsFlow):
                     await self.hass.config_entries.async_reload(current_entry.entry_id)
                 user_input = new_options
                 return self.async_create_entry(title="", data=user_input)
-        options_schema = vol.Schema(
+        options_schema = probatio.Schema(
             {
-                vol.Optional(
+                probatio.Optional(
                     CONF_API_KEY,
                 ): api_key_selector(),
             }

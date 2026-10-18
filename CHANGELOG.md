@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### 🚧 Breaking changes
+- Raise the minimum supported Home Assistant version to `2026.10.0`.
+
+### ✨ New features
+- None
+
+### 🐛 Bug fixes
+- None
+
+### 🔧 Improvements
+- Use Home Assistant's current Assist and tool-result APIs and migrate config forms, actions and AI task schemas to Probatio; remove obsolete compatibility paths and their tests.
+- Cache packaged action descriptions, reuse service options across matching actions, and avoid buffering streamed Assist text twice.
+
+### 🔄 Other changes
+- Align both Docker test environments with Home Assistant `2026.10.0` and pytest helper `0.13.371`.
+
 ## v2.0.3 - 2026-10-04
 
 ### 🚧 Breaking changes

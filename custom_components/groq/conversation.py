@@ -139,23 +139,15 @@ class GroqConversationEntity(ConversationEntity):
     ) -> ConversationResult:
         """Generate an Assist response."""
         system_prompt = service_system_prompt(self._config_entry, self._service_data)
-        request_system_prompt: str | None = system_prompt
-        if hasattr(chat_log, "async_provide_llm_data") and hasattr(
-            user_input, "as_llm_context"
-        ):
-            try:
-                await chat_log.async_provide_llm_data(
-                    user_input.as_llm_context(DOMAIN),
-                    _selected_llm_api(self._config_entry, self._service_data),
-                    system_prompt,
-                    user_input.extra_system_prompt,
-                )
-            except conversation.ConverseError as err:
-                return err.as_conversation_result()
-            request_system_prompt = None
-        elif user_input.extra_system_prompt:
-            system_prompt = f"{system_prompt}\n\n{user_input.extra_system_prompt}"
-            request_system_prompt = system_prompt
+        try:
+            await chat_log.async_provide_llm_data(
+                user_input.as_llm_context(DOMAIN),
+                _selected_llm_api(self._config_entry, self._service_data),
+                system_prompt,
+                user_input.extra_system_prompt,
+            )
+        except conversation.ConverseError as err:
+            return err.as_conversation_result()
 
         tools = _chat_log_tools(chat_log)
         model = service_model(self._config_entry, self._service_data)
@@ -169,15 +161,12 @@ class GroqConversationEntity(ConversationEntity):
                 feature="Home Assistant tool calls",
             )
         text = ""
-        use_streaming = service_stream(
-            self._config_entry, self._service_data
-        ) and hasattr(chat_log, "async_add_delta_content_stream")
+        use_streaming = service_stream(self._config_entry, self._service_data)
         attachment_cache: dict[tuple[str, str], Any] = {}
         for _iteration in range(MAX_TOOL_ITERATIONS):
             request = await self._async_text_generation_request(
                 user_input,
                 chat_log,
-                request_system_prompt,
                 tools,
                 attachment_cache,
             )
@@ -197,7 +186,7 @@ class GroqConversationEntity(ConversationEntity):
                 raise translated_error(error, "invalid_request_options")
             if use_streaming:
                 text = await self._async_stream_message(user_input, chat_log, request)
-                if not getattr(chat_log, "unresponded_tool_results", False):
+                if not chat_log.unresponded_tool_results:
                     break
                 continue
 
@@ -207,18 +196,18 @@ class GroqConversationEntity(ConversationEntity):
             assistant_content = AssistantContent(
                 agent_id=user_input.agent_id,
                 content=text or None,
-                thinking_content=getattr(result, "reasoning", None),
+                thinking_content=result.reasoning,
                 tool_calls=tool_calls or None,
                 native=_assistant_native(result) or None,
             )
-            if tool_calls and hasattr(chat_log, "async_add_assistant_content"):
+            if tool_calls:
                 async for _content in chat_log.async_add_assistant_content(
                     assistant_content
                 ):
                     pass
             else:
                 chat_log.async_add_assistant_content_without_tools(assistant_content)
-            if not getattr(chat_log, "unresponded_tool_results", False):
+            if not chat_log.unresponded_tool_results:
                 break
         else:
             raise translated_error(
@@ -230,14 +219,13 @@ class GroqConversationEntity(ConversationEntity):
         return ConversationResult(
             response=response,
             conversation_id=chat_log.conversation_id,
-            continue_conversation=getattr(chat_log, "continue_conversation", True),
+            continue_conversation=chat_log.continue_conversation,
         )
 
     async def _async_text_generation_request(
         self,
         user_input: ConversationInput,
         chat_log: conversation.ChatLog,
-        system_prompt: str | None,
         tools: list[dict[str, Any]] | None,
         attachment_cache: dict[tuple[str, str], Any] | None = None,
     ) -> TextGenerationRequest:
@@ -254,7 +242,7 @@ class GroqConversationEntity(ConversationEntity):
                 getattr(user_input, "attachments", None),
                 attachment_cache,
             ),
-            system_prompt=system_prompt,
+            system_prompt=None,
             **service_generation_options(
                 self._config_entry, self._service_data, self._model_registry
             ),
@@ -273,22 +261,20 @@ class GroqConversationEntity(ConversationEntity):
         request: TextGenerationRequest,
     ) -> str:
         """Stream an Assist response into Home Assistant's chat log."""
-        chunks: list[str] = []
+        allowed_tools = {
+            tool["function"]["name"]
+            for tool in request.tools or []
+            if tool.get("type") == "function"
+        }
 
         async def content_stream() -> AsyncIterator[AssistantContentDeltaDict]:
             yield {"role": "assistant"}
             async for chunk in self._client.async_stream_chat(request):
                 if isinstance(chunk, str):
-                    chunks.append(chunk)
                     yield {"content": chunk}
                 else:
                     tool_calls = _result_tool_calls(chunk)
-                    allowed = {
-                        tool["function"]["name"]
-                        for tool in request.tools or []
-                        if tool.get("type") == "function"
-                    }
-                    if any(call.tool_name not in allowed for call in tool_calls):
+                    if any(call.tool_name not in allowed_tools for call in tool_calls):
                         raise translated_error(
                             "Groq returned an unexposed Home Assistant tool",
                             "invalid_request_options",
@@ -300,13 +286,10 @@ class GroqConversationEntity(ConversationEntity):
                     }
 
         completed: list[str] = []
-        # Home Assistant yields the completed assistant content back from the
-        # stream helper on recent versions. Keep the raw chunk buffer as a
-        # compatibility fallback for versions that only consume the stream.
         async for content in chat_log.async_add_delta_content_stream(
             user_input.agent_id,
             content_stream(),
         ):
             if isinstance(content, AssistantContent) and content.content:
                 completed.append(content.content)
-        return "".join(completed) or "".join(chunks)
+        return "".join(completed)

@@ -7,8 +7,7 @@ from collections.abc import Callable
 from hashlib import sha1
 from typing import Any
 
-from homeassistant import data_entry_flow
-from homeassistant.components.repairs.models import RepairsFlow
+from homeassistant.components.repairs.models import RepairsFlow, RepairsFlowResult
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
@@ -30,7 +29,7 @@ class GroqRepairsFlow(RepairsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, str] | None = None
-    ) -> data_entry_flow.FlowResult:
+    ) -> RepairsFlowResult:
         """Direct users to the resolution described by the repair issue."""
         return self.async_abort(reason="not_fixable")
 

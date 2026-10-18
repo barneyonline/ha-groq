@@ -1,4 +1,4 @@
-ARG HA_IMAGE=ghcr.io/home-assistant/home-assistant:2026.9.0@sha256:372d991e58882a1d8c68c07e9aa3f3b509276e695355f73ccdb03baa70407293
+ARG HA_IMAGE=ghcr.io/home-assistant/home-assistant:2026.10.0@sha256:1b64d38f38d922bf9d59336451fd6453e1d614f934456af4ee3d2a51061be3a4
 FROM ${HA_IMAGE}
 ARG PYTHON_VERSION=3.14
 ARG REQUIREMENTS_FILE=requirements-dev.txt
@@ -33,7 +33,11 @@ if actual != expected:
     )
 PY
 
-RUN python -m pip install --no-cache-dir --no-compile -r "/opt/groq-test/${REQUIREMENTS_FILE}"
+# The all-integrations image bundles surepy for Sure Petcare. Its rich<11 pin
+# conflicts with the HA 2026.10 pytest helper's pytest-codspeed (rich>=13.8.1).
+# Groq does not use surepy; remove it only from this disposable test image.
+RUN python -m pip uninstall --yes surepy \
+    && python -m pip install --no-cache-dir --no-compile -r "/opt/groq-test/${REQUIREMENTS_FILE}"
 COPY scripts/verify_test_environment.py /opt/groq-test/verify_test_environment.py
 RUN python /opt/groq-test/verify_test_environment.py \
     --expected-core-file /opt/groq-test/image-core-version --check-dependencies
