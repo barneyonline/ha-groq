@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import voluptuous as vol
+import probatio
 from homeassistant.components import conversation
 from homeassistant.components.ai_task import (
     AITaskEntity,
@@ -49,14 +49,11 @@ from .text_generation import (
     service_unique_id,
     structured_generation_request,
     text_generation_service_data,
-    voluptuous_schema_to_json_schema,
+    schema_to_json_schema,
 )
 from .types import GroqConfigEntry
 
 PARALLEL_UPDATES = 1
-SUPPORT_ATTACHMENTS = getattr(
-    AITaskEntityFeature, "SUPPORT_ATTACHMENTS", AITaskEntityFeature(0)
-)
 
 
 async def async_setup_entry(
@@ -99,7 +96,7 @@ def _strip_json_fence(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _structure_description(schema: vol.Schema) -> str:
+def _structure_description(schema: probatio.Schema) -> str:
     """Return a compact structure description for an AI task prompt."""
     fields: list[str] = []
     schema_data = getattr(schema, "schema", {})
@@ -195,7 +192,7 @@ class GroqAITaskEntity(AITaskEntity):
             service_model(config_entry, service_data),
             GroqFeature.VISION,
         ):
-            self._attr_supported_features |= SUPPORT_ATTACHMENTS
+            self._attr_supported_features |= AITaskEntityFeature.SUPPORT_ATTACHMENTS
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -260,7 +257,7 @@ class GroqAITaskEntity(AITaskEntity):
             service_model(self._config_entry, self._service_data),
             chat_log,
             task.instructions,
-            getattr(task, "attachments", None),
+            task.attachments,
         )
         message = next(
             message for message in reversed(messages) if message["role"] == "user"
@@ -288,7 +285,7 @@ class GroqAITaskEntity(AITaskEntity):
         if task.structure is not None:
             try:
                 return task.structure(data)
-            except vol.Invalid as err:
+            except probatio.Invalid as err:
                 raise translated_error(
                     "Groq returned data that did not match the requested structure",
                     "structured_response_invalid",
@@ -333,7 +330,7 @@ class GroqAITaskEntity(AITaskEntity):
             model,
             chat_log,
             instructions,
-            getattr(task, "attachments", None),
+            task.attachments,
             attachment_cache,
         )
         if output_instruction:
@@ -387,7 +384,7 @@ class GroqAITaskEntity(AITaskEntity):
             assistant_content = AssistantContent(
                 agent_id=service_unique_id(self._config_entry, self._service_data),
                 content=result.text or None,
-                thinking_content=getattr(result, "reasoning", None),
+                thinking_content=result.reasoning,
                 tool_calls=tool_calls or None,
                 native=_assistant_native(result) or None,
             )
@@ -398,7 +395,7 @@ class GroqAITaskEntity(AITaskEntity):
                     pass
             else:
                 chat_log.async_add_assistant_content_without_tools(assistant_content)
-            if not getattr(chat_log, "unresponded_tool_results", False):
+            if not chat_log.unresponded_tool_results:
                 return result
         raise translated_error(
             "Groq AI task exceeded the tool-call limit", "tool_call_limit"
@@ -449,7 +446,7 @@ class GroqAITaskEntity(AITaskEntity):
             task.name,
         )
         if task.structure is not None:
-            schema = voluptuous_schema_to_json_schema(task.structure)
+            schema = schema_to_json_schema(task.structure)
         elif service_structured_outputs(self._config_entry, self._service_data):
             schema = service_schema(self._config_entry, self._service_data)
 
@@ -477,7 +474,7 @@ class GroqAITaskEntity(AITaskEntity):
                 try:
                     data = json.loads(_strip_json_fence(result.text))
                     data = await self._validate_result(data, task, schema)
-                except (json.JSONDecodeError, vol.Invalid) as err:
+                except (json.JSONDecodeError, probatio.Invalid) as err:
                     raise translated_error(
                         "Groq returned data that did not match the requested structure",
                         "structured_response_invalid",
