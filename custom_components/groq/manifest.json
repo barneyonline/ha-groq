@@ -6,6 +6,9 @@
     "camera",
     "intent"
   ],
+  "categories": [
+    "ai_voice"
+  ],
   "codeowners": [
     "@barneyonline"
   ],
