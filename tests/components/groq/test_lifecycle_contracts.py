@@ -440,6 +440,117 @@ async def test_real_subentry_flow_clears_assist_control(hass, advanced):
     assert stored["max_tokens"] == 321
 
 
+async def test_real_structured_output_fallback_repeated_saves(hass):
+    """Validate defaults and persistence through the older HA flow manager."""
+    from homeassistant import data_entry_flow
+
+    if hasattr(data_entry_flow, "Optional"):
+        pytest.skip("This regression exercises HA without conditional field support")
+
+    service = text_service(model="openai/gpt-oss-20b")
+    service["data"].pop("llm_hass_api")
+    entry = account(hass, services=[service])
+    schema_fields = {"schema_name", "schema", "strict"}
+    saved = {
+        "schema_name": "saved_response",
+        "schema": {"type": "object", "properties": {"answer": {"type": "string"}}},
+        "strict": True,
+    }
+    enabled = False
+    with patch(
+        "custom_components.groq.config_flow.async_get_model_registry",
+        return_value=GroqModelRegistry(),
+    ):
+        for submitted in (
+            {"structured_outputs": True, **saved},
+            {"structured_outputs": False},
+            {},
+            {"structured_outputs": True},
+            {"strict": False},
+            {},
+        ):
+            result = await hass.config_entries.subentries.async_init(
+                (entry.entry_id, "text_generation"),
+                context={"source": "reconfigure", "subentry_id": "text-service"},
+            )
+            result = await hass.config_entries.subentries.async_configure(
+                result["flow_id"],
+                {
+                    "name": "Text service",
+                    "model": "openai/gpt-oss-20b",
+                    "advanced_options": True,
+                },
+            )
+            assert result["step_id"] == "text_generation_advanced"
+            markers = {key.schema: key for key in result["data_schema"].schema}
+            assert all(
+                getattr(key, "visible", None) is None for key in markers.values()
+            )
+            assert markers["structured_outputs"].default() is enabled
+            defaults = result["data_schema"]({})
+            previous = entry.subentries["text-service"].data
+            for key, default in {
+                "schema_name": "response",
+                "schema": {},
+                "strict": False,
+            }.items():
+                assert defaults[key] == previous.get(key, default)
+            result = await hass.config_entries.subentries.async_configure(
+                result["flow_id"], submitted
+            )
+            assert result["type"] == "abort"
+            assert result["reason"] == "reconfigure_successful"
+            enabled = submitted.get("structured_outputs", enabled)
+            saved.update(
+                {key: value for key, value in submitted.items() if key in schema_fields}
+            )
+            stored = entry.subentries["text-service"].data
+            assert stored["structured_outputs"] is enabled
+            assert {key: stored[key] for key in schema_fields} == saved
+
+
+@pytest.mark.parametrize("advanced", [False, True])
+async def test_real_model_change_clears_disabled_structured_outputs(hass, advanced):
+    """Capability cleanup still removes saved settings when their toggle is off."""
+    service = text_service(model="openai/gpt-oss-20b")
+    service["data"].update(
+        structured_outputs=False,
+        schema_name="saved_response",
+        schema={"type": "object"},
+        strict=True,
+    )
+    entry = account(hass, services=[service])
+    with patch(
+        "custom_components.groq.config_flow.async_get_model_registry",
+        return_value=GroqModelRegistry(),
+    ):
+        result = await hass.config_entries.subentries.async_init(
+            (entry.entry_id, "text_generation"),
+            context={"source": "reconfigure", "subentry_id": "text-service"},
+        )
+        result = await hass.config_entries.subentries.async_configure(
+            result["flow_id"],
+            {
+                "name": "Text service",
+                "model": "llama-3.1-8b-instant",
+                "advanced_options": advanced,
+            },
+        )
+        if advanced:
+            assert result["step_id"] == "text_generation_advanced"
+            assert not {"structured_outputs", "schema_name", "schema", "strict"} & {
+                key.schema for key in result["data_schema"].schema
+            }
+            result = await hass.config_entries.subentries.async_configure(
+                result["flow_id"], {}
+            )
+    assert result["reason"] == "reconfigure_successful"
+    assert (
+        not {"structured_outputs", "schema_name", "schema", "strict"}
+        & entry.subentries["text-service"].data.keys()
+    )
+
+
 @pytest.mark.parametrize(
     "feature",
     ["text_generation", "speech_to_text", "text_to_speech", "image_recognition"],
