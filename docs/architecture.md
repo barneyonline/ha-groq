@@ -105,6 +105,11 @@ Home Assistant LLM tools use Probatio schemas, so tool descriptions use its
 OpenAPI serializer directly. Config forms, action validation and AI task output
 structures also use Probatio.
 
+Conditional Structured Outputs fields use Home Assistant's visibility markers
+when available. The ordinary Probatio optional markers remain necessary on
+HA 2026.10, which predates the visibility API. Both paths preserve saved schema
+settings when fields are omitted or validation is retried.
+
 ## Network failures and repairs
 
 The shared client uses HA's aiohttp session, bounded response reads, explicit

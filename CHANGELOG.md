@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 - Raise the minimum supported Home Assistant version to `2026.10.0`.
 
 ### ✨ New features
-- None
+- Show Schema Name, Schema and Strict only when Structured Outputs is enabled on Home Assistant 2026.11 and newer. Preserve saved values when disabled, retain model-capability filtering, and keep the unconditional form on older supported versions.
 
 ### 🐛 Bug fixes
 - None
