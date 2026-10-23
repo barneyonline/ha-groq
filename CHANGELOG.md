@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v2.1.0 - 2026-10-24
+
 ### 🚧 Breaking changes
 - Raise the minimum supported Home Assistant version to `2026.10.0`.
 
@@ -19,6 +21,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🔄 Other changes
 - Align both Docker test environments with Home Assistant `2026.10.0` and pytest helper `0.13.371`.
+- Bumped the integration manifest version to `2.1.0`.
 
 ## v2.0.3 - 2026-10-04
 
