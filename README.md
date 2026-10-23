@@ -74,8 +74,8 @@ Each configured Groq service creates its own Home Assistant device and the relev
 
 ## Requirements
 
-- Home Assistant `2026.9.0` or newer. Both the primary and minimum-version test environments currently verify `2026.9.0`.
-  Assist and AI tasks also handle the new Home Assistant `2026.10` tool-result format, including its error flag. Full validation against a published `2026.10` package is pending its availability.
+- Home Assistant `2026.10.0` or newer. Both the primary and minimum-version test environments currently verify `2026.10.0`.
+  Assist and AI tasks preserve Home Assistant tool results and their error flags.
 - A Groq API key from [Groq Console](https://console.groq.com/).
 - Network access from Home Assistant to `https://api.groq.com`.
 - Optional: `ffmpeg` on the Home Assistant host if you enable TTS audio normalization, Long TTS, or processed playback conversion.
@@ -98,7 +98,7 @@ After adding an account, open the Groq integration page and add one or more serv
 
 Additional Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, Compound built-in tool allow-lists, structured output schema, strict schema mode, and additional Groq request body options.
 
-On Home Assistant 2026.11 and newer, Schema Name, Schema and Strict appear only while Structured Outputs is enabled for a compatible model. Older supported Home Assistant versions always show these fields for compatible models. Disabling Structured Outputs preserves the saved schema, name and strictness for reuse; switching to a model without Structured Outputs support clears those settings.
+On Home Assistant 2026.11 and newer, Schema Name, Schema and Strict appear only while Structured Outputs is enabled for a compatible model. Home Assistant 2026.10 always shows these fields for compatible models. Disabling Structured Outputs preserves the saved schema, name and strictness for reuse; switching to a model without Structured Outputs support clears those settings.
 
 Local response caching is opt-in per configured service. Disabling it for one service remains effective when another service enables caching. Responses expire and share a 16 MiB serialized-content budget per account. Speech audio caches share a separate 64 MiB account budget in addition to their configured item limits. These caches are local to Home Assistant and are distinct from Groq's provider-side prompt caching.
 

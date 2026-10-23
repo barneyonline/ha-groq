@@ -5,7 +5,7 @@ services:
       context: ../..
       dockerfile: devtools/docker/Dockerfile
       args:
-        HA_IMAGE: ${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.9.0@sha256:372d991e58882a1d8c68c07e9aa3f3b509276e695355f73ccdb03baa70407293}
+        HA_IMAGE: ${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.10.0@sha256:1b64d38f38d922bf9d59336451fd6453e1d614f934456af4ee3d2a51061be3a4}
         REQUIREMENTS_FILE: ${HA_GROQ_REQUIREMENTS_FILE:-requirements-dev.txt}
         PYTHON_VERSION: ${PYTHON_VERSION:-3.14}
         TEST_ENVIRONMENT_HASH: ${HA_GROQ_TEST_ENVIRONMENT_HASH:-manual}

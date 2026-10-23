@@ -1,4 +1,4 @@
-"""Compatibility regressions for Home Assistant 2026.10 tool results."""
+"""Regressions for Home Assistant tool result serialization."""
 
 import json
 from types import SimpleNamespace
@@ -38,8 +38,7 @@ async def test_modern_tool_results_preserve_data_and_failure_status(
         "tool_call_id": "call_1",
         "tool_name": "GetState",
     }
-    result_type = getattr(llm, "ToolResult", SimpleNamespace)
-    result = result_type(data=data, error=error)
+    result = llm.ToolResult(data=data, error=error)
     content = (
         {**metadata, "result": {"data": data, "error": error}, "tool_result": "stale"}
         if mapping
@@ -64,15 +63,6 @@ async def test_modern_tool_results_preserve_data_and_failure_status(
     assert tool_message["tool_call_id"] == "call_1"
     assert tool_message["name"] == "GetState"
     assert json.loads(tool_message["content"]) == {"data": data, "error": error}
-
-
-@pytest.mark.parametrize("mapping", [False, True])
-def test_legacy_tool_results_preserve_payload(mapping):
-    """Legacy payload keys named data/error must not be treated as a wrapper."""
-    data = {"data": "original", "error": "original error"}
-    fields = {"tool_call_id": "call_1", "tool_name": "GetState", "tool_result": data}
-    content = fields if mapping else SimpleNamespace(**fields)
-    assert json.loads(_tool_result_message(content)["content"]) == data
 
 
 def test_serialized_result_defaults_to_success():

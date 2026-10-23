@@ -7,8 +7,8 @@ from types import SimpleNamespace
 from threading import get_ident
 from unittest.mock import AsyncMock, Mock
 
+import probatio
 import pytest
-import voluptuous as vol
 from homeassistant.components import conversation
 from homeassistant.components.ai_task import GenDataTask
 from homeassistant.core import Context, SupportsResponse
@@ -146,20 +146,17 @@ async def test_real_chat_log_executes_and_validates_tools(
         integration = "groq"
         name = "ReadLevel"
         description = "Read a requested level"
-        parameters = vol.Schema({vol.Required("level"): vol.Coerce(int)})
+        parameters = probatio.Schema({probatio.Required("level"): probatio.Coerce(int)})
 
         async def async_call(self, hass, tool_input, llm_context):
             # HA delegates validation to tools (as its intent tools do).
             try:
                 validated = self.parameters(tool_input.tool_args)
-            except vol.Invalid as err:
-                # HA 2026.10 catches Probatio errors, not Voluptuous errors.
+            except probatio.Invalid as err:
                 raise HomeAssistantError(str(err)) from err
             calls.append(validated)
             data = {"level": validated["level"]}
-            if result_type := getattr(llm, "ToolResult", None):
-                return result_type(data=data)
-            return data
+            return llm.ToolResult(data=data)
 
     class LevelAPI(llm.API):
         async def async_get_api_instance(self, llm_context):
@@ -272,9 +269,8 @@ async def test_real_chat_log_executes_and_validates_tools(
     assert len(results) == 1
     assert results[0]["tool_call_id"] == "level-call"
     payload = json.loads(results[0]["content"])
-    if hasattr(llm, "ToolResult"):
-        assert payload["error"] is (arguments["level"] != "7")
-        payload = payload["data"]
+    assert payload["error"] is (arguments["level"] != "7")
+    payload = payload["data"]
     if arguments["level"] == "7":
         assert calls == [{"level": 7}]
         assert payload == {"level": 7}
@@ -440,7 +436,7 @@ async def test_large_tool_batch_preserves_current_request():
                 "role": "tool_result",
                 "tool_call_id": str(i),
                 "tool_name": "Operate",
-                "tool_result": {"done": True},
+                "result": {"data": {"done": True}, "error": False},
             }
             for i in range(14)
         ]
@@ -776,7 +772,7 @@ async def test_sanitized_provider_json_failure_still_uses_validated_fallback(has
     task = GenDataTask(
         name="summary",
         instructions="Summarize",
-        structure=vol.Schema({vol.Required("summary"): str}),
+        structure=probatio.Schema({probatio.Required("summary"): str}),
     )
     result = await entity._async_generate_data(
         task, conversation.ChatLog(hass, "retry")

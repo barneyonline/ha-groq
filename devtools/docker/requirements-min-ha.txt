@@ -1,6 +1,6 @@
 # Exact helper/Core pair for the advertised minimum. Install with dependencies.
-homeassistant==2026.9.0
-pytest-homeassistant-custom-component==0.13.363
+homeassistant==2026.10.0
+pytest-homeassistant-custom-component==0.13.371
 jsonschema==4.26.0
 PyYAML
 mypy==2.3.1

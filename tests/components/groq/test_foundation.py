@@ -4,8 +4,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import probatio
 import pytest
-import voluptuous as vol
 from homeassistant.components import conversation, stt
 from homeassistant.components.ai_task import AITaskEntityFeature, GenDataTask
 from homeassistant.config_entries import ConfigEntryState
@@ -142,7 +142,7 @@ class DummyTextClient:
 
     async def async_generate_text(self, request):
         self.requests.append(request)
-        return SimpleNamespace(text=self.text)
+        return SimpleNamespace(text=self.text, reasoning=None, tool_calls=None)
 
     async def async_stream_chat(self, request):
         self.requests.append(request)
@@ -282,12 +282,41 @@ class DummySTTClient:
         return self.text
 
 
+class DummyConversationInput(SimpleNamespace):
+    def as_llm_context(self, domain):
+        return llm.LLMContext(
+            platform=domain,
+            context=None,
+            language=self.language,
+            assistant="conversation",
+            device_id=None,
+        )
+
+
 class DummyChatLog:
     conversation_id = "conversation-id"
 
     def __init__(self):
         self.assistant_content = []
         self.stream_deltas = []
+        self.content = []
+        self.llm_api = None
+
+    @property
+    def unresponded_tool_results(self):
+        return False
+
+    @property
+    def continue_conversation(self):
+        return True
+
+    async def async_provide_llm_data(self, context, api, prompt, extra):
+        self.content.insert(
+            0,
+            conversation.SystemContent(
+                content=f"{prompt}\n\n{extra}" if extra else prompt
+            ),
+        )
 
     def async_add_assistant_content_without_tools(self, content):
         self.assistant_content.append(content)
@@ -297,7 +326,7 @@ class DummyChatLog:
         async for delta in stream:
             self.stream_deltas.append(delta)
             content += delta.get("content", "")
-        completed = SimpleNamespace(agent_id=agent_id, content=content)
+        completed = conversation.AssistantContent(agent_id=agent_id, content=content)
         self.assistant_content.append(completed)
         yield completed
 
@@ -344,7 +373,7 @@ class DummyToolChatLog(DummyChatLog):
                 SimpleNamespace(
                     name="GetState",
                     description="Get an entity state",
-                    parameters=vol.Schema({vol.Required("entity_id"): str}),
+                    parameters=probatio.Schema({probatio.Required("entity_id"): str}),
                 )
             ],
         )
@@ -360,7 +389,7 @@ class DummyToolChatLog(DummyChatLog):
                 agent_id=content.agent_id,
                 tool_call_id=tool_call.id,
                 tool_name=tool_call.tool_name,
-                tool_result={"state": "on"},
+                result=llm.ToolResult(data={"state": "on"}),
             )
             self.content.append(tool_result)
             yield tool_result
@@ -370,13 +399,11 @@ class DummyStateTool(llm.Tool):
     integration = "groq"
     name = "GetState"
     description = "Get an entity state"
-    parameters = vol.Schema({vol.Required("entity_id"): str})
+    parameters = probatio.Schema({probatio.Required("entity_id"): str})
 
     async def async_call(self, hass, tool_input, llm_context):
         data = {"entity_id": tool_input.tool_args["entity_id"], "state": "on"}
-        if result_type := getattr(llm, "ToolResult", None):
-            return result_type(data=data)
-        return data
+        return llm.ToolResult(data=data)
 
 
 class DummyToolAPI(llm.API):
@@ -638,7 +665,7 @@ def test_payload_builders_use_openai_compatible_shapes():
                 {
                     "role": "tool",
                     "tool_call_id": "call_1",
-                    "content": '{"state":"on"}',
+                    "content": '{"data":{"state":"on"},"error":false}',
                 },
             ],
             tools=[
@@ -658,7 +685,7 @@ def test_payload_builders_use_openai_compatible_shapes():
     assert tool_payload["messages"][1] == {
         "role": "tool",
         "tool_call_id": "call_1",
-        "content": '{"state":"on"}',
+        "content": '{"data":{"state":"on"},"error":false}',
     }
     assert tool_payload["tools"] == [
         {
@@ -1820,7 +1847,7 @@ async def test_conversation_entity_generates_assist_response():
     ]
 
     result = await entity._async_handle_message(
-        SimpleNamespace(
+        DummyConversationInput(
             text="Turn on the kitchen lights",
             language="en",
             agent_id="conversation.groq_assist",
@@ -1834,13 +1861,16 @@ async def test_conversation_entity_generates_assist_response():
     request = client.requests[0]
     assert request.model == "llama-3.1-8b-instant"
     assert request.prompt == "Turn on the kitchen lights"
-    assert request.messages == [
+    assert request.messages[1:] == [
         {"role": "user", "content": "What is the kitchen status?"},
         {"role": "assistant", "content": "The kitchen lights are off."},
         {"role": "user", "content": "Turn on the kitchen lights"},
     ]
-    assert DEFAULT_SYSTEM_PROMPT in request.system_prompt
-    assert "Prefer brief replies." in request.system_prompt
+    assert request.system_prompt is None
+    assert request.messages[0] == {
+        "role": "system",
+        "content": f"{DEFAULT_SYSTEM_PROMPT}\n\nPrefer brief replies.",
+    }
     assert request.temperature == 0.2
 
 
@@ -1863,7 +1893,7 @@ async def test_conversation_entity_limits_assist_history():
     ]
 
     await entity._async_handle_message(
-        SimpleNamespace(
+        DummyConversationInput(
             text="latest request",
             language="en",
             agent_id="conversation.groq_assist",
@@ -1873,38 +1903,9 @@ async def test_conversation_entity_limits_assist_history():
     )
 
     request = client.requests[0]
-    assert len(request.messages) == 13
-    assert request.messages[0] == {"role": "user", "content": "turn 18"}
+    assert len(request.messages) == 14
+    assert request.messages[1] == {"role": "user", "content": "turn 18"}
     assert request.messages[-1] == {"role": "user", "content": "latest request"}
-
-
-@pytest.mark.asyncio
-async def test_chat_log_messages_handles_role_fallbacks():
-    class AssistantFallback:
-        content = "Fallback assistant reply"
-
-    class UserFallback:
-        text = "Fallback user request"
-
-    chat_log = SimpleNamespace(
-        content=[
-            AssistantFallback(),
-            UserFallback(),
-            SimpleNamespace(content="ignored"),
-        ]
-    )
-
-    assert await _async_chat_log_messages(
-        DummyHass(),
-        GroqModelRegistry(),
-        "llama-3.1-8b-instant",
-        chat_log,
-        "current request",
-    ) == [
-        {"role": "assistant", "content": "Fallback assistant reply"},
-        {"role": "user", "content": "Fallback user request"},
-        {"role": "user", "content": "current request"},
-    ]
 
 
 def test_tool_message_helpers_handle_dicts_and_invalid_values():
@@ -1925,7 +1926,9 @@ def test_tool_message_helpers_handle_dicts_and_invalid_values():
         },
     }
     assert _tool_call_message({"tool_name": "GetState", "tool_args": None}) is None
-    assert _tool_result_message({"tool_call_id": "call_1"}) is None
+    assert (
+        _tool_result_message({"tool_call_id": "call_1", "result": {"data": {}}}) is None
+    )
 
 
 @pytest.mark.asyncio
@@ -1937,7 +1940,7 @@ async def test_chat_log_messages_includes_system_tool_and_assistant_tool_calls()
                 "role": "tool_result",
                 "tool_call_id": "call_1",
                 "tool_name": "GetState",
-                "tool_result": {"state": "on"},
+                "result": {"data": {"state": "on"}, "error": False},
             },
             {
                 "role": "assistant",
@@ -1951,6 +1954,7 @@ async def test_chat_log_messages_includes_system_tool_and_assistant_tool_calls()
                 ],
             },
             {"content": "ignored"},
+            SimpleNamespace(content="ignored"),
         ]
     )
 
@@ -1966,7 +1970,7 @@ async def test_chat_log_messages_includes_system_tool_and_assistant_tool_calls()
             "role": "tool",
             "tool_call_id": "call_1",
             "name": "GetState",
-            "content": '{"state":"on"}',
+            "content": '{"data":{"state":"on"},"error":false}',
         },
         {
             "role": "assistant",
@@ -1998,7 +2002,7 @@ async def test_async_chat_log_messages_drops_orphan_tool_results():
                 "role": "tool_result",
                 "tool_call_id": "orphaned",
                 "tool_name": "GetState",
-                "tool_result": {"state": "on"},
+                "result": {"data": {"state": "on"}, "error": False},
             },
             {"content": "ignored"},
             {"role": "user", "content": "current request"},
@@ -2017,37 +2021,30 @@ async def test_async_chat_log_messages_drops_orphan_tool_results():
     assert result[-1] == {"role": "user", "content": "current request"}
 
 
-def test_tool_conversion_handles_empty_api_and_raw_result_shapes():
+def test_chat_log_without_tools():
+    assert _chat_log_tools(SimpleNamespace(llm_api=None)) is None
     assert _chat_log_tools(SimpleNamespace(llm_api=SimpleNamespace(tools=[]))) is None
 
-    tool_inputs = _result_tool_calls(
+
+def test_tool_conversion_skips_missing_metadata():
+    """Incomplete provider metadata must never become an executable HA call."""
+    calls = _result_tool_calls(
         SimpleNamespace(
-            tool_calls=None,
-            raw={
-                "choices": [
-                    {
-                        "message": {
-                            "tool_calls": [
-                                "bad",
-                                {"function": None},
-                                {"function": {"arguments": "{}"}},
-                                {
-                                    "id": "dict_args",
-                                    "function": {
-                                        "name": "DictArgs",
-                                        "arguments": {"entity_id": "light.kitchen"},
-                                    },
-                                },
-                            ]
-                        }
-                    }
-                ]
-            },
+            tool_calls=[
+                {"function": None},
+                {"function": {"arguments": "{}"}},
+                {
+                    "id": "valid",
+                    "function": {
+                        "name": "GetState",
+                        "arguments": {"entity_id": "light.kitchen"},
+                    },
+                },
+            ]
         )
     )
-
-    assert [(item.tool_name, item.tool_args, item.id) for item in tool_inputs] == [
-        ("DictArgs", {"entity_id": "light.kitchen"}, "dict_args"),
+    assert [(call.id, call.tool_name, call.tool_args) for call in calls] == [
+        ("valid", "GetState", {"entity_id": "light.kitchen"})
     ]
 
 
@@ -2066,7 +2063,7 @@ async def test_conversation_entity_streams_assist_response():
     chat_log = DummyChatLog()
 
     result = await entity._async_handle_message(
-        SimpleNamespace(
+        DummyConversationInput(
             text="Turn on the kitchen lights",
             language="en",
             agent_id="conversation.groq_assist",
@@ -2115,7 +2112,7 @@ async def test_conversation_entity_sends_image_attachments_to_vision_models(tmp_
     ]
 
     await entity._async_handle_message(
-        SimpleNamespace(
+        DummyConversationInput(
             text="What is in this image?",
             language="en",
             agent_id="conversation.groq_assist",
@@ -2125,7 +2122,7 @@ async def test_conversation_entity_sends_image_attachments_to_vision_models(tmp_
     )
 
     request = client.requests[0]
-    assert request.messages == [
+    assert request.messages[1:] == [
         {
             "role": "user",
             "content": [
@@ -2146,7 +2143,7 @@ async def test_conversation_entity_sends_image_attachments_to_vision_models(tmp_
     )
     with pytest.raises(HomeAssistantError, match="vision-capable model"):
         await text_entity._async_handle_message(
-            SimpleNamespace(
+            DummyConversationInput(
                 text="What is in this image?",
                 language="en",
                 agent_id="conversation.groq_assist",
@@ -2171,7 +2168,7 @@ async def test_conversation_entity_prefers_current_input_attachments(tmp_path):
     chat_log.content = [{"role": "user", "content": "Describe this"}]
 
     await entity._async_handle_message(
-        SimpleNamespace(
+        DummyConversationInput(
             text="Describe this",
             language="en",
             agent_id="conversation.groq_assist",
@@ -2226,7 +2223,7 @@ async def test_conversation_entity_keeps_repeated_prompt_current_attachment(tmp_
     ]
 
     await entity._async_handle_message(
-        SimpleNamespace(
+        DummyConversationInput(
             text="Describe this",
             language="en",
             agent_id="conversation.groq_assist",
@@ -2272,7 +2269,7 @@ async def test_conversation_entity_uses_home_assistant_llm_tools():
     chat_log = DummyToolChatLog()
 
     result = await entity._async_handle_message(
-        SimpleNamespace(
+        DummyConversationInput(
             text="Is the kitchen light on?",
             language="en",
             agent_id="conversation.groq_assist",
@@ -2315,7 +2312,7 @@ async def test_conversation_entity_uses_home_assistant_llm_tools():
         "role": "tool",
         "tool_call_id": "call_1",
         "name": "GetState",
-        "content": '{"state":"on"}',
+        "content": '{"data":{"state":"on"},"error":false}',
     }
 
 
@@ -2339,7 +2336,7 @@ async def test_conversation_entity_returns_converse_error_from_llm_setup():
     )
 
     result = await entity._async_handle_message(
-        SimpleNamespace(
+        DummyConversationInput(
             text="Hello",
             language="en",
             agent_id="conversation.groq_assist",
@@ -2370,7 +2367,7 @@ async def test_conversation_entity_rejects_tools_for_non_tool_model():
 
     with pytest.raises(HomeAssistantError, match="tool calls"):
         await entity._async_handle_message(
-            SimpleNamespace(
+            DummyConversationInput(
                 text="Use tools",
                 language="en",
                 agent_id="conversation.groq_assist",
@@ -2418,7 +2415,9 @@ async def test_conversation_entity_limits_unresolved_tool_iterations():
                     SimpleNamespace(
                         name="GetState",
                         description="Get an entity state",
-                        parameters=vol.Schema({vol.Required("entity_id"): str}),
+                        parameters=probatio.Schema(
+                            {probatio.Required("entity_id"): str}
+                        ),
                     )
                 ],
             )
@@ -2442,7 +2441,7 @@ async def test_conversation_entity_limits_unresolved_tool_iterations():
 
     with pytest.raises(HomeAssistantError, match="tool-call limit"):
         await entity._async_handle_message(
-            SimpleNamespace(
+            DummyConversationInput(
                 text="Use tools",
                 language="en",
                 agent_id="conversation.groq_assist",
@@ -2469,7 +2468,7 @@ async def test_conversation_entity_adapts_chat_log_llm_prompt():
     chat_log = DummyToolChatLog()
 
     result = await entity._async_handle_message(
-        SimpleNamespace(
+        DummyConversationInput(
             text="Summarize the house",
             language="en",
             agent_id="conversation.groq_assist",
@@ -2507,7 +2506,7 @@ async def test_conversation_entity_adapts_chat_log_tool_results():
     chat_log = DummyToolChatLog()
 
     result = await entity._async_handle_message(
-        SimpleNamespace(
+        DummyConversationInput(
             text="Is the kitchen light on?",
             language="en",
             agent_id="conversation.groq_assist",
@@ -2523,7 +2522,7 @@ async def test_conversation_entity_adapts_chat_log_tool_results():
         "role": "tool",
         "tool_call_id": "call_real",
         "name": "GetState",
-        "content": '{"state":"on"}',
+        "content": '{"data":{"state":"on"},"error":false}',
     }
 
 
@@ -2575,7 +2574,7 @@ async def test_ai_task_entity_generates_and_validates_structured_data():
     task = GenDataTask(
         name="summary",
         instructions="Summarize the current home state",
-        structure=vol.Schema({vol.Required("summary"): str}),
+        structure=probatio.Schema({probatio.Required("summary"): str}),
     )
 
     result = await entity._async_generate_data(task, DummyChatLog())
@@ -2716,7 +2715,7 @@ async def test_ai_task_entity_uses_task_llm_api_tools():
         "role": "tool",
         "tool_call_id": "call_real",
         "name": "GetState",
-        "content": '{"state":"on"}',
+        "content": '{"data":{"state":"on"},"error":false}',
     } in client.requests[1].messages
 
 
@@ -2742,7 +2741,7 @@ async def test_ai_task_entity_uses_tools_with_structure_and_image(tmp_path):
     task = GenDataTask(
         name="state_summary",
         instructions="Summarize this camera image and kitchen light state.",
-        structure=vol.Schema({vol.Required("summary"): str}),
+        structure=probatio.Schema({probatio.Required("summary"): str}),
         attachments=attachments,
     )
     chat_log = await async_dummy_tool_chat_log()

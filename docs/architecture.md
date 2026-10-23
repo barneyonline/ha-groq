@@ -101,9 +101,14 @@ estimation considers text, tools and schemas without treating base64 image bytes
 as text tokens. It is a heuristic; provider context enforcement remains authoritative.
 Image count and byte limits apply independently.
 
-Keep the schema-type-aware Probatio/Voluptuous OpenAPI adapter while the supported
-HA range needs both. Package availability alone is insufficient in mixed upgrade
-environments.
+Home Assistant LLM tools use Probatio schemas, so tool descriptions use its
+OpenAPI serializer directly. Config forms, action validation and AI task output
+structures also use Probatio.
+
+Conditional Structured Outputs fields use Home Assistant's visibility markers
+when available. The ordinary Probatio optional markers remain necessary on
+HA 2026.10, which predates the visibility API. Both paths preserve saved schema
+settings when fields are omitted or validation is retried.
 
 ## Network failures and repairs
 
@@ -160,11 +165,20 @@ claims about actual device or provider performance.
 
 ## Validation and performance evidence
 
-The primary and minimum Docker harnesses currently run HA 2026.9.0 with pytest
-helper 0.13.363. Image digests are pinned. Both verify
+The primary and minimum Docker harnesses currently run HA 2026.10.0 with pytest
+helper 0.13.371. Image digests are pinned. Both verify
 the original image's Core version after dependency installation and check package
 consistency. An incompatible `HA_IMAGE` override fails instead of silently testing
-a downgraded Core. `scripts/test --minimum` selects the separate minimum container.
+a downgraded Core. `scripts/test --minimum` selects the separate minimum container. The disposable
+Groq test image removes the unrelated bundled Sure Petcare `surepy` package,
+whose Rich dependency conflicts with the HA pytest helper; dependency validation
+remains enabled.
+
+Assist uses HA's prepared ChatLog prompt, current tool results and Probatio tool
+schemas directly. Streaming returns the completed assistant content supplied by HA
+without keeping another copy of each text delta. Action description YAML is parsed
+once per HA instance; each refresh rebuilds the current service options once per
+service type and copies the cached descriptions before adding those options.
 
 Tests combine pure unit cases with real HA config entries, immutable subentries,
 flow managers, entity/issue registries, service dispatch and ChatLog. Outbound Groq

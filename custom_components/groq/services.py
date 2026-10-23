@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlparse
 
-import voluptuous as vol
+import probatio
 from homeassistant.auth.permissions.const import POLICY_READ
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID
@@ -115,6 +115,7 @@ MAX_IMAGE_BYTES = 20 * 1024 * 1024
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 _REGISTERED = "services_registered"
+_SERVICE_DESCRIPTIONS = "service_descriptions"
 _SERVICES_YAML = Path(__file__).with_name("services.yaml")
 
 
@@ -144,94 +145,104 @@ def is_media_source_id(value: str) -> bool:
     return bool(check(value))
 
 
-_ENTRY_SELECTOR = vol.Optional(ATTR_CONFIG_ENTRY_ID)
-_REQUIRED_ENTRY_SELECTOR = vol.Required(ATTR_CONFIG_ENTRY_ID)
-_SERVICE_SELECTOR = vol.Required(ATTR_SERVICE_ID)
-_MODEL_SELECTOR = vol.Optional(ATTR_MODEL)
+_ENTRY_SELECTOR = probatio.Optional(ATTR_CONFIG_ENTRY_ID)
+_REQUIRED_ENTRY_SELECTOR = probatio.Required(ATTR_CONFIG_ENTRY_ID)
+_SERVICE_SELECTOR = probatio.Required(ATTR_SERVICE_ID)
+_MODEL_SELECTOR = probatio.Optional(ATTR_MODEL)
 _TEXT_OPTIONS = {
     _ENTRY_SELECTOR: cv.string,
     _SERVICE_SELECTOR: cv.string,
     _MODEL_SELECTOR: cv.string,
-    vol.Required(ATTR_PROMPT): cv.string,
-    vol.Optional(ATTR_SYSTEM_PROMPT): cv.string,
-    vol.Optional(ATTR_TEMPERATURE): vol.All(vol.Coerce(float), vol.Range(min=0, max=2)),
-    vol.Optional(ATTR_MAX_TOKENS): vol.All(vol.Coerce(int), vol.Range(min=1)),
-    vol.Optional(ATTR_TOP_P): vol.All(vol.Coerce(float), vol.Range(min=0, max=1)),
-    vol.Optional(ATTR_STOP): vol.Any(cv.string, [cv.string]),
-    vol.Optional(ATTR_SEED): vol.All(vol.Coerce(int), vol.Range(min=0)),
-    vol.Optional(ATTR_SERVICE_TIER): cv.string,
-    vol.Optional(ATTR_REASONING_EFFORT): cv.string,
-    vol.Optional(ATTR_REASONING_FORMAT): cv.string,
-    vol.Optional(ATTR_INCLUDE_REASONING): cv.boolean,
-    vol.Optional(ATTR_REQUEST_BODY_OPTIONS): dict,
-    vol.Optional("browser_search"): cv.boolean,
+    probatio.Required(ATTR_PROMPT): cv.string,
+    probatio.Optional(ATTR_SYSTEM_PROMPT): cv.string,
+    probatio.Optional(ATTR_TEMPERATURE): probatio.All(
+        probatio.Coerce(float), probatio.Range(min=0, max=2)
+    ),
+    probatio.Optional(ATTR_MAX_TOKENS): probatio.All(
+        probatio.Coerce(int), probatio.Range(min=1)
+    ),
+    probatio.Optional(ATTR_TOP_P): probatio.All(
+        probatio.Coerce(float), probatio.Range(min=0, max=1)
+    ),
+    probatio.Optional(ATTR_STOP): probatio.Any(cv.string, [cv.string]),
+    probatio.Optional(ATTR_SEED): probatio.All(
+        probatio.Coerce(int), probatio.Range(min=0)
+    ),
+    probatio.Optional(ATTR_SERVICE_TIER): cv.string,
+    probatio.Optional(ATTR_REASONING_EFFORT): cv.string,
+    probatio.Optional(ATTR_REASONING_FORMAT): cv.string,
+    probatio.Optional(ATTR_INCLUDE_REASONING): cv.boolean,
+    probatio.Optional(ATTR_REQUEST_BODY_OPTIONS): dict,
+    probatio.Optional("browser_search"): cv.boolean,
 }
 
-GENERATE_TEXT_SCHEMA = vol.Schema(
+GENERATE_TEXT_SCHEMA = probatio.Schema(
     {
         **_TEXT_OPTIONS,
-        vol.Optional(ATTR_SCHEMA): dict,
-        vol.Optional(ATTR_SCHEMA_NAME): cv.string,
-        vol.Optional(ATTR_STRICT): cv.boolean,
+        probatio.Optional(ATTR_SCHEMA): dict,
+        probatio.Optional(ATTR_SCHEMA_NAME): cv.string,
+        probatio.Optional(ATTR_STRICT): cv.boolean,
     }
 )
 GENERATE_STRUCTURED_SCHEMA = GENERATE_TEXT_SCHEMA
-VISION_SCHEMA = vol.Schema(
+VISION_SCHEMA = probatio.Schema(
     {
         **cv.TARGET_SERVICE_FIELDS,
         _ENTRY_SELECTOR: cv.string,
         _SERVICE_SELECTOR: cv.string,
         _MODEL_SELECTOR: cv.string,
-        vol.Required(ATTR_PROMPT): cv.string,
-        vol.Optional(ATTR_SYSTEM_PROMPT): cv.string,
-        vol.Optional(ATTR_CAMERA_ENTITY_ID): cv.entity_id,
-        vol.Optional(ATTR_IMAGE_FILE): cv.string,
-        vol.Optional(ATTR_IMAGE_PATH): cv.string,
-        vol.Optional(ATTR_IMAGE_URL): cv.string,
+        probatio.Required(ATTR_PROMPT): cv.string,
+        probatio.Optional(ATTR_SYSTEM_PROMPT): cv.string,
+        probatio.Optional(ATTR_CAMERA_ENTITY_ID): cv.entity_id,
+        probatio.Optional(ATTR_IMAGE_FILE): cv.string,
+        probatio.Optional(ATTR_IMAGE_PATH): cv.string,
+        probatio.Optional(ATTR_IMAGE_URL): cv.string,
     }
 )
-OCR_SCHEMA = vol.Schema(
+OCR_SCHEMA = probatio.Schema(
     {
         **cv.TARGET_SERVICE_FIELDS,
         _ENTRY_SELECTOR: cv.string,
         _SERVICE_SELECTOR: cv.string,
         _MODEL_SELECTOR: cv.string,
-        vol.Optional(
+        probatio.Optional(
             ATTR_PROMPT,
             default="Extract all visible text from this image. Return only the text.",
         ): cv.string,
-        vol.Optional(ATTR_SYSTEM_PROMPT): cv.string,
-        vol.Optional(ATTR_CAMERA_ENTITY_ID): cv.entity_id,
-        vol.Optional(ATTR_IMAGE_FILE): cv.string,
-        vol.Optional(ATTR_IMAGE_PATH): cv.string,
-        vol.Optional(ATTR_IMAGE_URL): cv.string,
+        probatio.Optional(ATTR_SYSTEM_PROMPT): cv.string,
+        probatio.Optional(ATTR_CAMERA_ENTITY_ID): cv.entity_id,
+        probatio.Optional(ATTR_IMAGE_FILE): cv.string,
+        probatio.Optional(ATTR_IMAGE_PATH): cv.string,
+        probatio.Optional(ATTR_IMAGE_URL): cv.string,
     }
 )
-_AUDIO_SCHEMA = vol.Schema(
+_AUDIO_SCHEMA = probatio.Schema(
     {
         _ENTRY_SELECTOR: cv.string,
         _SERVICE_SELECTOR: cv.string,
         _MODEL_SELECTOR: cv.string,
-        vol.Optional(ATTR_AUDIO_FILE): cv.string,
-        vol.Optional(ATTR_AUDIO_PATH): cv.string,
-        vol.Optional(ATTR_LANGUAGE): cv.string,
-        vol.Optional(ATTR_PROMPT): cv.string,
+        probatio.Optional(ATTR_AUDIO_FILE): cv.string,
+        probatio.Optional(ATTR_AUDIO_PATH): cv.string,
+        probatio.Optional(ATTR_LANGUAGE): cv.string,
+        probatio.Optional(ATTR_PROMPT): cv.string,
     }
 )
 TRANSCRIBE_AUDIO_SCHEMA = _AUDIO_SCHEMA.extend(
     {
-        vol.Optional("response_format"): vol.In({"json", "verbose_json"}),
-        vol.Optional("timestamp_granularities"): [vol.In({"word", "segment"})],
+        probatio.Optional("response_format"): probatio.In({"json", "verbose_json"}),
+        probatio.Optional("timestamp_granularities"): [
+            probatio.In({"word", "segment"})
+        ],
     }
 )
-TRANSLATE_AUDIO_SCHEMA = vol.Schema(
+TRANSLATE_AUDIO_SCHEMA = probatio.Schema(
     {key: value for key, value in _AUDIO_SCHEMA.schema.items() if key != ATTR_LANGUAGE}
 )
-CLEAR_CACHE_SCHEMA = vol.Schema({_REQUIRED_ENTRY_SELECTOR: cv.string})
-LIST_MODELS_SCHEMA = vol.Schema(
+CLEAR_CACHE_SCHEMA = probatio.Schema({_REQUIRED_ENTRY_SELECTOR: cv.string})
+LIST_MODELS_SCHEMA = probatio.Schema(
     {
         _REQUIRED_ENTRY_SELECTOR: cv.string,
-        vol.Optional(ATTR_REFRESH, default=False): cv.boolean,
+        probatio.Optional(ATTR_REFRESH, default=False): cv.boolean,
     }
 )
 
@@ -1341,29 +1352,27 @@ async def async_update_service_descriptions(
     exclude_entry_id: str | None = None,
 ) -> None:
     """Populate Groq action descriptions with currently configured services."""
-    if not hasattr(hass, "services") or not hasattr(hass.services, "supports_response"):
-        return
-    if hasattr(hass, "async_add_executor_job"):
-        descriptions = await hass.async_add_executor_job(load_yaml, _SERVICES_YAML)
-    else:
-        descriptions = load_yaml(_SERVICES_YAML)
-    if not isinstance(descriptions, dict):
-        return
+    data = _domain_data(hass)
+    if _SERVICE_DESCRIPTIONS not in data:
+        data[_SERVICE_DESCRIPTIONS] = await hass.async_add_executor_job(
+            load_yaml, _SERVICES_YAML
+        )
+    descriptions = cast(dict[str, Any], data[_SERVICE_DESCRIPTIONS])
+    options_by_type = {
+        service_type: _service_options(
+            hass, service_type, exclude_entry_id=exclude_entry_id
+        )
+        for service_type in set(_SERVICE_FIELD_TYPES.values())
+    }
     for service_name, service_type in _SERVICE_FIELD_TYPES.items():
-        description = descriptions.get(service_name)
-        if not isinstance(description, dict):
-            continue
+        description = descriptions[service_name]
         service_helper.async_set_service_schema(
             hass,
             DOMAIN,
             service_name,
             _apply_service_options(
                 description,
-                _service_options(
-                    hass,
-                    service_type,
-                    exclude_entry_id=exclude_entry_id,
-                ),
+                options_by_type[service_type],
             ),
         )
 
@@ -1487,7 +1496,3 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_LIST_MODELS,
     ):
         hass.services.async_remove(DOMAIN, service)
-
-
-async_setup_services = async_register_services
-async_unload_services = async_unregister_services
