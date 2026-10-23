@@ -36,8 +36,11 @@ from .const import (
     CONF_NORMALIZE_AUDIO,
     CONF_RESPONSE_FORMAT,
     CONF_SAMPLE_RATE,
+    CONF_SCHEMA,
+    CONF_SCHEMA_NAME,
     CONF_SERVICE_TYPE,
     CONF_SPEED,
+    CONF_STRICT,
     CONF_VOCAL_DIRECTIONS,
     CONF_VOICE,
     DEFAULT_MODEL,
@@ -714,6 +717,11 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
             model_registry = await self._model_registry()
             errors = validate_text_generation_input(service_data, model_registry)
             if errors:
+                # A retry can hide these fields. Retain edits, including an
+                # explicitly cleared schema, before HA omits them next time.
+                for key in (CONF_SCHEMA_NAME, CONF_SCHEMA, CONF_STRICT):
+                    if key in user_input:
+                        self._pending_service_data[key] = user_input[key]
                 advanced_errors = {
                     "base" if field == CONF_MODEL else field: reason
                     for field, reason in errors.items()
