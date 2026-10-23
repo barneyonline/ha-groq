@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import voluptuous as vol
+from homeassistant import data_entry_flow
 from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.helpers.selector import Selector, selector
 
@@ -626,6 +627,22 @@ def _optional_value(values: dict[str, Any], key: str) -> vol.Optional:
     return vol.Optional(key, default=value if value is not None else vol.UNDEFINED)
 
 
+def _structured_output_option(key: str, default: Any) -> vol.Optional:
+    """Condition schema fields on their toggle when HA supports visibility."""
+    # HA 2026.11 adds this marker; older supported versions show all fields.
+    optional = getattr(data_entry_flow, "Optional", None)
+    if optional is None:
+        return vol.Optional(key, default=default)
+    return cast(
+        vol.Optional,
+        optional(
+            key,
+            default=default,
+            visible={"field": CONF_STRUCTURED_OUTPUTS, "value": True},
+        ),
+    )
+
+
 def text_generation_advanced_schema(
     user_input: dict[str, Any] | None = None,
     model_registry: GroqModelRegistry | None = None,
@@ -702,16 +719,16 @@ def text_generation_advanced_schema(
                     CONF_STRUCTURED_OUTPUTS,
                     default=values.get(CONF_STRUCTURED_OUTPUTS, False),
                 ): selector({"boolean": {}}),
-                vol.Optional(
+                _structured_output_option(
                     CONF_SCHEMA_NAME,
-                    default=values.get(CONF_SCHEMA_NAME, "response"),
+                    values.get(CONF_SCHEMA_NAME, "response"),
                 ): str,
-                vol.Optional(
-                    CONF_SCHEMA, default=values.get(CONF_SCHEMA, {})
+                _structured_output_option(
+                    CONF_SCHEMA, values.get(CONF_SCHEMA, {})
                 ): selector({"object": {}}),
-                vol.Optional(CONF_STRICT, default=values.get(CONF_STRICT, False)): (
-                    selector({"boolean": {}})
-                ),
+                _structured_output_option(
+                    CONF_STRICT, values.get(CONF_STRICT, False)
+                ): selector({"boolean": {}}),
             }
         )
     schema[

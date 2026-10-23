@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Show Schema Name, Schema and Strict only when Structured Outputs is enabled on Home Assistant 2026.11 and newer. Preserve saved values when disabled, retain model-capability filtering, and keep the unconditional form on older supported versions.
+
 ## v2.0.3 - 2026-10-04
 
 ### 🚧 Breaking changes

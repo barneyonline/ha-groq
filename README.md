@@ -98,6 +98,8 @@ After adding an account, open the Groq integration page and add one or more serv
 
 Additional Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, Compound built-in tool allow-lists, structured output schema, strict schema mode, and additional Groq request body options.
 
+On Home Assistant 2026.11 and newer, Schema Name, Schema and Strict appear only while Structured Outputs is enabled for a compatible model. Older supported Home Assistant versions always show these fields for compatible models. Disabling Structured Outputs preserves the saved schema, name and strictness for reuse; switching to a model without Structured Outputs support clears those settings.
+
 Local response caching is opt-in per configured service. Disabling it for one service remains effective when another service enables caching. Responses expire and share a 16 MiB serialized-content budget per account. Speech audio caches share a separate 64 MiB account budget in addition to their configured item limits. These caches are local to Home Assistant and are distinct from Groq's provider-side prompt caching.
 
 Explicit action arguments override service defaults; omitted structured-output fields inherit the configured schema name and strictness. Structured results are validated locally before being returned or cached, including JSON fallback for models without native schema output. Clearing the Assist control selection disables those Home Assistant tools without discarding other advanced settings.

@@ -703,6 +703,9 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
     ) -> SubentryFlowResult:
         """Configure advanced text generation request options."""
         if user_input is not None:
+            # HA omits fields hidden by the Structured Outputs toggle. Merge
+            # those fields from the capability-sanitized data so disabling the
+            # toggle keeps the schema, name, and strictness for later reuse.
             service_data = {
                 **self._pending_service_data,
                 **user_input,
