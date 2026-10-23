@@ -159,6 +159,49 @@ async def test_validation_retry_keeps_saved_schema(monkeypatch, conditional_api)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("schema", [{"type": "array", "items": {"type": "string"}}, {}])
+async def test_validation_retry_retains_edits_before_hiding_fields(
+    monkeypatch, conditional_api, schema
+):
+    """A retry must not revert visible edits when the next submit omits them."""
+    flow = config_flow.GroqServiceSubentryFlow()
+    _patch_flow_common(monkeypatch, flow)
+    flow._pending_service_data = {
+        "model": MODEL,
+        "structured_outputs": True,
+        **deepcopy(SAVED),
+    }
+    edited = {"schema_name": "edited_response", "schema": schema, "strict": False}
+    result = await flow.async_step_text_generation_advanced(
+        {
+            "structured_outputs": True,
+            **edited,
+            "request_body_options": {"model": "invalid"},
+        }
+    )
+    assert result["errors"] == {"request_body_options": "reserved_request_body_option"}
+    defaults = result["data_schema"]({})
+    assert {key: defaults[key] for key in SCHEMA_FIELDS} == edited
+    reopened = await flow.async_step_text_generation_advanced()
+    defaults = reopened["data_schema"]({})
+    assert {key: defaults[key] for key in SCHEMA_FIELDS} == edited
+
+    # Hidden fields are omitted by HA's conditional API. Submit directly to
+    # avoid the older runtime injecting schema defaults into this payload.
+    result = await flow.async_step_text_generation_advanced(
+        {"structured_outputs": False, "request_body_options": {}}
+    )
+    assert result["type"] == "create_entry"
+    assert result["data"]["structured_outputs"] is False
+    assert result["data"]["schema_name"] == edited["schema_name"]
+    assert result["data"]["strict"] is False
+    if schema:
+        assert result["data"]["schema"] == schema
+    else:
+        assert "schema" not in result["data"]
+
+
+@pytest.mark.asyncio
 async def test_model_change_clears_hidden_schema(monkeypatch, conditional_api):
     flow = config_flow.GroqServiceSubentryFlow()
     _patch_flow_common(monkeypatch, flow)
