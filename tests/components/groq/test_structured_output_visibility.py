@@ -8,7 +8,7 @@ from copy import deepcopy
 from unittest.mock import AsyncMock
 
 import pytest
-import voluptuous as vol
+import probatio
 from homeassistant import data_entry_flow
 
 from custom_components.groq import config_flow, flow_schemas
@@ -30,7 +30,7 @@ SAVED = {
 }
 
 
-class ConditionalOptional(vol.Optional):
+class ConditionalOptional(probatio.Optional):
     """Capture the documented HA marker arguments without emulating rendering."""
 
     def __init__(self, *args, visible=None, **kwargs):
@@ -73,11 +73,11 @@ def test_only_structured_schema_fields_have_visibility(conditional_api, enabled,
         "schema": {},
         "strict": False,
     }.items():
-        assert isinstance(markers[key], vol.Optional)
+        assert isinstance(markers[key], probatio.Optional)
         assert markers[key].default() == saved.get(key, default)
     # Reasoning controls retain their ordinary markers in both API branches.
     for key in ("reasoning_effort", "reasoning_format", "include_reasoning"):
-        assert type(markers[key]) is vol.Optional
+        assert type(markers[key]) is probatio.Optional
 
 
 def test_unsupported_model_has_no_structured_fields(conditional_api):

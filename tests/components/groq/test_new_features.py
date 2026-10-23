@@ -7,8 +7,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import probatio
 import pytest
-import voluptuous as vol
 from homeassistant.components import conversation
 from homeassistant.core import Context, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
@@ -572,7 +572,7 @@ async def test_real_chat_log_streams_and_executes_only_completed_exposed_tools(
             SimpleNamespace(
                 name="Operate",
                 description="Operate a light",
-                parameters=vol.Schema({vol.Required("entity_id"): str}),
+                parameters=probatio.Schema({probatio.Required("entity_id"): str}),
             )
         ],
         custom_serializer=None,
@@ -802,7 +802,7 @@ async def test_structured_ai_task_rejects_browser_search_before_tools(hass):
             GenDataTask(
                 name="data",
                 instructions="Generate",
-                structure=vol.Schema({vol.Required("value"): str}),
+                structure=probatio.Schema({probatio.Required("value"): str}),
             ),
             conversation.ChatLog(hass, "task"),
         )

@@ -67,7 +67,7 @@ scripts/test python -m pytest tests/components/groq -q
 scripts/test python -m pytest -q
 ```
 
-The primary harness uses Home Assistant 2026.9.0. Verify the advertised minimum
+The primary harness uses Home Assistant 2026.10.0. Verify the advertised minimum
 separately with `scripts/test --minimum python -m pytest tests/components/groq -q`.
 Both environments verify the actual Core/helper versions and run dependency checks
 when built. `HA_IMAGE` overrides must match the helper dependency; incompatible

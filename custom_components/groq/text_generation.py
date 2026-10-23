@@ -7,7 +7,7 @@ import re
 from dataclasses import fields
 from typing import Any, TypedDict
 
-import voluptuous as vol
+import probatio
 
 from .api import (
     RESERVED_CHAT_BODY_OPTIONS,
@@ -650,7 +650,7 @@ def selector_to_json_schema(validator: Any) -> dict[str, Any]:
     selector_type = getattr(validator, "selector_type", None)
     config = getattr(validator, "config", {}) or {}
 
-    # AI tasks can provide voluptuous structures with HA selectors. Convert only
+    # AI tasks can provide Probatio structures with HA selectors. Convert only
     # the selector shapes this integration can represent safely as JSON Schema.
     if selector_type == "text":
         return {"type": "string"}
@@ -686,12 +686,12 @@ def selector_to_json_schema(validator: Any) -> dict[str, Any]:
         return {"type": "integer"}
     if validator is float:
         return {"type": "number"}
-    if isinstance(validator, vol.Schema):
-        return voluptuous_schema_to_json_schema(validator)
+    if isinstance(validator, probatio.Schema):
+        return schema_to_json_schema(validator)
     return {}
 
 
-def voluptuous_schema_to_json_schema(schema: vol.Schema) -> dict[str, Any]:
+def schema_to_json_schema(schema: probatio.Schema) -> dict[str, Any]:
     """Convert a simple Home Assistant AI task structure to JSON Schema."""
     properties: dict[str, Any] = {}
     required: list[str] = []
@@ -708,8 +708,8 @@ def voluptuous_schema_to_json_schema(schema: vol.Schema) -> dict[str, Any]:
             field_schema = {**field_schema, "description": description}
         properties[name] = field_schema
         # Groq strict structured outputs need an explicit required list rather
-        # than relying on voluptuous marker objects.
-        if isinstance(marker, vol.Required):
+        # than relying on Probatio marker objects.
+        if isinstance(marker, probatio.Required):
             required.append(name)
 
     json_schema: dict[str, Any] = {

@@ -1,10 +1,10 @@
-"""Voluptuous schemas used by the Groq config and subentry flows."""
+"""Probatio schemas used by the Groq config and subentry flows."""
 
 from __future__ import annotations
 
 from typing import Any, cast
 
-import voluptuous as vol
+import probatio
 from homeassistant import data_entry_flow
 from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.helpers.selector import Selector, selector
@@ -354,21 +354,21 @@ def api_key_selector() -> Selector[Any]:
     return selector({"text": {"type": "password"}})
 
 
-def setup_schema() -> vol.Schema:
+def setup_schema() -> probatio.Schema:
     """Return the account-level setup schema."""
-    return vol.Schema(
+    return probatio.Schema(
         {
-            vol.Required(CONF_NAME, default="Groq"): str,
-            vol.Required(CONF_API_KEY): api_key_selector(),
+            probatio.Required(CONF_NAME, default="Groq"): str,
+            probatio.Required(CONF_API_KEY): api_key_selector(),
         }
     )
 
 
-def service_type_schema() -> vol.Schema:
+def service_type_schema() -> probatio.Schema:
     """Return the Groq service type selector schema."""
-    return vol.Schema(
+    return probatio.Schema(
         {
-            vol.Required(CONF_SERVICE_TYPE): selector(
+            probatio.Required(CONF_SERVICE_TYPE): selector(
                 {
                     "select": {
                         "options": [
@@ -386,7 +386,7 @@ def service_type_schema() -> vol.Schema:
 def _protect_free_tier_field(values: dict[str, Any]) -> tuple[Any, Any]:
     """Return the shared per-service free-tier protection schema field."""
     return (
-        vol.Optional(
+        probatio.Optional(
             CONF_PROTECT_FREE_TIER,
             default=values.get(CONF_PROTECT_FREE_TIER, DEFAULT_PROTECT_FREE_TIER),
         ),
@@ -398,7 +398,7 @@ def speech_to_text_schema(
     user_input: dict[str, Any] | None = None,
     model_options: list[str] | None = None,
     default_language: str | None = None,
-) -> vol.Schema:
+) -> probatio.Schema:
     """Return the speech-to-text service schema."""
     values = user_input or {}
     models = model_options or STT_MODELS
@@ -409,17 +409,17 @@ def speech_to_text_schema(
         default_language or DEFAULT_STT_LANGUAGE,
         STT_LANGUAGES,
     )
-    return vol.Schema(
+    return probatio.Schema(
         {
-            vol.Required(
+            probatio.Required(
                 CONF_NAME,
                 default=values.get(CONF_NAME, "Speech-to-Text"),
             ): str,
-            vol.Required(
+            probatio.Required(
                 CONF_MODEL,
                 default=_model_default(values, CONF_MODEL, DEFAULT_STT_MODEL, models),
             ): selector({"select": {"options": models}}),
-            vol.Required(
+            probatio.Required(
                 CONF_LANGUAGE,
                 default=language_default,
             ): selector({"select": {"options": STT_LANGUAGE_OPTIONS}}),
@@ -435,7 +435,7 @@ def text_to_speech_schema(
     *,
     clear_voice: bool = False,
     ffmpeg_available: bool = True,
-) -> vol.Schema:
+) -> probatio.Schema:
     """Return the text-to-speech service schema."""
     values = user_input or {}
     models = model_options or MODELS
@@ -445,31 +445,31 @@ def text_to_speech_schema(
     ffmpeg_option_selector = selector({"boolean": {"read_only": not ffmpeg_available}})
     sample_rate_default = _sample_rate_default(values)
     sample_rate_field = (
-        vol.Optional(CONF_SAMPLE_RATE, default=sample_rate_default)
+        probatio.Optional(CONF_SAMPLE_RATE, default=sample_rate_default)
         if sample_rate_default is not None
-        else vol.Optional(CONF_SAMPLE_RATE)
+        else probatio.Optional(CONF_SAMPLE_RATE)
     )
     response_formats = RESPONSE_FORMATS
     voice_field = (
-        vol.Required(CONF_VOICE)
+        probatio.Required(CONF_VOICE)
         if clear_voice
-        else vol.Required(
+        else probatio.Required(
             CONF_VOICE,
             default=_model_default(values, CONF_VOICE, DEFAULT_VOICE, voices),
         )
     )
-    return vol.Schema(
+    return probatio.Schema(
         {
-            vol.Required(
+            probatio.Required(
                 CONF_NAME,
                 default=values.get(CONF_NAME, "Text-to-Speech"),
             ): str,
-            vol.Required(
+            probatio.Required(
                 CONF_MODEL,
                 default=selected_model,
             ): selector({"select": {"options": models}}),
             voice_field: selector({"select": {"options": voices}}),
-            vol.Optional(
+            probatio.Optional(
                 CONF_RESPONSE_FORMAT,
                 default=(
                     _response_format_default(values)
@@ -487,7 +487,7 @@ def text_to_speech_schema(
                     }
                 }
             ),
-            vol.Optional(
+            probatio.Optional(
                 CONF_SPEED,
                 default=_speed_default(values),
             ): selector(
@@ -500,7 +500,7 @@ def text_to_speech_schema(
                     }
                 }
             ),
-            vol.Optional(
+            probatio.Optional(
                 CONF_VOCAL_DIRECTIONS,
                 default=_vocal_directions_default(values),
             ): selector(
@@ -512,7 +512,7 @@ def text_to_speech_schema(
                     }
                 }
             ),
-            vol.Optional(
+            probatio.Optional(
                 CONF_NORMALIZE_AUDIO,
                 default=(
                     values.get(CONF_NORMALIZE_AUDIO, False)
@@ -520,7 +520,7 @@ def text_to_speech_schema(
                     else False
                 ),
             ): ffmpeg_option_selector,
-            vol.Optional(
+            probatio.Optional(
                 CONF_ENABLE_LONG_TTS,
                 default=(
                     values.get(CONF_ENABLE_LONG_TTS, False)
@@ -536,24 +536,24 @@ def text_to_speech_schema(
 def image_recognition_schema(
     user_input: dict[str, Any] | None = None,
     model_options: list[str] | None = None,
-) -> vol.Schema:
+) -> probatio.Schema:
     """Return the image recognition service schema."""
     values = user_input or {}
     models = model_options or VISION_MODELS
     protect_field, protect_selector = _protect_free_tier_field(values)
-    return vol.Schema(
+    return probatio.Schema(
         {
-            vol.Required(
+            probatio.Required(
                 CONF_NAME,
                 default=values.get(CONF_NAME, "Image Recognition"),
             ): str,
-            vol.Required(
+            probatio.Required(
                 CONF_MODEL,
                 default=_model_default(
                     values, CONF_MODEL, DEFAULT_VISION_MODEL, models
                 ),
             ): selector({"select": {"options": models}}),
-            vol.Optional(
+            probatio.Optional(
                 CONF_SYSTEM_PROMPT,
                 default=values.get(CONF_SYSTEM_PROMPT, ""),
             ): str,
@@ -568,18 +568,18 @@ def text_generation_basic_schema(
     model_registry: GroqModelRegistry | None = None,
     *,
     llm_api_options: list[dict[str, str]] | None = None,
-) -> vol.Schema:
+) -> probatio.Schema:
     """Return the basic text generation service schema."""
     values = user_input or {}
     models = model_options or TEXT_MODELS
     protect_field, protect_selector = _protect_free_tier_field(values)
-    return vol.Schema(
+    return probatio.Schema(
         {
-            vol.Required(
+            probatio.Required(
                 CONF_NAME,
                 default=values.get(CONF_NAME, "Text Generation"),
             ): str,
-            vol.Required(
+            probatio.Required(
                 CONF_MODEL,
                 default=_model_default(values, CONF_MODEL, DEFAULT_TEXT_MODEL, models),
             ): selector(
@@ -592,11 +592,11 @@ def text_generation_basic_schema(
                     }
                 }
             ),
-            vol.Optional(
+            probatio.Optional(
                 CONF_SYSTEM_PROMPT,
                 default=values.get(CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT),
             ): selector({"text": {"multiline": True}}),
-            vol.Optional(
+            probatio.Optional(
                 CONF_LLM_HASS_API,
                 default=values.get(CONF_LLM_HASS_API, []),
             ): selector(
@@ -608,11 +608,11 @@ def text_generation_basic_schema(
                     }
                 }
             ),
-            vol.Optional(
+            probatio.Optional(
                 CONF_TEMPERATURE,
                 default=values.get(CONF_TEMPERATURE, DEFAULT_TEXT_TEMPERATURE),
             ): selector({"number": {"min": 0, "max": 2, "step": 0.1, "mode": "box"}}),
-            vol.Optional(
+            probatio.Optional(
                 CONF_ADVANCED_OPTIONS,
                 default=values.get(CONF_ADVANCED_OPTIONS, False),
             ): selector({"boolean": {}}),
@@ -621,20 +621,22 @@ def text_generation_basic_schema(
     )
 
 
-def _optional_value(values: dict[str, Any], key: str) -> vol.Optional:
+def _optional_value(values: dict[str, Any], key: str) -> probatio.Optional:
     """Omit unset optional defaults instead of validating None as selector input."""
     value = values.get(key)
-    return vol.Optional(key, default=value if value is not None else vol.UNDEFINED)
+    return probatio.Optional(
+        key, default=value if value is not None else probatio.UNDEFINED
+    )
 
 
-def _structured_output_option(key: str, default: Any) -> vol.Optional:
+def _structured_output_option(key: str, default: Any) -> probatio.Optional:
     """Condition schema fields on their toggle when HA supports visibility."""
-    # HA 2026.11 adds this marker; older supported versions show all fields.
+    # HA 2026.11 adds this marker; HA 2026.10 still needs ordinary Probatio fields.
     optional = getattr(data_entry_flow, "Optional", None)
     if optional is None:
-        return vol.Optional(key, default=default)
+        return probatio.Optional(key, default=default)
     return cast(
-        vol.Optional,
+        probatio.Optional,
         optional(
             key,
             default=default,
@@ -646,7 +648,7 @@ def _structured_output_option(key: str, default: Any) -> vol.Optional:
 def text_generation_advanced_schema(
     user_input: dict[str, Any] | None = None,
     model_registry: GroqModelRegistry | None = None,
-) -> vol.Schema:
+) -> probatio.Schema:
     """Return advanced text generation request options."""
     values = user_input or {}
     model = str(values.get(CONF_MODEL, ""))
@@ -661,30 +663,32 @@ def text_generation_advanced_schema(
         _optional_value(values, CONF_SEED): selector(
             {"number": {"min": 0, "step": 1, "mode": "box"}}
         ),
-        vol.Optional(
+        probatio.Optional(
             CONF_SERVICE_TIER,
             default=values.get(CONF_SERVICE_TIER, ""),
         ): selector({"select": {"options": SERVICE_TIER_OPTIONS}}),
-        vol.Optional(CONF_STREAM, default=values.get(CONF_STREAM, True)): selector(
+        probatio.Optional(CONF_STREAM, default=values.get(CONF_STREAM, True)): selector(
             {"boolean": {}}
         ),
     }
     if model in BROWSER_SEARCH_MODELS:
         schema[
-            vol.Optional("browser_search", default=values.get("browser_search", False))
+            probatio.Optional(
+                "browser_search", default=values.get("browser_search", False)
+            )
         ] = selector({"boolean": {}})
     if _supports_model_option(model_registry, model, GroqFeature.REASONING):
         schema.update(
             {
-                vol.Optional(
+                probatio.Optional(
                     CONF_REASONING_EFFORT,
                     default=values.get(CONF_REASONING_EFFORT, ""),
                 ): selector({"select": {"options": REASONING_EFFORT_OPTIONS}}),
-                vol.Optional(
+                probatio.Optional(
                     CONF_REASONING_FORMAT,
                     default=values.get(CONF_REASONING_FORMAT, ""),
                 ): selector({"select": {"options": REASONING_FORMAT_OPTIONS}}),
-                vol.Optional(
+                probatio.Optional(
                     CONF_INCLUDE_REASONING,
                     default=values.get(CONF_INCLUDE_REASONING, False),
                 ): selector({"boolean": {}}),
@@ -692,14 +696,14 @@ def text_generation_advanced_schema(
         )
     if _supports_model_option(model_registry, model, GroqFeature.PROMPT_CACHING):
         schema[
-            vol.Optional(
+            probatio.Optional(
                 CONF_PROMPT_CACHING,
                 default=values.get(CONF_PROMPT_CACHING, False),
             )
         ] = selector({"boolean": {}})
     if _supports_model_option(model_registry, model, GroqCapability.COMPOUND):
         schema[
-            vol.Optional(
+            probatio.Optional(
                 CONF_COMPOUND_BUILTIN_TOOLS,
                 default=values.get(CONF_COMPOUND_BUILTIN_TOOLS, []),
             )
@@ -715,7 +719,7 @@ def text_generation_advanced_schema(
     if _supports_model_option(model_registry, model, GroqFeature.STRUCTURED_OUTPUTS):
         schema.update(
             {
-                vol.Optional(
+                probatio.Optional(
                     CONF_STRUCTURED_OUTPUTS,
                     default=values.get(CONF_STRUCTURED_OUTPUTS, False),
                 ): selector({"boolean": {}}),
@@ -732,12 +736,12 @@ def text_generation_advanced_schema(
             }
         )
     schema[
-        vol.Optional(
+        probatio.Optional(
             CONF_REQUEST_BODY_OPTIONS,
             default=values.get(CONF_REQUEST_BODY_OPTIONS, {}),
         )
     ] = selector({"object": {}})
-    return vol.Schema(schema)
+    return probatio.Schema(schema)
 
 
 def entry_defaults(user_input: dict[str, Any]) -> dict[str, Any]:

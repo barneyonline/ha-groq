@@ -139,28 +139,6 @@ async def test_api_clientsession_helper_preloads_with_executor(monkeypatch):
     assert calls == ["executor", "load"]
 
 
-@pytest.mark.asyncio
-async def test_api_clientsession_helper_falls_back_without_executor(monkeypatch):
-    from custom_components.groq import api
-
-    calls = []
-
-    def factory(hass):
-        return ("session", hass)
-
-    def load_factory():
-        calls.append("load")
-        return factory
-
-    monkeypatch.setattr(api, "_CLIENTSESSION_FACTORY", None)
-    monkeypatch.setattr(api, "_load_clientsession_factory", load_factory)
-
-    await api.async_preload_clientsession_helper(SimpleNamespace())
-
-    assert api.async_get_clientsession("hass") == ("session", "hass")
-    assert calls == ["load"]
-
-
 def test_api_clientsession_helper_loads_on_direct_use(monkeypatch):
     from custom_components.groq import api
 

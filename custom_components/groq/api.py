@@ -80,12 +80,9 @@ async def async_preload_clientsession_helper(hass: HomeAssistant) -> None:
     global _CLIENTSESSION_FACTORY
     if _CLIENTSESSION_FACTORY is not None:
         return
-    if hasattr(hass, "async_add_executor_job"):
-        _CLIENTSESSION_FACTORY = await hass.async_add_executor_job(
-            _load_clientsession_factory
-        )
-        return
-    _CLIENTSESSION_FACTORY = _load_clientsession_factory()
+    _CLIENTSESSION_FACTORY = await hass.async_add_executor_job(
+        _load_clientsession_factory
+    )
 
 
 def async_get_clientsession(hass: HomeAssistant) -> aiohttp.ClientSession:

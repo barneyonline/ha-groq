@@ -2,62 +2,22 @@
 
 from __future__ import annotations
 
-import importlib
 import json
-from collections.abc import Sequence
-from typing import Any, cast
+from typing import Any
 
+import probatio
 from homeassistant.components import conversation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import llm
 
+from .api import ChatCompletionResult
 from .attachments import async_attachment_content_parts
 from .errors import translated_error
 from .feature_registry import GroqFeature
 from .model_registry import GroqModelRegistry
 
-
-def _optional_import(module_name: str) -> Any:
-    """Import an optional module without hiding its broken dependencies."""
-    try:
-        return importlib.import_module(module_name)
-    except ModuleNotFoundError as err:
-        if err.name != module_name:
-            raise
-        return None
-
-
-_probatio = _optional_import("probatio")
-_voluptuous_openapi = _optional_import("voluptuous_openapi")
-
 MAX_HISTORY_MESSAGES = 12
 MAX_TOOL_ITERATIONS = 10
-
-
-def _to_openapi(
-    schema: Any,
-    custom_serializer: Any = None,
-) -> dict[str, Any]:
-    """Convert a tool schema with its matching Home Assistant serializer."""
-    if _probatio is not None and (
-        _voluptuous_openapi is None or isinstance(schema, _probatio.Schema)
-    ):
-        return cast(
-            dict[str, Any],
-            _probatio.to_openapi(
-                schema,
-                custom_serializer=custom_serializer,
-            ),
-        )
-    if _voluptuous_openapi is not None:
-        return cast(
-            dict[str, Any],
-            _voluptuous_openapi.convert(
-                schema,
-                custom_serializer=custom_serializer,
-            ),
-        )
-    raise ImportError("No supported OpenAPI schema serializer is available")
 
 
 def _content_role(content: Any) -> str | None:
@@ -72,11 +32,6 @@ def _content_role(content: Any) -> str | None:
     role = getattr(content, "role", None)
     if role in {"system", "user", "assistant"}:
         return str(role)
-    class_name = content.__class__.__name__.lower()
-    if "assistant" in class_name:
-        return "assistant"
-    if "user" in class_name:
-        return "user"
     return None
 
 
@@ -178,24 +133,14 @@ def _tool_result_message(content: Any) -> dict[str, str] | None:
     if isinstance(content, dict):
         tool_call_id = content.get("tool_call_id", tool_call_id)
         tool_name = content.get("tool_name", tool_name)
-        result = content.get("result")
+        result = content["result"]
     else:
-        result = getattr(content, "result", None)
-    if result is not None:
-        # HA 2026.10 carries failure status separately from the result data.
-        # Do not read the deprecated tool_result property on these objects.
-        tool_result: Any = (
-            {"data": result["data"], "error": result.get("error", False)}
-            if isinstance(result, dict)
-            else {"data": result.data, "error": result.error}
-        )
-    else:
-        # Keep compatibility with Home Assistant 2026.9 chat logs.
-        tool_result = (
-            content.get("tool_result")
-            if isinstance(content, dict)
-            else getattr(content, "tool_result", None)
-        )
+        result = content.result
+    tool_result = (
+        {"data": result["data"], "error": result.get("error", False)}
+        if isinstance(result, dict)
+        else {"data": result.data, "error": result.error}
+    )
     if not isinstance(tool_call_id, str) or not isinstance(tool_name, str):
         return None
     return {
@@ -216,14 +161,8 @@ async def _async_chat_log_messages(
     attachment_cache: dict[tuple[str, str], Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Return OpenAI-compatible messages, including supported image attachments."""
-    history: Sequence[Any] = ()
-    for attr in ("content", "messages"):
-        value = getattr(chat_log, attr, None)
-        if isinstance(value, (list, tuple)):
-            history = value
-            break
     messages: list[dict[str, Any]] = []
-    for item in history:
+    for item in chat_log.content:
         if getattr(item, "role", None) == "tool_result" or (
             isinstance(item, dict) and item.get("role") == "tool_result"
         ):
@@ -302,9 +241,8 @@ def _format_tool(tool: llm.Tool, custom_serializer: Any = None) -> dict[str, Any
     """Return an OpenAI-compatible function tool definition."""
     function: dict[str, Any] = {
         "name": tool.name,
-        "parameters": _to_openapi(
-            tool.parameters,
-            custom_serializer=custom_serializer,
+        "parameters": probatio.to_openapi(
+            tool.parameters, custom_serializer=custom_serializer
         ),
     }
     if tool.description:
@@ -317,38 +255,23 @@ def _format_tool(tool: llm.Tool, custom_serializer: Any = None) -> dict[str, Any
 
 def _chat_log_tools(chat_log: conversation.ChatLog) -> list[dict[str, Any]] | None:
     """Return OpenAI-compatible tools exposed by Home Assistant."""
-    llm_api = getattr(chat_log, "llm_api", None)
+    llm_api = chat_log.llm_api
     if llm_api is None:
         return None
-    tools = getattr(llm_api, "tools", None)
+    tools = llm_api.tools
     if not tools:
         return None
-    custom_serializer = getattr(llm_api, "custom_serializer", None)
+    custom_serializer = llm_api.custom_serializer
     return [_format_tool(tool, custom_serializer) for tool in tools]
 
 
-def _result_tool_calls(result: Any) -> list[llm.ToolInput]:
+def _result_tool_calls(result: ChatCompletionResult) -> list[llm.ToolInput]:
     """Return Home Assistant tool inputs from a Groq chat completion result."""
-    raw_tool_calls = getattr(result, "tool_calls", None)
-    if raw_tool_calls is None:
-        raw = getattr(result, "raw", None)
-        message = None
-        if isinstance(raw, dict):
-            choices = raw.get("choices")
-            if isinstance(choices, list) and choices:
-                first_choice = choices[0]
-                if isinstance(first_choice, dict):
-                    message = first_choice.get("message")
-        if isinstance(message, dict):
-            raw_tool_calls = message.get("tool_calls")
-    if not isinstance(raw_tool_calls, list):
-        return []
+    raw_tool_calls = result.tool_calls or []
 
     tool_inputs: list[llm.ToolInput] = []
     call_ids: set[str] = set()
     for tool_call in raw_tool_calls:
-        if not isinstance(tool_call, dict):
-            continue
         function = tool_call.get("function")
         if not isinstance(function, dict):
             continue
@@ -363,8 +286,6 @@ def _result_tool_calls(result: Any) -> list[llm.ToolInput]:
                 raise translated_error(
                     "Groq returned malformed tool arguments", "invalid_request_options"
                 ) from err
-        elif isinstance(arguments, dict):
-            tool_args = arguments
         else:
             tool_args = arguments
         call_id = tool_call.get("id")
