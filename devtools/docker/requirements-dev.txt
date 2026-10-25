@@ -1,12 +1,8 @@
-pytest
-pytest-asyncio
 # Keep this plugin aligned with the pinned Home Assistant dev image.
+# It supplies pytest, asyncio/coverage plugins, and freezegun; Core supplies PyYAML.
 pytest-homeassistant-custom-component==0.13.371
-pytest-cov
-PyYAML
 mypy==2.3.1
 ruff==0.6.9
 black==26.10.1
-freezegun
 pre-commit
 jsonschema==4.26.0

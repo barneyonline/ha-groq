@@ -79,6 +79,19 @@ controls. Keep the 100% integration and changed-module coverage gates. The optio
 `python -m pytest scripts/benchmark_runtime.py -q -s` command inside the harness
 measures warmed local overhead with mocked provider I/O; it is not live latency.
 
+## Dependency Ownership
+
+Keep the Home Assistant image and matching test plugin aligned. They supply
+their own dependencies, including pytest, its asyncio/coverage plugins,
+freezegun, and PyYAML. Do not duplicate those dependencies in the repository's
+development requirements or export the complete Home Assistant environment to
+GitHub's dependency graph.
+
+Declare the integration's own runtime requirements and independently upgradable
+development tools. Dependabot remains enabled for those declarations. Upstream
+Home Assistant requirements are resolved by the image and test plugin; removing
+duplicate declarations does not change the packages installed in Home Assistant.
+
 ## Coding Standards And Tooling
 
 Home Assistant integrations must follow the [core development guidelines](https://developers.home-assistant.io/docs/development_guidelines/). Key points:
