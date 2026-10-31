@@ -1,0 +1,230 @@
+# Groq user guide
+
+[README](../README.md) · [Project wiki](https://github.com/barneyonline/ha-groq/wiki)
+
+This guide contains the full configuration, action, usage and troubleshooting reference.
+
+- [Supported functionality](#supported-functionality)
+- [Installation](#installation)
+- [Requirements](#requirements)
+- [Configuration](#configuration)
+- [Speech transcription and translation](#speech-transcription-and-translation)
+- [Usage sensors](#usage-sensors)
+- [Streaming and browser search](#streaming-and-browser-search)
+- [Known limitations](#known-limitations)
+- [Troubleshooting](#troubleshooting)
+- [Removal](#removal)
+- [Useful links](#useful-links)
+
+Groq is a cloud API service for fast language, speech, and vision models. This Home Assistant custom integration connects a Groq account to Assist, AI Tasks, speech-to-text, text-to-speech, image analysis, and response actions.
+
+> [!IMPORTANT]
+> This is an unofficial community project. It is not affiliated with, endorsed by, or supported by Groq.
+>
+> Feature availability, model availability, rate limits, token limits, and billing behavior are controlled by Groq and can vary by account, project, and model.
+
+The Platinum quality-scale label is a repository self-assessment against the current Home Assistant integration quality rules. As a custom integration, ha-groq is not reviewed, security audited, maintained, or supported by the Home Assistant project. The rule-by-rule evidence is tracked in [`quality_scale.yaml`](../quality_scale.yaml).
+
+## Supported Functionality
+
+This integration supports Groq cloud accounts. It does not discover or control physical devices.
+
+Supported Home Assistant platforms:
+
+- `conversation`: Assist conversation agents backed by configured Groq text generation services.
+- `ai_task`: data generation tasks for services and automations that need structured output.
+- `stt`: speech-to-text entities for Home Assistant voice pipelines.
+- `tts`: text-to-speech entities for `tts.speak`.
+- `sensor`: optional usage diagnostics on Text Generation and Image Recognition devices.
+
+Provided response actions:
+
+- `groq.generate_text`: generate a text response.
+- `groq.generate_structured`: generate JSON or schema-shaped output.
+- `groq.analyze_image`: ask a question about a camera image, media image, local image, or image URL.
+- `groq.extract_text_from_image`: OCR-style text extraction from an image.
+- `groq.transcribe_audio`: transcribe a local or media-source audio file, optionally returning timestamps and speech-quality metadata.
+- `groq.translate_audio`: translate recorded speech into English using Whisper Large V3.
+- `groq.clear_cache`: clear the local response cache for a Groq account.
+- `groq.list_models`: list models visible to a Groq account.
+
+Camera inputs honor the invoking Home Assistant user's entity read permissions.
+Media-source and direct local-path inputs are restricted to administrators because
+they are resolved with Home Assistant process privileges. Assist and AI Task image
+inputs accept at most four attachments with a combined 20 MB limit.
+
+The integration does not provide custom automation triggers or conditions. Use standard Home Assistant entity, event, template, and other built-in automation triggers and conditions with Groq entities and actions.
+
+Each configured Groq service creates its own Home Assistant device and the relevant entity for that platform. Text generation services can create Assist and AI Task entities. Speech-to-text and text-to-speech services create STT and TTS entities.
+
+## Installation
+
+### HACS
+
+1. Open HACS.
+2. Search for Groq in Integrations.
+3. Download Groq.
+4. Restart Home Assistant.
+5. Go to Settings -> Devices & services -> Add integration -> Groq.
+
+[![Open your Home Assistant instance and open the Groq repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=barneyonline&repository=ha-groq&category=integration)
+
+### Manual
+
+1. Copy `custom_components/groq` into your Home Assistant `custom_components` directory.
+2. Restart Home Assistant.
+3. Go to Settings -> Devices & services -> Add integration -> Groq.
+
+## Requirements
+
+- Home Assistant `2026.10.0` or newer. Both the primary and minimum-version test environments currently verify `2026.10.0`.
+  Assist and AI tasks preserve Home Assistant tool results and their error flags.
+- A Groq API key from [Groq Console](https://console.groq.com/).
+- Network access from Home Assistant to `https://api.groq.com`.
+- Optional: `ffmpeg` on the Home Assistant host if you enable TTS audio normalization, Long TTS, or processed playback conversion.
+
+This integration does not use Home Assistant application credentials or OAuth. Groq API keys act as account or project credentials. Use separate Groq keys when you want separate projects, billing pools, environments, or rate-limit isolation.
+
+## Configuration
+
+Initial account setup asks for:
+
+- Name: friendly name for this Groq account in Home Assistant.
+- Groq API key: secret key used for Groq API requests. The key is stored by Home Assistant and redacted from diagnostics.
+
+After adding an account, open the Groq integration page and add one or more services:
+
+- Text Generation: name, model, system prompt, temperature, free-tier protection, and optional additional request options.
+- Speech-to-Text: name, model, language hint, and free-tier protection.
+- Text-to-Speech: name, model, voice, output format, optional sample rate, optional speed, optional vocal directions, optional audio normalization, optional Long TTS, and free-tier protection.
+- Image Recognition: name, model, system prompt, and free-tier protection.
+
+Additional Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, Compound built-in tool allow-lists, structured output schema, strict schema mode, and additional Groq request body options.
+
+On Home Assistant 2026.11 and newer, Schema Name, Schema and Strict appear only while Structured Outputs is enabled for a compatible model. Home Assistant 2026.10 always shows these fields for compatible models. Disabling Structured Outputs preserves the saved schema, name and strictness for reuse; switching to a model without Structured Outputs support clears those settings.
+
+Local response caching is opt-in per configured service. Disabling it for one service remains effective when another service enables caching. Responses expire and share a 16 MiB serialized-content budget per account. Speech audio caches share a separate 64 MiB account budget in addition to their configured item limits. These caches are local to Home Assistant and are distinct from Groq's provider-side prompt caching.
+
+Explicit action arguments override service defaults; omitted structured-output fields inherit the configured schema name and strictness. Structured results are validated locally before being returned or cached, including JSON fallback for models without native schema output. Clearing the Assist control selection disables those Home Assistant tools without discarding other advanced settings.
+
+Compound built-in tools are opt-in. For `groq/compound` and `groq/compound-mini`, the integration sends an explicit empty built-in tool allow-list unless you enable tools such as web search, visit website, browser automation, code execution, or Wolfram Alpha in the service's additional options. Enabling these tools allows Groq to run server-side tools and inspect external content for the request.
+
+You can add more than one Groq account. The integration prevents adding the same API key twice.
+
+## Speech transcription and translation
+
+For Romanian Assist pipelines, select **Romanian** (`ro-RO`) in the Groq
+Speech-to-Text service. Romanian is also available in `groq.transcribe_audio`;
+the integration sends the ISO language hint `ro` to Groq.
+
+Existing `groq.transcribe_audio` calls keep their text response. Select
+`response_format: verbose_json` to also return the provider's detected language,
+duration, segments, and words when supplied. `timestamp_granularities` accepts
+`word`, `segment`, or both and requires `verbose_json`. Segment metadata includes
+`avg_logprob`, `compression_ratio`, and `no_speech_prob`; these are diagnostic
+indicators, not guarantees of recognition accuracy. The Assist STT pipeline
+continues to receive plain text.
+
+```yaml
+action: groq.transcribe_audio
+data:
+  service_id: YOUR_STT_SERVICE_ID
+  audio_path: /config/www/recording.wav
+  response_format: verbose_json
+  timestamp_granularities:
+    - word
+    - segment
+response_variable: transcript
+```
+
+`groq.translate_audio` uses the selected STT service's account and rate-limit
+protection but defaults to `whisper-large-v3`, even when that service normally uses
+Turbo. Translation produces English text only; it does not accept a language
+selector or timestamp options. Both audio actions retain the existing administrator
+and allowed-path restrictions and 25 MiB local upload ceiling.
+
+```yaml
+action: groq.translate_audio
+data:
+  service_id: YOUR_STT_SERVICE_ID
+  audio_path: /config/www/recording.wav
+response_variable: translation
+```
+
+## Usage sensors
+
+Text Generation and Image Recognition devices have seven diagnostic sensors,
+disabled by default. Enable the ones you want from the device's entity list:
+successful generation requests, last input/output/total tokens, last cached input
+tokens, last response time, and last provider cache hit rate.
+
+Measurements cover only completed generation requests made by this integration,
+including Assist tool rounds, AI Tasks, and image actions. They do not represent
+organization-wide usage, billed cost, or STT/TTS usage. Local response-cache hits
+make no request and do not increment the counter. Groq provider cache hits still
+count as requests. Counters reset on integration reload or Home Assistant restart;
+missing provider measurements remain unknown. Updates are pushed without polling
+or extra API calls, and sensors retain no prompts, responses, or source URLs.
+
+## Streaming and browser search
+
+Streaming Assist now works with Home Assistant tools enabled. Text arrives while
+Groq generates it; local tool calls execute only after the full response has
+arrived and the complete arguments and exposed tool names have been validated.
+Cancelled, malformed, and incomplete tool streams do not execute pending calls.
+The existing maximum number of tool rounds still applies.
+
+For GPT-OSS 20B, 120B, and Safeguard 20B, enable **Browser search** in a Text
+Generation service's additional options. It is off by default. `groq.generate_text`
+also accepts a `browser_search` boolean to override the service default. Browser
+search can coexist with exposed HA tools on compatible models, but cannot be used
+with structured output or a structured AI Task. Searches bypass the local response
+cache. Groq may charge for server-side tools and browsing can increase latency.
+
+Text action responses include `citations`, a list of `{url, title}` source objects
+when Groq supplies annotations or search results. The same sources are retained
+in Assist conversation trace metadata, including streamed responses. Source URLs
+are not added to spoken replies. Existing Compound web search remains available;
+its `search_settings` domain filters can still be supplied through additional
+request body options.
+
+## Known Limitations
+
+- This is a cloud integration and will not work without internet access to Groq.
+- Groq can change model availability, limits, and request option support outside this integration.
+- Some additional options work only on models that support them. The setup flow validates known model capabilities where possible.
+- TTS input is limited by Groq Orpheus model limits. Enable the Long TTS option to split longer announcements and stitch them with `ffmpeg`; this uses more CPU and more Groq request quota. Processed audio output is limited to 64 MiB. Without Long TTS, overly long requests are blocked locally.
+- Groq speech can generate WAV, MP3, FLAC, OGG, or MULAW audio. The integration sends the selected format directly to Groq for single-part announcements without audio processing. When audio normalization or Long TTS is enabled, the integration asks Groq for WAV chunks and uses `ffmpeg` to normalize, stitch, or convert the final playback output.
+- TTS sample rate and speed are optional. Leave sample rate unset to use Groq's model default or the integration's playback profile; use speed `1.0` for normal playback.
+- Long TTS, audio normalization, and playback conversion need `ffmpeg` and use extra CPU.
+- This integration does not discover devices. It supports Groq cloud accounts and user-created Groq service entries.
+
+## Troubleshooting
+
+- Invalid API key: create or copy a fresh key from Groq Console, then reauthenticate the Groq integration entry.
+- Cannot connect: check Home Assistant network/DNS access to `api.groq.com` and the [Groq status page](https://groqstatus.com/).
+- Model missing: use `groq.list_models` to see models visible to the selected account, or choose a known compatible model.
+- Service actions: provide `service_id` for Text Generation, Image Recognition, and Speech-to-Text actions so automations keep using the intended configured Groq service. Provide `config_entry_id` for account-level actions such as clearing the cache or listing models.
+- Rate-limit errors: wait for Groq's reset window, lower automation frequency, choose a smaller model, or use separate Groq projects/keys where appropriate. The free-tier guard is a conservative local estimate; it does not know all organization-wide usage.
+- Model permission errors: check Groq organization/project model permissions. Known permission restrictions create a model-specific repair rather than asking you to replace a working account key. Repairs clear after matching successful requests or removal of obsolete configuration.
+- TTS audio processing fails: install `ffmpeg` on the Home Assistant host, choose direct single-part playback without audio normalization, or disable Long TTS.
+- Local image or audio file fails: direct paths and media-source inputs require an administrator, and direct paths must also be allowed by Home Assistant `allowlist_external_dirs`.
+- Diagnostics: download diagnostics from the integration page. API keys, endpoint URLs, and prompt fields are redacted.
+
+## Removal
+
+1. Go to Settings -> Devices & services -> Groq.
+2. Delete any Groq service entries you no longer want.
+3. Delete the Groq account entry.
+4. Restart Home Assistant if you plan to remove the custom integration files.
+5. If installed through HACS, remove Groq from HACS. For a manual install, delete `custom_components/groq`.
+
+Removing the integration stops future Groq API calls from Home Assistant. It does not delete Groq projects, keys, billing data, or logs in Groq Console.
+
+## Useful Links
+
+- [Project Wiki](https://github.com/barneyonline/ha-groq/wiki)
+- [Groq Console](https://console.groq.com/)
+- [Groq status page](https://groqstatus.com/)
+- [Groq API reference](https://console.groq.com/docs/api-reference)
+- [Architecture notes](architecture.md)

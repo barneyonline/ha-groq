@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Documentation
+
+- Refresh the README with wiki-style light and dark banners, a concise feature overview, fresh Home Assistant screenshots, an expandable gallery and a direct HACS link. Keep project badges visible at the bottom and preserve the detailed reference in `docs/user-guide.md` alongside links to the wiki.
+
 ## v2.1.0 - 2026-10-24
 
 ### 🚧 Breaking changes
