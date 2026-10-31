@@ -79,6 +79,45 @@ controls. Keep the 100% integration and changed-module coverage gates. The optio
 `python -m pytest scripts/benchmark_runtime.py -q -s` command inside the harness
 measures warmed local overhead with mocked provider I/O; it is not live latency.
 
+## Warnings And CI Logs
+
+Pytest treats Python warnings as errors. The only exception in `pytest.ini` is
+the exact aiohttp `NotAppKeyWarning` payload, including its documentation link,
+from
+`homeassistant.components.http.server`: pinned Home Assistant 2026.10.0 retains
+the `app["hass"]` string key for backward compatibility. Review this exception
+when updating Core. The same warning from Groq or any other module still fails
+tests, as do other warning messages and categories. The import-time check also
+rejects integration deprecations. Avoid `-W always` on normal verification runs;
+it overrides this policy and is useful only when auditing filtered warnings.
+
+Python warnings and logging records are separate. CI retains WARNING-level
+runtime logs for both Home Assistant profiles, including failed test runs.
+Keep production error logs visible. Tests that exercise API failures, oversized
+audio, or missing ffmpeg should assert the expected records with `caplog`.
+Unit tests that isolate API or audio behavior must explicitly model the repair
+reporting boundary; registry and lifecycle tests should use the real `hass`
+fixture. A passing test must not rely on caught repair errors from incomplete
+test doubles.
+
+Some upstream tools emit informational warnings even when their checks succeed:
+
+| Output | Treatment |
+| --- | --- |
+| Codecov GPG key has no trusted certification | Keep signature and checksum validation enabled. A good signature followed by successful integrity verification is expected on a fresh runner without a personal trust database. |
+| Git checkout initial-branch hint | Keep checkout's output; the requested ref is selected afterward. |
+| Home Assistant custom-integration notice | Keep the loader warning. Groq is a custom integration. |
+| API retry, STT limit, or ffmpeg failure logs | Keep actionable production messages and assert them in the tests that deliberately trigger the failure. |
+| Asyncio slow-callback warning | Retain the debug threshold. Rerun the affected test without concurrent build or benchmark work, then profile a reproducible delay before changing runtime code. |
+| Managed dependency-graph CA bundle rehash warning | GitHub owns this job. A bundle contains multiple certificates, while rehash expects individual certificates. Investigate if the job develops TLS failures. |
+
+The disposable Docker test image explicitly acknowledges pip's intentional root
+installs with `PIP_ROOT_USER_ACTION=ignore`; dependency checks and resolver warnings
+remain enabled. Codecov uploads use the reports generated inside Docker rather
+than optional host-side coverage collectors. Workflow runner versions are pinned
+to the verified Ubuntu 26.04 baseline; update them deliberately alongside the
+verification environment.
+
 ## Dependency Ownership
 
 Keep the Home Assistant image and matching test plugin aligned. They supply

@@ -19,6 +19,8 @@ from custom_components.groq.tts import (
     _tts_input_chunks,
 )
 
+from .unit_helpers import unit_hass_data
+
 validate_user_input = config_flow.validate_user_input
 
 ORPHEUS_ENGLISH_MODEL = "canopylabs/orpheus-v1-english"
@@ -109,7 +111,8 @@ class DummyTimeoutSession:
 
 
 class DummyHass:
-    pass
+    def __init__(self):
+        self.data = unit_hass_data()
 
 
 @pytest.mark.asyncio
@@ -903,6 +906,7 @@ class DummyConfigEntry:
         self.data = data
         self.options = options
         self.unique_id = data.get("unique_id")
+        self.entry_id = "entry-id"
 
 
 @pytest.mark.asyncio

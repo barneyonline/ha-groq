@@ -26,6 +26,8 @@ from custom_components.groq.services import (
     _image_url_from_call,
 )
 
+from .unit_helpers import unit_hass_data
+
 
 class _Auth:
     def __init__(self, user) -> None:
@@ -47,6 +49,7 @@ class _Permissions:
 
 class _Hass:
     def __init__(self, user=None) -> None:
+        self.data = unit_hass_data()
         self.auth = _Auth(user)
         self.config = SimpleNamespace(is_allowed_path=lambda _path: True)
 

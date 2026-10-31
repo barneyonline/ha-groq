@@ -39,6 +39,8 @@ from custom_components.groq.vocal_directions import (
     vocal_directions_validation_error,
 )
 
+from .unit_helpers import unit_hass_data
+
 ORPHEUS_ENGLISH_MODEL = "canopylabs/orpheus-v1-english"
 ORPHEUS_ENGLISH_VOICE = "troy"
 ORPHEUS_ARABIC_MODEL = "canopylabs/orpheus-arabic-saudi"
@@ -55,6 +57,9 @@ PCM_WAV_BYTES = (
 
 
 class DummyHass:
+    def __init__(self):
+        self.data = unit_hass_data()
+
     async def async_add_executor_job(self, func, *args):
         return func(*args)
 
@@ -1388,7 +1393,8 @@ async def test_tts_long_stitching_temp_file_work_uses_executor(monkeypatch, capl
         calls.append(func.__name__)
         return func(*args)
 
-    hass = SimpleNamespace(async_add_executor_job=async_add_executor_job)
+    hass = DummyHass()
+    hass.async_add_executor_job = async_add_executor_job
     entity = GroqTTSEntity(
         hass,
         DummyConfigEntry(data, {"enable_long_tts": True}),
@@ -2476,6 +2482,33 @@ async def test_text_generation_subentry_flow_stores_llm_hass_api(monkeypatch):
 
     assert result["type"] == "create_entry"
     assert result["data"][CONF_LLM_HASS_API] == ["assist"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [AttributeError, KeyError, TypeError])
+async def test_text_generation_setup_survives_unavailable_llm_api_registry(
+    monkeypatch, error_type
+):
+    """Optional HA tools must not prevent configuring ordinary text generation."""
+    flow = config_flow.GroqServiceSubentryFlow()
+    _patch_flow_common(monkeypatch, flow)
+
+    def unavailable_apis(_hass):
+        raise error_type("HA LLM API registry unavailable")
+
+    monkeypatch.setattr(config_flow.llm, "async_get_apis", unavailable_apis)
+
+    form = await flow.async_step_text_generation()
+
+    assert form["type"] == "form"
+    user_input = form["data_schema"](
+        {"name": "Text Service", "model": "llama-3.1-8b-instant"}
+    )
+    assert not user_input.get(CONF_LLM_HASS_API)
+    result = await flow.async_step_text_generation(user_input)
+    assert result["type"] == "create_entry"
+    assert result["data"]["model"] == "llama-3.1-8b-instant"
+    assert CONF_LLM_HASS_API not in result["data"]
 
 
 @pytest.mark.asyncio
