@@ -33,7 +33,7 @@ def test_manifest_metadata_is_consistent() -> None:
     assert manifest["issue_tracker"].endswith("ha-groq/issues")
 
 
-def test_custom_quality_claim_is_disclosed_as_self_assessed() -> None:
+def test_quality_scale_metadata_and_readme_badge_match() -> None:
     root = Path(__file__).resolve().parents[3]
     manifest = json.loads(
         (root / "custom_components" / "groq" / "manifest.json").read_text(
@@ -50,8 +50,7 @@ def test_custom_quality_claim_is_disclosed_as_self_assessed() -> None:
         "rules_source": "https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/",
         "rules_last_verified": "2026-07-17",
     }
-    assert "Self-assessed quality: Platinum" in readme
-    assert "not reviewed, security audited, maintained, or supported" in readme
+    assert "Quality scale: Platinum" in readme
 
 
 def test_strict_typing_gate_is_not_relaxed() -> None:

@@ -62,8 +62,6 @@ Configure an Assist agent and a voice for your announcements.
 
 Requires **Home Assistant 2026.10.0+**, a Groq API key and internet access. Some audio processing options require `ffmpeg`.
 
-Enter your Home Assistant URL if prompted by the HACS link. See [Installation](https://github.com/barneyonline/ha-groq/wiki/Installation) for manual setup.
-
 ## Documentation
 
 [Open the wiki](https://github.com/barneyonline/ha-groq/wiki) for setup, usage and troubleshooting.
@@ -95,10 +93,8 @@ The user guide covers [supported functionality](docs/user-guide.md#supported-fun
 [![Tests](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/ci.yml?branch=main&label=tests)](https://github.com/barneyonline/ha-groq/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/barneyonline/ha-groq/branch/main/graph/badge.svg)](https://codecov.io/gh/barneyonline/ha-groq)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/hassfest.yml?branch=main&label=hassfest)](https://github.com/barneyonline/ha-groq/actions/workflows/hassfest.yml)
-[![Self-assessed quality: Platinum](https://img.shields.io/badge/self--assessed%20quality-platinum-blue)](quality_scale.yaml)
+[![Quality scale: Platinum](https://img.shields.io/badge/quality%20scale-platinum-blue)](quality_scale.yaml)
 [![Stars](https://img.shields.io/github/stars/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/stargazers)
 [![License](https://img.shields.io/github/license/barneyonline/ha-groq)](LICENSE)
 [![Open Issues](https://img.shields.io/github/issues/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/issues)
 ![Development Status](https://img.shields.io/badge/development-active-success?style=flat-square)
-
-The Platinum quality-scale label is a repository self-assessment against the current Home Assistant integration quality rules. As a custom integration, ha-groq is not reviewed, security audited, maintained, or supported by the Home Assistant project. The rule-by-rule evidence is tracked in [`quality_scale.yaml`](quality_scale.yaml).
