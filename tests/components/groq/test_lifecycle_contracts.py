@@ -19,7 +19,11 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.groq import async_migrate_entry, async_unload_entry
-from custom_components.groq.api import SpeechRequest, TextGenerationRequest
+from custom_components.groq.api import (
+    GroqApiClient,
+    SpeechRequest,
+    TextGenerationRequest,
+)
 from custom_components.groq.config_flow import (
     GroqServiceSubentryFlow,
     async_get_model_registry,
@@ -44,7 +48,7 @@ from custom_components.groq.repairs import (
 )
 from custom_components.groq.subentries import service_data_for_type
 
-from .test_foundation import DummyResponse
+from .test_foundation import DummyResponse, DummySession
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -818,3 +822,46 @@ async def test_real_subentry_flow_saves_valid_default_schema(hass, feature):
     service = next(iter(entry.subentries.values()))
     assert service.data["service_type"] == feature
     assert service.data["model"]
+
+
+@pytest.mark.parametrize("status", [200, 403])
+async def test_repair_registry_failure_preserves_inference_outcome(
+    hass, monkeypatch, caplog, expected_repair_errors, status
+):
+    """Repair reporting keeps its exception visible without replacing inference."""
+    failure = OSError("injected registry storage failure")
+    expected_repair_errors.append(failure)
+
+    def unavailable_registry(*_args, **_kwargs):
+        raise failure
+
+    monkeypatch.setattr(
+        ir,
+        "async_delete_issue" if status == 200 else "async_create_issue",
+        unavailable_registry,
+    )
+    payload = (
+        {"choices": [{"message": {"content": "Available"}}]}
+        if status == 200
+        else {"error": {"code": "model_not_found", "message": "Model not found"}}
+    )
+    client = GroqApiClient(
+        hass,
+        api_key="test-key",
+        session=DummySession(DummyResponse(status, {}, payload)),
+    )
+    request = TextGenerationRequest(prompt="Hello", model=TEXT_MODEL)
+    if status == 200:
+        assert (await client.async_generate_text(request)).text == "Available"
+    else:
+        with pytest.raises(GroqApiError) as error:
+            await client.async_generate_text(request)
+        assert error.value.status == 403
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "custom_components.groq.repairs"
+    ]
+    assert len(records) == 1
+    assert records[0].getMessage() == "Could not update the Groq repair registry"
+    assert records[0].exc_info[1] is failure

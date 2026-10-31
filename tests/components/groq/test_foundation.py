@@ -78,6 +78,8 @@ from custom_components.groq.services import (
 )
 from custom_components.groq.stt import GroqSTTEntity
 
+from .unit_helpers import unit_hass_data
+
 
 class DummyContent:
     def __init__(self, body: bytes):
@@ -127,7 +129,7 @@ class DummyConfigEntries:
 
 class DummyHass:
     def __init__(self, entries=()):
-        self.data = {}
+        self.data = unit_hass_data()
         self.config_entries = DummyConfigEntries(entries)
 
     async def async_add_executor_job(self, func, *args):
