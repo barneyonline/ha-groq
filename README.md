@@ -100,5 +100,3 @@ The user guide covers [supported functionality](docs/user-guide.md#supported-fun
 [![License](https://img.shields.io/github/license/barneyonline/ha-groq)](LICENSE)
 [![Open Issues](https://img.shields.io/github/issues/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/issues)
 ![Development Status](https://img.shields.io/badge/development-active-success?style=flat-square)
-
-The Platinum quality-scale label is a repository self-assessment against the current Home Assistant integration quality rules. As a custom integration, ha-groq is not reviewed, security audited, maintained, or supported by the Home Assistant project. The rule-by-rule evidence is tracked in [`quality_scale.yaml`](quality_scale.yaml).
