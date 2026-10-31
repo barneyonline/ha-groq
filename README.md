@@ -95,7 +95,7 @@ The user guide covers [supported functionality](docs/user-guide.md#supported-fun
 [![Tests](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/ci.yml?branch=main&label=tests)](https://github.com/barneyonline/ha-groq/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/barneyonline/ha-groq/branch/main/graph/badge.svg)](https://codecov.io/gh/barneyonline/ha-groq)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/hassfest.yml?branch=main&label=hassfest)](https://github.com/barneyonline/ha-groq/actions/workflows/hassfest.yml)
-[![Self-assessed quality: Platinum](https://img.shields.io/badge/self--assessed%20quality-platinum-blue)](quality_scale.yaml)
+[![Quality scale: Platinum](https://img.shields.io/badge/quality%20scale-platinum-blue)](quality_scale.yaml)
 [![Stars](https://img.shields.io/github/stars/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/stargazers)
 [![License](https://img.shields.io/github/license/barneyonline/ha-groq)](LICENSE)
 [![Open Issues](https://img.shields.io/github/issues/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/issues)

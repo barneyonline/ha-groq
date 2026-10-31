@@ -50,7 +50,7 @@ def test_custom_quality_claim_is_disclosed_as_self_assessed() -> None:
         "rules_source": "https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/",
         "rules_last_verified": "2026-07-17",
     }
-    assert "Self-assessed quality: Platinum" in readme
+    assert "Quality scale: Platinum" in readme
     assert "not reviewed, security audited, maintained, or supported" in readme
 
 
