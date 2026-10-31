@@ -62,8 +62,6 @@ Configure an Assist agent and a voice for your announcements.
 
 Requires **Home Assistant 2026.10.0+**, a Groq API key and internet access. Some audio processing options require `ffmpeg`.
 
-Enter your Home Assistant URL if prompted by the HACS link. See [Installation](https://github.com/barneyonline/ha-groq/wiki/Installation) for manual setup.
-
 ## Documentation
 
 [Open the wiki](https://github.com/barneyonline/ha-groq/wiki) for setup, usage and troubleshooting.
