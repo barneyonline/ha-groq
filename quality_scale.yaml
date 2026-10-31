@@ -25,7 +25,7 @@ rules:
         - custom_components/groq/conversation.py
         - custom_components/groq/ai_task.py
       docs:
-        - README.md
+        - docs/user-guide.md
   brands:
     status: done
     references:
@@ -63,7 +63,7 @@ rules:
       tests:
         - tests/components/groq/test_integration_harness.py
       docs:
-        - README.md
+        - docs/user-guide.md
   dependency-transparency:
     status: done
     comment: The jsonschema dependency is declared and pinned in the manifest; OpenAPI serialization uses the package bundled by each supported Home Assistant release, and HTTP I/O uses Home Assistant aiohttp sessions rather than an undeclared API client.
@@ -82,19 +82,19 @@ rules:
       code:
         - custom_components/groq/services.yaml
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-triggers:
     status: exempt
     comment: The integration does not provide custom automation triggers; users can use standard Home Assistant entity and event triggers.
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-conditions:
     status: exempt
     comment: The integration does not provide custom automation conditions; users can use standard Home Assistant conditions.
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-high-level-description:
     status: done
     references:
@@ -109,7 +109,7 @@ rules:
     status: done
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   entity-event-setup:
     status: exempt
     comment: Groq entities do not subscribe to external event buses or dispatcher callbacks.
@@ -193,12 +193,12 @@ rules:
     status: done
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-installation-parameters:
     status: done
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   entity-unavailable:
     status: exempt
     comment: The entities expose on-demand AI, STT, and TTS capabilities rather than periodically fetched state; request failures are returned through platform/service error paths.
@@ -209,7 +209,7 @@ rules:
         - custom_components/groq/conversation.py
         - custom_components/groq/ai_task.py
       docs:
-        - README.md
+        - docs/user-guide.md
   integration-owner:
     status: done
     references:
@@ -277,44 +277,44 @@ rules:
     comment: Groq is configured from cloud API keys and user-created service subentries; there is no discovered network address or discovery payload to update.
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   discovery:
     status: exempt
     comment: Groq is a cloud API service account integration, not a discoverable local device or network service.
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-data-update:
     status: done
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-examples:
     status: done
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-known-limitations:
     status: done
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-supported-devices:
     status: done
-    comment: The README documents that this integration supports Groq cloud accounts and does not support or discover physical devices.
+    comment: The user guide documents that this integration supports Groq cloud accounts and does not support or discover physical devices.
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-supported-functions:
     status: done
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-troubleshooting:
     status: done
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   docs-use-cases:
     status: done
     references:
@@ -353,7 +353,7 @@ rules:
     comment: The integration does not create noisy, diagnostic, or rarely used entities by default; users explicitly create each Groq service subentry they want.
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   entity-translations:
     status: done
     references:
@@ -406,13 +406,13 @@ rules:
       tests:
         - tests/components/groq/test_coverage_gaps.py
       docs:
-        - README.md
+        - docs/user-guide.md
   stale-devices:
     status: exempt
     comment: The integration has no discovered physical device inventory. Devices correspond to user-managed Groq service subentries and are removed when those entries are removed.
     references:
       docs:
-        - README.md
+        - docs/user-guide.md
   async-dependency:
     status: done
     comment: Groq network and process I/O is implemented with async aiohttp and asyncio subprocess APIs. The jsonschema dependency performs local, CPU-only validation and does not introduce blocking I/O.
