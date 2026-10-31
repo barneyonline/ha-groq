@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   close_inactive_issues:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Mark and close inactive blocked issues
         uses: actions/stale@1e223db275d687790206a7acac4d1a11bd6fe629 # v10
