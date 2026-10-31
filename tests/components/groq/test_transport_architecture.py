@@ -37,8 +37,13 @@ from custom_components.groq.rate_limit import (
 )
 from custom_components.groq.tts import _normalize_sample_rate, _normalize_speed
 
+from .unit_helpers import unit_hass_data
+
 
 class Hass:
+    def __init__(self):
+        self.data = unit_hass_data()
+
     async def async_add_executor_job(self, func, *args):
         return await asyncio.to_thread(func, *args)
 

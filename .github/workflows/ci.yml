@@ -16,6 +16,8 @@ on:
       - ".pre-commit-config.yaml"
       - ".ruff.toml"
       - "pyproject.toml"
+      - "pytest.ini"
+      - "codecov.yml"
       - "devtools/docker/**"
       - "scripts/**"
       - ".github/workflows/tests.yml"

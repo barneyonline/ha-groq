@@ -9,6 +9,8 @@ on:
       - ".pre-commit-config.yaml"
       - ".ruff.toml"
       - "pyproject.toml"
+      - "pytest.ini"
+      - "codecov.yml"
       - "devtools/docker/**"
       - "hacs.json"
       - "quality_scale.yaml"
@@ -26,7 +28,7 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       # Authenticate Codecov uploads without repository or Dependabot secrets.
@@ -47,6 +49,18 @@ jobs:
         run: scripts/test python -m pip check
       - name: Run pre-commit in Home Assistant Docker
         run: scripts/test pre-commit run --all-files
+      - name: Restore pre-commit cache ownership for the runner
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          cache_dir=.test-cache/pre-commit
+          if [ -L .test-cache ] || [ -L "$cache_dir" ]; then
+            echo "Refusing to change cache ownership through a symbolic link" >&2
+            exit 1
+          fi
+          if [ -d "$cache_dir" ]; then
+            sudo chown -RhP -- "$(id -u):$(id -g)" "$cache_dir"
+          fi
       - name: Validate quality scale evidence in Home Assistant Docker
         run: |
           scripts/test python scripts/validate_quality_scale.py
@@ -95,6 +109,15 @@ jobs:
           --cov-fail-under=100
           --junitxml=junit.xml
           -o junit_family=legacy
+          --log-file=.test-cache/test-runtime.log
+          --log-file-level=WARNING
+      - name: Upload test warning and error logs
+        if: ${{ always() && (steps.pytest.outcome == 'success' || steps.pytest.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: test-runtime-logs
+          path: .test-cache/test-runtime.log
+          if-no-files-found: ignore
       - name: Enforce 100% coverage on changed integration modules
         if: ${{ github.event_name == 'pull_request' && steps.pytest.outcome == 'success' && steps.changed.outputs.include != '' }}
         run: >
@@ -106,6 +129,8 @@ jobs:
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
         with:
           use_oidc: true
+          plugins: noop
+          disable_search: true
           files: ./coverage.xml
           fail_ci_if_error: true
       - name: Upload test results to Codecov
@@ -113,6 +138,8 @@ jobs:
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
         with:
           use_oidc: true
+          plugins: noop
+          disable_search: true
           files: ./junit.xml
           report_type: test_results
       - name: Fail if tests failed
@@ -120,7 +147,7 @@ jobs:
         run: exit 1
 
   minimum-homeassistant:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -134,4 +161,15 @@ jobs:
       - name: Verify minimum Home Assistant typing contracts
         run: scripts/test --minimum python scripts/check_ha_typing.py
       - name: Run component tests against minimum Home Assistant
-        run: scripts/test --minimum python -m pytest tests/components/groq -q
+        id: pytest
+        run: >
+          scripts/test --minimum python -m pytest tests/components/groq -q
+          --log-file=.test-cache/minimum-test-runtime.log
+          --log-file-level=WARNING
+      - name: Upload minimum Home Assistant warning and error logs
+        if: ${{ always() && (steps.pytest.outcome == 'success' || steps.pytest.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: minimum-test-runtime-logs
+          path: .test-cache/minimum-test-runtime.log
+          if-no-files-found: ignore

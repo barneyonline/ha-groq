@@ -207,6 +207,8 @@ from custom_components.groq.tts import GroqTTSEntity
 
 from .test_foundation import DummyChatLog, DummyConversationInput
 
+from .unit_helpers import unit_hass_data
+
 PCM_WAV_BYTES = (
     b"RIFF"
     + (40).to_bytes(4, "little")
@@ -294,7 +296,7 @@ class DummyServices:
 
 class DummyHass:
     def __init__(self, entries=(), *, services=None):
-        self.data = {}
+        self.data = unit_hass_data()
         self.config_entries = DummyConfigEntries(entries)
         if services is not None:
             self.services = services

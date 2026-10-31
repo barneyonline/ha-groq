@@ -4,7 +4,10 @@ ARG PYTHON_VERSION=3.14
 ARG REQUIREMENTS_FILE=requirements-dev.txt
 ENV PYTHON_VERSION=${PYTHON_VERSION}
 
+# Root installs are intentional in this disposable test image. Dependency
+# resolver warnings and the explicit pip check remain enabled.
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
     PIP_NO_COMPILE=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

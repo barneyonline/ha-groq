@@ -1,0 +1,3 @@
+# Keep Codecov's default CI requirement explicit; pytest enforces 100% coverage.
+codecov:
+  require_ci_to_pass: true
