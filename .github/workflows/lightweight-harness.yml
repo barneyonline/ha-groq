@@ -1,0 +1,101 @@
+name: Lightweight Home Assistant harness
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/lightweight-harness.yml"
+      - "devtools/docker/**"
+      - "custom_components/groq/**"
+      - "tests/**"
+      - "scripts/**"
+      - "pytest.ini"
+      - "pyproject.toml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lightweight-harness-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  native-amd64:
+    name: native-amd64
+    runs-on: ubuntu-26.04
+    cache-mode: none
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Build the separate slim image natively
+        env:
+          DOCKER_BUILDKIT: "1"
+          GROQ_LIGHT_EVIDENCE: ${{ runner.temp }}/groq-lightweight
+        run: |
+          test "$(uname -m)" = x86_64
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          mkdir -p "$GROQ_LIGHT_EVIDENCE"
+          {
+            printf 'head_sha=%s\nrunner_image=%s\n' "$SOURCE_SHA" "${ImageVersion:-unknown}"
+            sha256sum devtools/docker/Dockerfile.core \
+              devtools/docker/install_component_requirements.py \
+              devtools/docker/codec_probe.py devtools/docker/requirements-min-ha.txt \
+              scripts/verify_test_environment.py custom_components/groq/manifest.json
+          } > "$GROQ_LIGHT_EVIDENCE/provenance.txt"
+          docker build --pull --no-cache --platform=linux/amd64 \
+            -f devtools/docker/Dockerfile.core -t ha-groq-light:ci . \
+            2>&1 | tee "$GROQ_LIGHT_EVIDENCE/build.log"
+          test "$(docker image inspect -f '{{.Architecture}}' ha-groq-light:ci)" = amd64
+          docker image inspect ha-groq-light:ci \
+            --format '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}}}' \
+            > "$GROQ_LIGHT_EVIDENCE/image.json"
+      - name: Verify, import, collect, test and convert synthetic audio
+        env:
+          GROQ_LIGHT_EVIDENCE: ${{ runner.temp }}/groq-lightweight
+        run: |
+          docker run --rm --platform=linux/amd64 --network=none \
+            --cap-drop=ALL --security-opt=no-new-privileges \
+            --user "$(id -u):$(id -g)" \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
+            --mount "type=bind,src=$GROQ_LIGHT_EVIDENCE,dst=/evidence" \
+            --tmpfs /tmp:rw,exec,nosuid,nodev,size=512m \
+            -e HOME=/tmp -e PYTHONPATH=/workspace \
+            -e COVERAGE_FILE=/evidence/.coverage \
+            ha-groq-light:ci bash -euo pipefail -c '
+              test "$(uname -m)" = x86_64
+              python /opt/groq-test/verify_test_environment.py \
+                --expected-core-file /opt/groq-test/image-core-version \
+                --expected-python 3.14.6 --check-dependencies
+              python -c "import platform; assert platform.python_version() == \"3.14.6\""
+              python -m pip freeze > /evidence/python-distributions.txt
+              cp /opt/groq-test/component-requirements.json /evidence/
+              dpkg-query -W ffmpeg libturbojpeg0 > /evidence/system-packages.txt
+              if command -v gcc; then
+                echo "Native build tools remain in the runtime image" >&2
+                exit 1
+              fi
+              python scripts/importtime_profile.py --strict-integration-warnings \
+                --output /evidence/importtime-groq.log
+              python -m pytest --collect-only -q -o cache_dir=/tmp/pytest-cache
+              python -m pytest --cov=custom_components.groq \
+                --cov-report=term-missing --cov-report=xml:/evidence/coverage.xml \
+                --cov-fail-under=100 --junitxml=/evidence/junit.xml \
+                -o junit_family=legacy -o cache_dir=/tmp/pytest-cache \
+                --log-file=/evidence/test-runtime.log --log-file-level=WARNING
+              python devtools/docker/codec_probe.py | tee /evidence/codec.json
+            ' 2>&1 | tee "$GROQ_LIGHT_EVIDENCE/validation.log"
+      - name: Preserve bounded prototype evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: groq-lightweight-amd64-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/groq-lightweight/*
+          if-no-files-found: error
+          retention-days: 1

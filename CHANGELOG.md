@@ -4,9 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-### Documentation
+### 🚧 Breaking changes
+
+- None
+
+### ✨ New features
+
+- None
+
+### 🐛 Bug fixes
+
+- None
+
+### 🔧 Improvements
+
+- None
+
+### 🔄 Other changes
+
+- Evaluate a smaller Home Assistant Core test image in isolated native amd64 CI while retaining the current default harness.
 
 - Refresh the README with wiki-style light and dark banners, a concise feature overview, fresh Home Assistant screenshots, an expandable gallery and a direct HACS link. Keep project badges visible at the bottom and preserve the detailed reference in `docs/user-guide.md` alongside links to the wiki.
+- Add maintenance workflows and merge checks for HAL-managed issues and PR feedback, with shared operating instructions and changelog/release templates maintained in the central HAL plugin. Keep unattended activation gated by verification.
 
 ## v2.1.0 - 2026-10-24
 
