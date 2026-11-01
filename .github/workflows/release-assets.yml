@@ -49,6 +49,7 @@ jobs:
   package:
     needs: resolve
     runs-on: ubuntu-26.04
+    cache-mode: none
     steps:
       - name: Checkout trusted default-branch tooling
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

@@ -42,6 +42,7 @@ concurrency:
 jobs:
   package:
     runs-on: ubuntu-26.04
+    cache-mode: none
     outputs:
       artifact_name: release-candidate-${{ inputs.candidate_sha }}
     steps:
