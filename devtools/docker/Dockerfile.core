@@ -1,0 +1,40 @@
+FROM python:3.14.6-slim@sha256:7bec7ddcddeff7975d6ba9b4be7dd6f6b2f55e7491539145e2978f7f97ce9144
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    PIP_NO_COMPILE=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+    PYTEST_PLUGINS=pytest_asyncio.plugin,pytest_homeassistant_custom_component.plugins,pytest_cov.plugin \
+    PYTEST_ASYNCIO_MODE=strict \
+    PYTEST_ASYNCIO_DEFAULT_FIXTURE_LOOP_SCOPE=function
+
+RUN apt-get update && apt-get install --yes --no-install-recommends \
+    bash ffmpeg git libturbojpeg0 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+COPY devtools/docker/requirements-min-ha.txt scripts/verify_test_environment.py /opt/groq-test/
+COPY custom_components/groq/manifest.json /opt/groq-test/manifest.json
+
+# Preserve the existing pre-helper Core recording and fail on an incompatible
+# minimum/helper upgrade instead of silently moving the Core version.
+RUN python -m pip install --no-cache-dir "pip==26.2.1" \
+    && python -m pip install --no-cache-dir --no-compile "homeassistant==2026.10.0" \
+    && python -c "from importlib.metadata import version; from pathlib import Path; core = version('homeassistant'); Path('/opt/groq-test/image-core-version').write_text(core); Path('/opt/groq-test/core-constraint.txt').write_text('homeassistant==' + core + '\\n')" \
+    && python -m pip install --no-cache-dir --no-compile \
+      --constraint /opt/groq-test/core-constraint.txt \
+      -r /opt/groq-test/requirements-min-ha.txt \
+    && python /opt/groq-test/verify_test_environment.py \
+      --expected-core-file /opt/groq-test/image-core-version --check-dependencies
+
+COPY devtools/docker/install_component_requirements.py /opt/groq-test/
+RUN apt-get update && apt-get install --yes --no-install-recommends build-essential \
+    && python /opt/groq-test/install_component_requirements.py \
+    && python /opt/groq-test/verify_test_environment.py \
+      --expected-core-file /opt/groq-test/image-core-version --check-dependencies \
+    && apt-get purge --yes --auto-remove build-essential \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+CMD ["bash"]

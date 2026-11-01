@@ -12,7 +12,7 @@ on:
     types: [completed]
   status:
   workflow_run:
-    workflows: [CI, Tests, Codespell, Validate with hassfest, Quality Scale, Validate, Home Assistant Smoke, Autonomous Maintenance Review Events]
+    workflows: [CI, Tests, Codespell, Validate with hassfest, Quality Scale, Validate, Home Assistant Smoke, Autonomous Maintenance Review Events, Lightweight Home Assistant harness]
     types: [completed]
   workflow_dispatch:
     inputs:
