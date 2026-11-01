@@ -96,3 +96,26 @@ def test_managed_labels_are_removed_when_no_longer_desired() -> None:
 def test_validate_template_mappings_for_repository() -> None:
     root = Path(__file__).resolve().parents[2]
     assert issue_labeling.validate_template_mappings(root) == []
+
+
+def test_managed_and_control_issues_keep_lifecycle_and_area_labels() -> None:
+    for action in ("opened", "edited", "workflow_dispatch"):
+        for managed in ("automation/hal", "automation/control"):
+            for objects in (False, True):
+                labels = [managed, "status/awaiting-release", "area/climate"]
+                issue = {
+                    "number": 42,
+                    "title": "[Bug]: Already under investigation",
+                    "body": "### Primary affected area\n\nDocumentation",
+                    "labels": (
+                        [{"name": name} for name in labels] if objects else labels
+                    ),
+                }
+                decision = issue_labeling.desired_labels_for_issue(
+                    issue, action=action, parser_outputs={}
+                )
+                assert decision.to_add == []
+                assert decision.to_remove == []
+                assert issue["labels"] == (
+                    [{"name": name} for name in labels] if objects else labels
+                )

@@ -1,45 +1,39 @@
 ## Summary
 
-Describe the change and why it is needed.
+Refs #<!-- issue number; keep the issue open until its verified release -->
 
-## Related Issues
+<!-- Describe the user-visible problem and resulting behavior. State whether this is a bug fix, feature, maintenance, or release preparation. -->
 
-List related issues or discussions. Use `Fixes #123` only when this PR closes the issue.
+```text
+Before: <concrete trigger and observed behavior>
+After:  <resulting behavior>
+```
 
-## Type of change
+<!-- For structural changes, replace the sketch with a small call tree or diagram that explains the change. -->
 
-- [ ] Bugfix
-- [ ] New feature
-- [ ] Documentation
-- [ ] Refactor / tech debt
-- [ ] Translation update
-- [ ] Repository tooling / CI
-- [ ] Other
+## Evidence
+
+- **Before:** <!-- Failing reproducer, test, or observed evidence; state when unavailable. -->
+- **After:** <!-- Passing verification of the same behavior. -->
+- **Feedback:** <!-- Link the current feedback ledger and independent GitHub review. Account for Codecov and all automated reports; disclose remaining blockers. -->
+- **Release:** <!-- Candidate version/scope, or state that this PR is not itself a release. -->
 
 ## Testing
 
-List the exact commands run. Prefer the Docker test environment and keep commands scoped when possible:
+<!-- List exact commands and results from the repository's AGENTS.md validation contract, including applicable Docker checks, typing, quality, translations and touched-file coverage. Link CI and sanitized artifacts. Explain any unavailable or not-applicable check with evidence. -->
 
-```bash
-scripts/test
-scripts/test python -m pytest tests/components/groq -q
-scripts/test ruff check custom_components/groq tests/components/groq tests/scripts scripts
-scripts/strict-typing
-scripts/test python scripts/validate_quality_scale.py
-scripts/test python scripts/importtime_profile.py --strict-integration-warnings
-```
+## Merge Danger
+
+**Door:** <!-- two-way or one-way; explain any irreversible effect -->
+
+**Blast Radius:** <!-- One-word scope, followed by the concrete affected behavior. -->
+
+<!-- State the recovery/revert path and material limitations. Distinguish cloud tests from physical-device validation. -->
 
 ## Checklist
 
-- [ ] I updated `README.md` or `CONTRIBUTING.md` for user-facing or contributor-facing changes.
-- [ ] I updated `custom_components/groq/services.yaml` when action inputs or response shapes changed.
-- [ ] I updated translations under `custom_components/groq/translations/` when strings changed.
-- [ ] I added or updated tests for changed behavior.
-- [ ] I ran the relevant Docker-backed checks and listed them above.
-- [ ] I updated `quality_scale.yaml` when quality-scale evidence changed.
-- [ ] I verified diagnostics, repairs, and errors do not expose Groq API keys or private prompt/media content.
-- [ ] I considered whether the manifest version, HACS metadata, dependencies, loggers, or quality scale claim need updates.
-
-## Diagnostics / Screenshots / Notes
-
-Add screenshots, redacted diagnostics, repair issue context, or implementation notes reviewers should see.
+- [ ] The change has a focused scope and meaningful verification.
+- [ ] Changelog and relevant user/contributor documentation are current.
+- [ ] Applicable translations, service schemas, diagnostics redaction and quality-scale evidence are current.
+- [ ] Required checks, touched-file coverage and all PR/automated feedback have been reviewed and actioned; unresolved items are disclosed.
+- [ ] The issue remains open until the verified release delivers its fix.
