@@ -351,9 +351,10 @@ def stage_archive(archive: BinaryIO, directory: Path) -> dict[str, Any]:
                     0o600,
                 )
                 copied = 0
-                with os.fdopen(descriptor, "wb") as target, zipped.open(
-                    entry
-                ) as source:
+                with (
+                    os.fdopen(descriptor, "wb") as target,
+                    zipped.open(entry) as source,
+                ):
                     while chunk := source.read(65536):
                         copied += len(chunk)
                         require(

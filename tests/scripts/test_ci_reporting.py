@@ -429,16 +429,16 @@ class CLITests(unittest.TestCase):
         )
 
     def run_main(self, operation: str) -> int:
-        with patch.dict(os.environ, self.environment, clear=True), patch(
-            "sys.argv", ["ci_reporting.py", operation]
-        ), patch.object(
-            reporting,
-            "sys",
-            SimpleNamespace(flags=SimpleNamespace(isolated=1), stderr=sys.stderr),
-        ), patch.object(
-            reporting, "ReadAPI"
-        ) as api, patch.object(
-            reporting, "verify_scope", return_value=self.scope
+        with (
+            patch.dict(os.environ, self.environment, clear=True),
+            patch("sys.argv", ["ci_reporting.py", operation]),
+            patch.object(
+                reporting,
+                "sys",
+                SimpleNamespace(flags=SimpleNamespace(isolated=1), stderr=sys.stderr),
+            ),
+            patch.object(reporting, "ReadAPI") as api,
+            patch.object(reporting, "verify_scope", return_value=self.scope),
         ):
             api.return_value.archive.return_value = io.BytesIO(self.archive_bytes)
             return reporting.main()
@@ -491,15 +491,16 @@ class CLITests(unittest.TestCase):
         self.assertFalse((self.root / "hal-ci-reporting.py").exists())
 
     def test_nonisolated_invocation_is_refused_before_api(self) -> None:
-        with patch.dict(os.environ, self.environment, clear=True), patch(
-            "sys.argv", ["ci_reporting.py", "verify-event"]
-        ), patch.object(
-            reporting,
-            "sys",
-            SimpleNamespace(flags=SimpleNamespace(isolated=0), stderr=sys.stderr),
-        ), patch.object(
-            reporting, "ReadAPI"
-        ) as api:
+        with (
+            patch.dict(os.environ, self.environment, clear=True),
+            patch("sys.argv", ["ci_reporting.py", "verify-event"]),
+            patch.object(
+                reporting,
+                "sys",
+                SimpleNamespace(flags=SimpleNamespace(isolated=0), stderr=sys.stderr),
+            ),
+            patch.object(reporting, "ReadAPI") as api,
+        ):
             self.assertEqual(reporting.main(), 1)
             api.assert_not_called()
 
@@ -748,8 +749,9 @@ class ArchiveTransportTests(unittest.TestCase):
         self.response.__exit__.assert_called_once()
 
     def test_changed_archive_digest_is_refused(self) -> None:
-        with self.assertRaises(reporting.Refused), self.api.archive(
-            99, "sha256:" + "0" * 64
+        with (
+            self.assertRaises(reporting.Refused),
+            self.api.archive(99, "sha256:" + "0" * 64),
         ):
             self.fail("must not yield")
 
