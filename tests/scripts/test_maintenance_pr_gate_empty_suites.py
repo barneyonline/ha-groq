@@ -385,8 +385,9 @@ class EmptySuiteCollectorTests(unittest.TestCase):
         for response, headers in cases:
             snapshot, policy = empty_fixture()
             transport, _ = transport_for(snapshot, policy, response, headers)
-            with self.subTest(response=response, headers=headers), self.assertRaises(
-                gate.GateError
+            with (
+                self.subTest(response=response, headers=headers),
+                self.assertRaises(gate.GateError),
             ):
                 gate.GitHub(fixtures.REPOSITORY, "placeholder", transport).collect(1)
 
