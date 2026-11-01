@@ -44,8 +44,8 @@ def test_consolidated_checks_do_not_persist_write_credentials() -> None:
     )
     checks = workflow["jobs"]["checks"]
 
-    # OIDC authenticates Codecov; repository contents remain read-only.
-    assert checks["permissions"] == {"contents": "read", "id-token": "write"}
+    # Candidate checks use read access; protected reporting owns Codecov uploads.
+    assert checks["permissions"] == {"contents": "read"}
 
     caller = yaml.safe_load((REPOSITORY_ROOT / ".github/workflows/ci.yml").read_text())[
         "jobs"
@@ -60,29 +60,20 @@ def test_consolidated_checks_do_not_persist_write_credentials() -> None:
     assert checkout["with"]["persist-credentials"] is False
 
 
-def test_codecov_uploads_require_completed_pytest_step() -> None:
-    """Do not attempt uploads when an earlier consolidated check skips pytest."""
-    workflow = yaml.safe_load(
-        (REPOSITORY_ROOT / ".github/workflows/tests.yml").read_text()
-    )
-    codecov_steps = [
-        step
-        for step in workflow["jobs"]["checks"]["steps"]
-        if step.get("uses", "").startswith("codecov/codecov-action@")
-    ]
-
-    assert len(codecov_steps) == 2
-    for step in codecov_steps:
-        # Dependabot runs cannot access ordinary Actions upload secrets.
-        assert step["with"]["use_oidc"] is True
-        assert "token" not in step["with"]
-        assert step["with"]["plugins"] == "noop"
-        assert step["with"]["disable_search"] is True
-        assert not step["with"].get("skip_validation", False)
-        condition = step["if"]
-        assert "steps.pytest.outcome == 'success'" in condition
-        assert "steps.pytest.outcome == 'failure'" in condition
-        assert "always()" not in condition
+def test_candidate_checks_have_no_codecov_or_inherited_secrets() -> None:
+    """Mutable test programs cannot share a runner with upload credentials."""
+    for filename in ("tests.yml", "ci.yml"):
+        source = (REPOSITORY_ROOT / ".github/workflows" / filename).read_text()
+        workflow = yaml.safe_load(source)
+        assert workflow["permissions"] == {"contents": "read"}
+        assert "codecov/codecov-action@" not in source
+        assert "CODECOV_TOKEN" not in source
+        assert "secrets:" not in source
+        for job in workflow["jobs"].values():
+            assert job.get("permissions", {"contents": "read"}) == {"contents": "read"}
+            for step in job.get("steps", []):
+                if step.get("uses", "").startswith("actions/checkout@"):
+                    assert step["with"]["persist-credentials"] is False
 
 
 def test_home_assistant_container_defaults_are_digest_pinned() -> None:

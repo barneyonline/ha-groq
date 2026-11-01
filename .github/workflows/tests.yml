@@ -22,6 +22,9 @@ on:
   workflow_dispatch:
   workflow_call:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ format('{0}-{1}', github.workflow_ref || github.workflow, github.ref) }}
   cancel-in-progress: true
@@ -31,8 +34,6 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       contents: read
-      # Authenticate Codecov uploads without repository or Dependabot secrets.
-      id-token: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -158,24 +159,6 @@ jobs:
             coverage.xml
             junit.xml
             coverage.json
-      - name: Upload coverage to Codecov
-        if: ${{ (steps.pytest.outcome == 'success' || steps.pytest.outcome == 'failure') && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
-        with:
-          use_oidc: true
-          plugins: noop
-          disable_search: true
-          files: ./coverage.xml
-          fail_ci_if_error: true
-      - name: Upload test results to Codecov
-        if: ${{ (steps.pytest.outcome == 'success' || steps.pytest.outcome == 'failure') && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
-        with:
-          use_oidc: true
-          plugins: noop
-          disable_search: true
-          files: ./junit.xml
-          report_type: test_results
       - name: Fail if tests failed
         if: ${{ steps.pytest.outcome == 'failure' }}
         run: exit 1
