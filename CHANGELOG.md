@@ -25,7 +25,7 @@ All notable changes to this project will be documented in this file.
 - Evaluate a smaller Home Assistant Core test image in isolated native amd64 CI while retaining the current default harness.
 
 - Refresh the README with wiki-style light and dark banners, a concise feature overview, fresh Home Assistant screenshots, an expandable gallery and a direct HACS link. Keep project badges visible at the bottom and preserve the detailed reference in `docs/user-guide.md` alongside links to the wiki.
-- Add repository controls and templates for HAL-managed issue investigation, complete PR-feedback review, and verified bug-release delivery. Bind final independent handling verdicts to settled checks in separate PR conversation comments. Verify native clean-review receipts and explicit zero-run app-suite evidence without waiving actual feedback or check failures.
+- Add maintenance workflows and merge checks for HAL-managed issues and PR feedback, with shared operating instructions and changelog/release templates maintained in the central HAL plugin. Keep unattended activation gated by verification.
 
 ## v2.1.0 - 2026-10-24
 
