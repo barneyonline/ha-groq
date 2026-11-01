@@ -15,8 +15,12 @@ jobs:
   label_issue:
     if: >
       github.event_name == 'workflow_dispatch' ||
-      startsWith(github.event.issue.title, '[Bug]:') ||
-      startsWith(github.event.issue.title, '[Feature]:')
+      (!contains(github.event.issue.labels.*.name, 'automation/hal') &&
+       !contains(github.event.issue.labels.*.name, 'automation/control') &&
+       (
+        startsWith(github.event.issue.title, '[Bug]:') ||
+        startsWith(github.event.issue.title, '[Feature]:')
+       ))
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

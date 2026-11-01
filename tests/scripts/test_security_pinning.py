@@ -26,7 +26,9 @@ def test_github_actions_are_pinned_to_full_commit_shas() -> None:
     for workflow in sorted((REPOSITORY_ROOT / ".github/workflows").glob("*.*ml")):
         for line_number, line in enumerate(workflow.read_text().splitlines(), 1):
             value = line.strip().removeprefix("- ").removeprefix("uses: ")
-            if "uses:" not in line or value.startswith("./"):
+            if not line.strip().removeprefix("- ").startswith(
+                "uses:"
+            ) or value.startswith("./"):
                 continue
             reference = value.split(" #", 1)[0].strip().strip('"')
             if not IMMUTABLE_ACTION.fullmatch(reference):

@@ -4,9 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-### Documentation
+### 🚧 Breaking changes
+
+- None
+
+### ✨ New features
+
+- None
+
+### 🐛 Bug fixes
+
+- None
+
+### 🔧 Improvements
+
+- None
+
+### 🔄 Other changes
 
 - Refresh the README with wiki-style light and dark banners, a concise feature overview, fresh Home Assistant screenshots, an expandable gallery and a direct HACS link. Keep project badges visible at the bottom and preserve the detailed reference in `docs/user-guide.md` alongside links to the wiki.
+- Add repository controls and templates for HAL-managed issue investigation, complete PR-feedback review, and verified bug-release delivery.
 
 ## v2.1.0 - 2026-10-24
 

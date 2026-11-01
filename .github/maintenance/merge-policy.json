@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "repository": "barneyonline/ha-groq",
+  "base_branch": "main",
+  "trusted_ledger_authors": [
+    {
+      "id": 38914183,
+      "login": "barneyonline"
+    }
+  ],
+  "codex_reviewers": [
+    {
+      "id": 199175422,
+      "login": "chatgpt-codex-connector[bot]"
+    }
+  ],
+  "independent_reviewers": [
+    {
+      "id": 199175422,
+      "login": "chatgpt-codex-connector[bot]"
+    }
+  ],
+  "gate_check": {
+    "name": "Autonomous maintenance / merge gate",
+    "app_id": 15368,
+    "workflow_path": null
+  },
+  "checks": [
+    {
+      "app_id": 15368,
+      "workflow_path": ".github/workflows/auto_assign.yml",
+      "name": "auto-assign",
+      "required": true
+    },
+    {
+      "app_id": 15368,
+      "workflow_path": ".github/workflows/codespell.yml",
+      "name": "codespell",
+      "required": true
+    },
+    {
+      "app_id": 15368,
+      "workflow_path": ".github/workflows/quality-scale.yml",
+      "name": "validate",
+      "required": true
+    },
+    {
+      "app_id": 15368,
+      "workflow_path": ".github/workflows/tests.yml",
+      "name": "checks",
+      "required": true
+    },
+    {
+      "app_id": 15368,
+      "workflow_path": ".github/workflows/tests.yml",
+      "name": "minimum-homeassistant",
+      "required": true
+    },
+    {
+      "app_id": 15368,
+      "workflow_path": ".github/workflows/validate.yaml",
+      "name": "validate-hacs",
+      "required": true
+    },
+    {
+      "app_id": 15368,
+      "workflow_path": "dynamic/github-code-scanning/codeql",
+      "name": "Analyze (actions)",
+      "required": true
+    },
+    {
+      "app_id": 15368,
+      "workflow_path": "dynamic/github-code-scanning/codeql",
+      "name": "Analyze (python)",
+      "required": true
+    },
+    {
+      "app_id": 254,
+      "workflow_path": null,
+      "name": "codecov/patch",
+      "required": true
+    },
+    {
+      "app_id": 57789,
+      "workflow_path": null,
+      "name": "CodeQL",
+      "required": true
+    }
+  ],
+  "statuses": [],
+  "operational_check": {
+    "name": "maintenance-gate",
+    "app_id": 15368,
+    "workflow_path": ".github/workflows/maintenance-gate.yml"
+  }
+}
