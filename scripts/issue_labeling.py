@@ -204,6 +204,13 @@ def desired_labels_for_issue(
     if kind is None:
         return LabelDecision(set(), set(), [], [])
 
+    existing = {
+        label.get("name") if isinstance(label, dict) else str(label)
+        for label in issue.get("labels", [])
+    }
+    if {"automation/hal", "automation/control"}.intersection(existing):
+        return LabelDecision(set(), set(), [], [])
+
     body = str(issue.get("body") or "")
     desired: set[str] = {"status/needs-triage"}
     fields = BODY_FIELD_LABELS[kind]
@@ -242,10 +249,6 @@ def desired_labels_for_issue(
     if action == "opened":
         desired.add("status/needs-triage")
 
-    existing = {
-        label.get("name") if isinstance(label, dict) else str(label)
-        for label in issue.get("labels", [])
-    }
     managed_existing = {
         label
         for label in existing

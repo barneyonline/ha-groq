@@ -65,7 +65,7 @@ jobs:
             --user "$(id -u):$(id -g)" \
             --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
             --mount "type=bind,src=$GROQ_LIGHT_EVIDENCE,dst=/evidence" \
-            --tmpfs /tmp:rw,nosuid,size=512m \
+            --tmpfs /tmp:rw,exec,nosuid,nodev,size=512m \
             -e HOME=/tmp -e PYTHONPATH=/workspace \
             -e COVERAGE_FILE=/evidence/.coverage \
             ha-groq-light:ci bash -euo pipefail -c '
