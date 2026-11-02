@@ -179,6 +179,11 @@ count as requests. Counters reset on integration reload or Home Assistant restar
 missing provider measurements remain unknown. Updates are pushed without polling
 or extra API calls, and sensors retain no prompts, responses, or source URLs.
 
+Renaming a sensor preserves its current measurements. On Home Assistant 2026.11
+and newer, renames update the entity in place and keep its existing usage
+subscription. Home Assistant 2026.10 removes and adds the entity again; both paths
+stop updates when the sensor or account is unloaded.
+
 ## Streaming and browser search
 
 Streaming Assist now works with Home Assistant tools enabled. Text arrives while
@@ -223,6 +228,16 @@ request body options.
 - TTS audio processing fails: install `ffmpeg` on the Home Assistant host, choose direct single-part playback without audio normalization, or disable Long TTS.
 - Local image or audio file fails: direct paths and media-source inputs require an administrator, and direct paths must also be allowed by Home Assistant `allowlist_external_dirs`.
 - Diagnostics: download diagnostics from the integration page. API keys, endpoint URLs, and prompt fields are redacted.
+
+Repair notices retain their ignored status across account reloads. Request-time
+failures remain until a matching request succeeds or the affected service/model
+configuration is removed. On Home Assistant 2026.11 and newer, repairs also belong
+to their account entry: disabling the account hides its notices, and removing it
+deletes them. Existing persistent notices gain native ownership during
+reconciliation without being deleted and recreated. Home Assistant 2026.10 uses
+the integration's metadata-based cleanup; native ownership, disabled-account
+visibility and issue refresh require 2026.11. The advertised minimum remains
+2026.10.0 pending the owner's separate version bump.
 
 ## Removal
 
