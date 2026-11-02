@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import os
-from pathlib import Path
 import re
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib import parse, request
 
@@ -208,7 +208,7 @@ def desired_labels_for_issue(
         label.get("name") if isinstance(label, dict) else str(label)
         for label in issue.get("labels", [])
     }
-    if {"automation/hal", "automation/control"}.intersection(existing):
+    if "automation/hal" in existing:
         return LabelDecision(set(), set(), [], [])
 
     body = str(issue.get("body") or "")

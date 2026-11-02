@@ -2,23 +2,8 @@ name: Tests
 
 on:
   pull_request:
-    paths:
-      - "custom_components/groq/**"
-      - "tests/components/groq/**"
-      - "tests/scripts/**"
-      - ".pre-commit-config.yaml"
-      - ".ruff.toml"
-      - "pyproject.toml"
-      - "pytest.ini"
-      - "codecov.yml"
-      - "devtools/docker/**"
-      - "hacs.json"
-      - "quality_scale.yaml"
-      - "scripts/**"
-      - "README.md"
-      - "CONTRIBUTING.md"
-      - ".github/workflows/ci.yml"
-      - ".github/workflows/tests.yml"
+  push:
+    branches: [main, "release/**"]
   workflow_dispatch:
   workflow_call:
 
@@ -30,7 +15,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-26.04
+    outputs:
+      tests: ${{ steps.select.outputs.tests }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Select checks for changed paths
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          import subprocess
+          from fnmatch import fnmatchcase
+          patterns = ['custom_components/groq/**', 'tests/components/groq/**', 'tests/scripts/**', '.pre-commit-config.yaml', '.ruff.toml', 'pyproject.toml', 'pytest.ini', 'codecov.yml', 'devtools/docker/**', 'hacs.json', 'quality_scale.yaml', 'scripts/**', 'README.md', 'CONTRIBUTING.md', '.github/workflows/tests.yml', '.github/workflows/coverage-reporting.yml', '.github/workflows/release-candidate.yml', '.github/workflows/release-assets.yml', 'AGENTS.md']
+          selected = True
+          if os.environ['EVENT_NAME'] == 'pull_request':
+              paths = subprocess.check_output(
+                  ['git', 'diff', '--no-renames', '--name-only',
+                   os.environ['BASE_SHA'] + '...' + os.environ['HEAD_SHA']], text=True
+              ).splitlines()
+              selected = any(fnmatchcase(path, pattern) for path in paths for pattern in patterns)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tests={str(selected).lower()}\n')
+          PYTHON
+
   checks:
+    needs: changes
+    if: needs.changes.outputs.tests == 'true'
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -164,6 +183,8 @@ jobs:
         run: exit 1
 
   minimum-homeassistant:
+    needs: changes
+    if: needs.changes.outputs.tests == 'true'
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -190,3 +211,24 @@ jobs:
           name: minimum-test-runtime-logs
           path: .test-cache/minimum-test-runtime.log
           if-no-files-found: ignore
+
+  repository-checks:
+    name: Repository checks
+    if: ${{ always() }}
+    needs: [changes, checks, minimum-homeassistant]
+    runs-on: ubuntu-26.04
+    permissions: {}
+    steps:
+      - name: Require every applicable check to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          results = json.loads(os.environ['RESULTS'])
+          failed = [name for name, job in results.items() if job['result'] not in {'success', 'skipped'}]
+          if failed:
+              raise SystemExit('Required checks did not pass: ' + ', '.join(failed))
+          print('All applicable repository checks passed.')
+          PYTHON

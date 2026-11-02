@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
 import sys
+from pathlib import Path
 
 
 def _load_module():
@@ -98,9 +98,9 @@ def test_validate_template_mappings_for_repository() -> None:
     assert issue_labeling.validate_template_mappings(root) == []
 
 
-def test_managed_and_control_issues_keep_lifecycle_and_area_labels() -> None:
+def test_hal_issues_keep_lifecycle_and_area_labels() -> None:
     for action in ("opened", "edited", "workflow_dispatch"):
-        for managed in ("automation/hal", "automation/control"):
+        for managed in ("automation/hal",):
             for objects in (False, True):
                 labels = [managed, "status/awaiting-release", "area/climate"]
                 issue = {

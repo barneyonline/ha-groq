@@ -47,11 +47,6 @@ def test_consolidated_checks_do_not_persist_write_credentials() -> None:
     # Candidate checks use read access; protected reporting owns Codecov uploads.
     assert checks["permissions"] == {"contents": "read"}
 
-    caller = yaml.safe_load((REPOSITORY_ROOT / ".github/workflows/ci.yml").read_text())[
-        "jobs"
-    ]["checks"]
-    assert caller["permissions"] == checks["permissions"]
-
     checkout = next(
         step
         for step in checks["steps"]
@@ -62,7 +57,7 @@ def test_consolidated_checks_do_not_persist_write_credentials() -> None:
 
 def test_candidate_checks_have_no_codecov_or_inherited_secrets() -> None:
     """Mutable test programs cannot share a runner with upload credentials."""
-    for filename in ("tests.yml", "ci.yml"):
+    for filename in ("tests.yml",):
         source = (REPOSITORY_ROOT / ".github/workflows" / filename).read_text()
         workflow = yaml.safe_load(source)
         assert workflow["permissions"] == {"contents": "read"}
@@ -70,7 +65,10 @@ def test_candidate_checks_have_no_codecov_or_inherited_secrets() -> None:
         assert "CODECOV_TOKEN" not in source
         assert "secrets:" not in source
         for job in workflow["jobs"].values():
-            assert job.get("permissions", {"contents": "read"}) == {"contents": "read"}
+            assert job.get("permissions", {"contents": "read"}) in (
+                {"contents": "read"},
+                {},
+            )
             for step in job.get("steps", []):
                 if step.get("uses", "").startswith("actions/checkout@"):
                     assert step["with"]["persist-credentials"] is False

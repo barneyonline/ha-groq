@@ -90,7 +90,7 @@ The user guide covers [supported functionality](docs/user-guide.md#supported-fun
 
 ---
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/ci.yml?branch=main&label=tests)](https://github.com/barneyonline/ha-groq/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/tests.yml?branch=main&label=tests)](https://github.com/barneyonline/ha-groq/actions/workflows/tests.yml)
 [![Codecov](https://codecov.io/gh/barneyonline/ha-groq/branch/main/graph/badge.svg)](https://codecov.io/gh/barneyonline/ha-groq)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/barneyonline/ha-groq/hassfest.yml?branch=main&label=hassfest)](https://github.com/barneyonline/ha-groq/actions/workflows/hassfest.yml)
 [![Quality scale: Platinum](https://img.shields.io/badge/quality%20scale-platinum-blue)](quality_scale.yaml)
