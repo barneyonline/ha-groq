@@ -1,155 +1,153 @@
-"""Regression checks for Codecov's unusable source inventory and empty reports."""
+"""Exercise the actual reporter workflow and coverage.py path configuration."""
 
 from __future__ import annotations
 
 import copy
+import io
 import json
-import stat
-import urllib.error
+import os
 from pathlib import Path
+import subprocess
+import sys
+import urllib.error
+import urllib.request
 from unittest.mock import Mock
 import xml.etree.ElementTree as ET
 
 import pytest
 import yaml
 
-from scripts import codecov_reporting as reporter
-
+ROOT = Path(__file__).resolve().parents[2]
 SHA = "a" * 40
 SOURCE = "custom_components/groq/api.py"
-TEST = "tests/components/groq/test_api.py"
-ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.fixture
-def reports(tmp_path):
-    tree = [
-        {"path": path, "type": "blob", "mode": "100644"}
-        for path in (SOURCE, TEST, "scripts/malicious.py", "codecov.yml")
-    ]
-    tree.extend(
+def workflow():
+    return yaml.load(
+        (ROOT / ".github/workflows/coverage-reporting.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+
+
+def step(name):
+    return next(
+        item for item in workflow()["jobs"]["upload"]["steps"] if item["name"] == name
+    )
+
+
+def test_source_checkout_and_uploader_keep_candidate_execution_isolated(tmp_path):
+    checkout = step("Check out the verified source for Codecov path matching")["with"]
+    assert checkout["ref"] == "${{ steps.source.outputs.sha }}"
+    assert checkout["persist-credentials"] == "false"
+    assert checkout["lfs"] == checkout["submodules"] == "false"
+    repo = tmp_path / "producer"
+    repo.mkdir()
+
+    def git(*args):
+        return subprocess.check_output(
+            ["git", "-C", str(repo), *args], text=True
+        ).strip()
+
+    git("init", "--initial-branch=base")
+    git("config", "user.name", "Coverage regression")
+    git("config", "user.email", "coverage@example.invalid")
+    source = repo / SOURCE
+    source.parent.mkdir(parents=True)
+    source.write_text("raise RuntimeError('candidate code must never run')\n")
+    # Candidate tool/config names stay in the source checkout, away from the
+    # uploader's CWD, executable download and automatic configuration discovery.
+    (repo / "codecov").symlink_to(tmp_path / "outside")
+    (repo / "codecov.yml").write_text("candidate configuration\n")
+    git("add", ".")
+    git("commit", "-m", "Add source")
+    git("checkout", "-b", "pr-head")
+    source.write_text("raise RuntimeError('changed candidate must never run')\n")
+    git("commit", "-am", "Change source")
+    head = git("rev-parse", "HEAD")
+    git("checkout", "base")
+    (repo / "base_only.py").write_text("# added after the PR branched\n")
+    git("add", ".")
+    git("commit", "-m", "Add base source")
+    git("merge", "--no-ff", "pr-head", "-m", "Synthetic PR merge")
+    assert "base_only.py" in git("ls-files").splitlines()
+    selected = tmp_path / "source"
+    git("worktree", "add", "--detach", str(selected), head)
+    assert (selected / SOURCE).exists()
+    assert not (selected / "base_only.py").exists()
+    subprocess.run(
         [
-            {
-                "path": "custom_components/groq/link.py",
-                "type": "blob",
-                "mode": "120000",
-            },
-            {"path": "submodule", "type": "commit", "mode": "160000"},
-        ]
+            "bash",
+            "-eu",
+            "-c",
+            step("Prepare isolated uploader working directory")["run"],
+        ],
+        env={**os.environ, "RUNNER_TEMP": str(tmp_path)},
+        check=True,
     )
-    (tmp_path / "producer-tree.json").write_text(json.dumps({"sha": SHA, "tree": tree}))
-    directory = tmp_path / "reports"
-    directory.mkdir()
-    (directory / "coverage.xml").write_text(
-        f"""<coverage lines-valid="2" lines-covered="1">
-      <sources><source>/workspace</source></sources>
-      <packages><package><classes><class filename="{SOURCE}"><lines>
-        <line number="3" hits="7"/><line number="9" hits="0"/>
-      </lines></class></classes></package></packages></coverage>"""
-    )
-    (directory / "junit.xml").write_text(f"""<testsuites><testsuite tests="1">
-      <testcase name="test_api" file="/workspace/{TEST}"/>
-    </testsuite></testsuites>""")
-    return tmp_path
-
-
-def test_inventory_and_exact_paths_preserve_covered_and_uncovered_lines(reports):
-    # The old root contained only XML; no source filename could match its network.
-    assert SOURCE not in {p.name for p in (reports / "reports").iterdir()}
-    reporter.prepare(reports, SHA)
-    # The action downloads these tools into its CWD. Keep them out of root_dir.
-    work = reports / "codecov-work"
+    work = tmp_path / "codecov-work"
     assert list(work.iterdir()) == []
     for name in ("codecov", "codecov.SHA256SUM", "codecov.SHA256SUM.sig"):
-        (work / name).write_text("wrapper tool")
-    inventory = reports / "codecov-source"
-    names = {
-        p.relative_to(inventory).as_posix() for p in inventory.rglob("*") if p.is_file()
-    }
-    assert names == {SOURCE, TEST, "scripts/malicious.py", "codecov.yml"}
-    for path in inventory.rglob("*"):
-        if path.is_file():
-            assert path.read_bytes() == b""
-            assert not path.stat().st_mode & stat.S_IXUSR
-    coverage = ET.parse(reports / "reports/coverage.xml")
-    assert coverage.findtext("sources/source") == "."
-    item = coverage.find("./packages/package/classes/class")
-    assert item.attrib["filename"] == SOURCE
-    assert [
-        (line.attrib["number"], line.attrib["hits"])
-        for line in item.findall("lines/line")
-    ] == [("3", "7"), ("9", "0")]
-    assert (
-        ET.parse(reports / "reports/junit.xml").find(".//testcase").attrib["file"]
-        == TEST
+        (work / name).write_text("wrapper artifact")
+    assert not (tmp_path / "outside").exists()
+    for item in workflow()["jobs"]["upload"]["steps"]:
+        if "codecov-action@" in item.get("uses", ""):
+            options = item["with"]
+            assert options["working-directory"] == "${{ runner.temp }}/codecov-work"
+            assert options["root_dir"] == "${{ github.workspace }}/codecov-source"
+            assert options["network_filter"] == "custom_components/groq/"
+            assert options["plugins"] == "noop"
+            assert options["disable_file_fixes"] == options["disable_search"] == "true"
+            assert options["use_oidc"] == "true"
+    tests = yaml.load(
+        (ROOT / ".github/workflows/tests.yml").read_text(), Loader=yaml.BaseLoader
     )
-    assert json.loads((reports / "codecov-expected.json").read_text()) == {
-        "sha": SHA,
-        "files": {SOURCE: {"lines": 2, "hits": 1}},
-    }
+    for name in ("checks", "minimum-homeassistant"):
+        checkout = next(
+            item
+            for item in tests["jobs"][name]["steps"]
+            if "checkout@" in item.get("uses", "")
+        )
+        assert (
+            checkout["with"]["ref"]
+            == "${{ github.event.pull_request.head.sha || github.sha }}"
+        )
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        "../escape",
-        "/absolute",
-        "a/../../escape",
-        "a//b",
-        "./a",
-        ".",
-        "a\\b",
-        "a\nb",
-        ".git/config",
-    ],
-)
-def test_unsafe_inventory_paths_fail_closed(reports, path):
-    tree = {"sha": SHA, "tree": [{"path": path, "type": "blob", "mode": "100644"}]}
-    (reports / "producer-tree.json").write_text(json.dumps(tree))
-    with pytest.raises(ValueError, match="Unsafe repository path"):
-        reporter.prepare(reports, SHA)
-
-
-@pytest.mark.parametrize(
-    "filename",
-    [
-        "api.py",
-        "/unknown/custom_components/groq/api.py",
-        "custom_components/groq/link.py",
-        "custom_components/groq/missing.py",
-    ],
-)
-def test_ambiguous_untracked_or_symlink_coverage_is_rejected(reports, filename):
-    path = reports / "reports/coverage.xml"
-    path.write_text(path.read_text().replace(SOURCE, filename))
-    with pytest.raises(ValueError):
-        reporter.prepare(reports, SHA)
-
-
-def test_absolute_workspace_paths_are_normalized(reports):
-    path = reports / "reports/coverage.xml"
-    path.write_text(path.read_text().replace(SOURCE, "/workspace/" + SOURCE))
-    reporter.prepare(reports, SHA)
-    assert ET.parse(path).find(".//class").attrib["filename"] == SOURCE
-
-
-@pytest.mark.parametrize(
-    "file,content",
-    [
-        ("coverage.xml", "<coverage><packages/></coverage>"),
-        ("junit.xml", "<testsuites/>"),
-        ("coverage.xml", '<!DOCTYPE coverage [<!ENTITY data "bad">]><coverage/>'),
-    ],
-)
-def test_empty_or_entity_reports_are_rejected(reports, file, content):
-    (reports / "reports" / file).write_text(content)
-    with pytest.raises(ValueError):
-        reporter.prepare(reports, SHA)
+def test_coverage_py_emits_repository_paths_and_preserves_uncovered_lines(tmp_path):
+    source = tmp_path / SOURCE
+    source.parent.mkdir(parents=True)
+    (source.parent / "__init__.py").touch()
+    source.write_text(
+        "def covered():\n    return 1\n\ndef uncovered():\n    return 2\n"
+    )
+    (tmp_path / "exercise.py").write_text(
+        "from custom_components.groq.api import covered\ncovered()\n"
+    )
+    env = {**os.environ, "COVERAGE_FILE": str(tmp_path / ".coverage")}
+    for args in (
+        ["run", f"--rcfile={ROOT / 'pyproject.toml'}", "exercise.py"],
+        ["xml", f"--rcfile={ROOT / 'pyproject.toml'}", "-o", "coverage.xml"],
+    ):
+        subprocess.run(
+            [sys.executable, "-m", "coverage", *args],
+            cwd=tmp_path,
+            env=env,
+            check=True,
+            capture_output=True,
+        )
+    xml = ET.parse(tmp_path / "coverage.xml")
+    classes = {item.attrib["filename"]: item for item in xml.findall(".//class")}
+    assert SOURCE in classes
+    hits = [int(line.attrib["hits"]) for line in classes[SOURCE].findall("lines/line")]
+    assert 0 in hits and any(hit > 0 for hit in hits)
+    assert all(not Path(name).is_absolute() for name in classes)
+    assert all(
+        not (item.text or "").startswith("/") for item in xml.findall("sources/source")
+    )
 
 
 @pytest.fixture
 def delivery():
-    expected = {"sha": SHA, "files": {SOURCE: {"lines": 2, "hits": 1}}}
     totals = {"files": 1, "lines": 2, "hits": 1, "misses": 1}
     commit = {
         "commitid": SHA,
@@ -168,159 +166,96 @@ def delivery():
         },
         {
             "name": None,
-            "job_code": "junit-123-2",
             "build_code": None,
-            "totals": None,
-            "state": "processed",
-            "state_name": "UPLOADED",
-            "state_id": 1,
             "build_url": None,
-            "storage_path": "test_results/v1/raw/file",
+            "job_code": "junit-123-2",
+            "state": "processed",
+            "state_id": 1,
+            "state_name": "UPLOADED",
+            "totals": None,
+            "storage_path": "test_results/v1/raw/example",
         },
     ]
-    return commit, uploads, expected
+    return commit, uploads
 
 
-def check(delivery):
-    return reporter.processed(*delivery, "123", "2")
+def verify(monkeypatch, delivery, pages=None):
+    commit, uploads = delivery
+    base = f"https://api.codecov.io/api/v2/github/barneyonline/repos/ha-groq/commits/{SHA}/"
+    reads = []
+
+    def read(url, timeout):
+        assert timeout == 15
+        reads.append(url)
+        data = (
+            commit
+            if url == base + "?format=json"
+            else (pages[url] if pages else {"results": uploads, "next": None})
+        )
+        return io.StringIO(json.dumps(data))
+
+    monkeypatch.setattr(urllib.request, "urlopen", read)
+    sleep = Mock()
+    monkeypatch.setattr("time.sleep", sleep)
+    for key, value in {
+        "GITHUB_REPOSITORY": "barneyonline/ha-groq",
+        "SOURCE_SHA": SHA,
+        "SOURCE_RUN_ID": "123",
+        "SOURCE_RUN_ATTEMPT": "2",
+    }.items():
+        monkeypatch.setenv(key, value)
+    script = step("Verify processed coverage and test results for this attempt")["run"]
+    code = script.split("<<'PYTHON'\n", 1)[1].rsplit("\nPYTHON", 1)[0]
+    exec(compile(code, "coverage-reporting.yml", "exec"), {})
+    return reads, sleep
 
 
-def test_processed_project_and_separately_processed_junit_pass(delivery):
-    assert check(delivery)
-
-
-@pytest.mark.parametrize("state", ["created", "uploaded", "processing", "processed"])
-def test_transport_or_queued_upload_does_not_pass(delivery, state):
-    delivery[1][0]["state"] = state
-    assert not check(delivery)
-
-
-@pytest.mark.parametrize("index", [0, 1])
-def test_exact_attempt_processing_error_is_visible(delivery, index):
-    delivery[1][index]["state"] = "error"
-    with pytest.raises(ValueError, match="rejected this attempt"):
-        check(delivery)
-
-
-def test_previous_attempt_does_not_satisfy_current_delivery(delivery):
-    delivery[1][0]["name"] = "coverage-123-1"
-    assert not check(delivery)
+def test_real_success_states_and_nullable_junit_fields_pass(monkeypatch, delivery):
+    reads, sleep = verify(monkeypatch, delivery)
+    assert len(reads) == 2
+    sleep.assert_not_called()
 
 
 @pytest.mark.parametrize(
     "case",
     [
-        "empty_commit",
-        "empty_upload",
-        "empty_files",
-        "wrong_path",
-        "wrong_hits",
-        "wrong_commit",
         "unusable",
-        "wrong_junit",
+        "empty_project",
+        "empty_upload",
+        "noop_report",
+        "queued",
+        "stale_coverage",
+        "stale_junit",
+        "wrong_commit",
     ],
 )
-def test_noop_patch_and_empty_or_unusable_reports_cannot_pass(delivery, case):
-    commit, uploads, expected = copy.deepcopy(delivery)
-    if case == "empty_commit":
+def test_empty_unusable_or_other_attempt_cannot_pass(monkeypatch, delivery, case):
+    commit, uploads = copy.deepcopy(delivery)
+    if case == "unusable":
+        uploads[0]["state"] = "error"
+    elif case == "empty_project":
         commit["totals"] = {"files": 0, "lines": 0}
     elif case == "empty_upload":
-        uploads[0]["totals"] = {"files": 0, "lines": 0}
-    elif case == "empty_files":
+        uploads[0]["totals"] = None
+    elif case == "noop_report":
         commit["report"]["files"] = []
-    elif case == "wrong_path":
-        commit["report"]["files"][0]["name"] = "api.py"
-    elif case == "wrong_hits":
-        commit["report"]["files"][0]["totals"]["hits"] = 2
-    elif case == "wrong_commit":
-        commit["commitid"] = "b" * 40
-    elif case == "unusable":
-        commit["state"] = "error"
+    elif case == "queued":
+        uploads[0]["state"] = "processed"
+    elif case == "stale_coverage":
+        uploads[0]["name"] = "coverage-123-1"
+    elif case == "stale_junit":
+        uploads[1]["job_code"] = "junit-123-1"
     else:
-        uploads[1]["storage_path"] = "v4/raw/coverage"
-    with pytest.raises(ValueError):
-        check((commit, uploads, expected))
+        commit["commitid"] = "b" * 40
+    with pytest.raises(SystemExit):
+        verify(monkeypatch, (commit, uploads))
 
 
-def test_pagination_is_complete_and_rejects_foreign_urls(monkeypatch):
-    base = "https://api.codecov.io/api/v2/github/owner/repos/repo/commits/sha/"
-    read = Mock(
-        side_effect=[
-            {"results": [1], "next": base + "uploads/?page=2"},
-            {"results": [2], "next": None},
-        ]
-    )
-    monkeypatch.setattr(reporter, "read_json", read)
-    assert reporter.uploads_for_commit(base) == [1, 2]
-    read.side_effect = [{"results": [], "next": "https://other.invalid/"}]
-    with pytest.raises(ValueError, match="pagination URL"):
-        reporter.uploads_for_commit(base)
-
-
-def test_verification_polls_boundedly_and_preserves_exact_attribution(
-    reports, delivery, monkeypatch
-):
-    reporter.prepare(reports, SHA)
-    commit, uploads, _ = delivery
-    read = Mock(
-        side_effect=[{"commitid": SHA}, {"results": []}, commit, {"results": uploads}]
-    )
-    monkeypatch.setattr(reporter, "read_json", read)
-    sleep = Mock()
-    monkeypatch.setattr(reporter.time, "sleep", sleep)
-    reporter.verify(reports, SHA, "barneyonline/ha-groq", "123", "2")
-    sleep.assert_called_once_with(10)
-    assert all(SHA in call.args[0] for call in read.call_args_list)
-    read.side_effect = None
-    read.return_value = {"commitid": SHA, "results": []}
-    with pytest.raises(ValueError, match="Timed out"):
-        reporter.verify(reports, SHA, "barneyonline/ha-groq", "123", "2")
-    assert read.call_count == 28
-
-
-def test_infrastructure_retries_are_limited_to_two(reports, monkeypatch):
-    reporter.prepare(reports, SHA)
-    read = Mock(side_effect=urllib.error.HTTPError("url", 503, "Unavailable", {}, None))
-    monkeypatch.setattr(reporter, "read_json", read)
-    monkeypatch.setattr(reporter.time, "sleep", Mock())
-    with pytest.raises(urllib.error.HTTPError):
-        reporter.verify(reports, SHA, "barneyonline/ha-groq", "123", "2")
-    assert read.call_count == 3
-
-
-def test_workflow_preserves_trust_boundary_and_checks_processing():
-    workflow = yaml.load(
-        (ROOT / ".github/workflows/coverage-reporting.yml").read_text(),
-        Loader=yaml.BaseLoader,
-    )
-    job = workflow["jobs"]["upload"]
-    steps = job["steps"]
-    checkout = next(step for step in steps if "checkout@" in step.get("uses", ""))
-    assert checkout["with"]["ref"] == "${{ github.workflow_sha }}"
-    assert checkout["with"]["persist-credentials"] == "false"
-    metadata = next(
-        step
-        for step in steps
-        if step["name"] == "Read the exact producer source inventory"
-    )
-    assert "commit_sha: sha" in metadata["with"]["script"]
-    assert "tree.truncated" in metadata["with"]["script"]
-    for step in steps:
-        if "codecov-action@" in step.get("uses", ""):
-            options = step["with"]
-            assert options["root_dir"] == "${{ runner.temp }}/codecov-source"
-            assert options["working-directory"] == "${{ runner.temp }}/codecov-work"
-            assert options["plugins"] == "noop"
-            assert options["disable_file_fixes"] == "true"
-            assert options["use_oidc"] == "true"
-    assert steps[-1]["run"].endswith("codecov_reporting.py verify")
-    assert "coverage_upload.outcome == 'success'" in steps[-1]["if"]
-    assert "junit_upload.outcome == 'success'" in steps[-1]["if"]
-
-
-def test_utf16_entity_xml_is_rejected_before_parsing(reports):
-    (reports / "reports/coverage.xml").write_bytes(
-        '<!DOCTYPE coverage [<!ENTITY data "bad">]><coverage/>'.encode("utf-16")
-    )
-    with pytest.raises(ValueError, match="declarations"):
-        reporter.prepare(reports, SHA)
+def test_upload_pagination_finds_this_attempt(monkeypatch, delivery):
+    base = f"https://api.codecov.io/api/v2/github/barneyonline/repos/ha-groq/commits/{SHA}/uploads/?"
+    pages = {
+        base + "format=json&page_size=100": {"results": [], "next": base + "page=2"},
+        base + "page=2": {"results": delivery[1], "next": None},
+    }
+    reads, _ = verify(monkeypatch, delivery, pages)
+    assert len(reads) == 3
