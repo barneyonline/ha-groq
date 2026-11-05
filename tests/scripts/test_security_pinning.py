@@ -82,12 +82,15 @@ def test_home_assistant_container_defaults_are_digest_pinned() -> None:
     compose_images = HOME_ASSISTANT_IMAGE.findall(compose)
     dockerfile_images = HOME_ASSISTANT_IMAGE.findall(dockerfile)
 
-    assert len(compose_images) == 2
-    assert len(dockerfile_images) == 1
+    assert len(compose_images) == 1
+    assert len(dockerfile_images) == 0
     assert all(
         IMMUTABLE_HOME_ASSISTANT_IMAGE.fullmatch(image)
         for image in [*compose_images, *dockerfile_images]
     )
+    python_image = re.compile(r"python:3\.14\.7-slim-bookworm@sha256:[0-9a-f]{64}")
+    assert python_image.search(compose)
+    assert python_image.search(dockerfile)
 
 
 @pytest.mark.parametrize("symlink", [None, ".test-cache", ".test-cache/pre-commit"])

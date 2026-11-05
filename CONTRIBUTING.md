@@ -39,7 +39,7 @@ Include the integration version, Home Assistant version, installation method, se
 3. Build the pinned Docker environment:
 
 ```bash
-docker compose -f devtools/docker/docker-compose.yml build ha-dev
+scripts/test --prepare
 ```
 
 4. Develop and test your changes inside `ha-dev` or through the `scripts/test` wrapper. The wrapper builds the test image only when its Docker inputs change and reuses a per-worktree container between commands. Run `scripts/test --stop` when you want to remove that container.
@@ -70,8 +70,38 @@ scripts/test python -m pytest -q
 The primary harness uses Home Assistant 2026.10.0. Verify the advertised minimum
 separately with `scripts/test --minimum python -m pytest tests/components/groq -q`.
 Both environments verify the actual Core/helper versions and run dependency checks
-when built. `HA_IMAGE` overrides must match the helper dependency; incompatible
-images fail before tests. Stop the minimum container with `scripts/test --minimum --stop`.
+when built. The test image uses digest-pinned Python 3.14 and installs only Core,
+the matching helper, and the component dependencies needed by Groq. `HA_VERSION`
+overrides must match the helper dependency; incompatible versions fail before
+tests. `PYTHON_IMAGE` overrides the interpreter image. Stop the minimum container
+with `scripts/test --minimum --stop`. The old `HA_IMAGE` override is rejected;
+use `HA_VERSION` for Core and `PYTHON_IMAGE` for the interpreter image instead.
+
+### Managed cloud environment
+
+Configure the saved cloud environment to run these commands from the checkout:
+
+- Install script: `scripts/cloud-environment install`
+- Session startup script: `scripts/cloud-environment start`
+
+Installation builds `ha-dev` using normal Docker layer caching. Session startup
+recreates the container to refresh Docker's injected proxy settings, verifies
+the exact HA/helper versions and dependencies, and leaves it ready for
+`scripts/test <command>`. Neither hook runs tests or starts `ha-runtime`.
+Run relevant tests while developing and the full required checks before pushing.
+
+The hooks use the managed local Docker socket and preserve Docker's proxy and
+registry configuration. When `CODEX_PROXY_CERT` is present, `scripts/test` supplies
+the combined system CA bundle as a BuildKit secret and a read-only runtime mount.
+It configures Python, pip, Requests and Git trust without baking session
+certificates into the image. Set `HA_GROQ_CA_BUNDLE` to use another combined CA
+bundle. Without a custom bundle, normal system trust applies.
+
+Use `scripts/cloud-environment reset` only for an explicit reset: it removes this
+worktree's test container and rebuilds with `--pull --no-cache`. Ordinary startup
+reuses the image and build cache. Keep only the Docker environment; a separate
+native virtualenv and copied HA source are unnecessary. Start the digest-pinned
+HA 2026.10.0 `ha-runtime` service only for manual UI checks.
 
 `scripts/strict-typing` discovers the installed HA source for actual interface checks.
 Run `scripts/test python scripts/check_ha_typing.py` for positive and negative typing
@@ -136,7 +166,7 @@ See Codecov's [source inventory guidance](https://docs.codecov.com/docs/error-re
 
 ## Dependency Ownership
 
-Keep the Home Assistant image and matching test plugin aligned. They supply
+Keep the Home Assistant package and matching test plugin aligned. They supply
 their own dependencies, including pytest, its asyncio/coverage plugins,
 freezegun, and PyYAML. Do not duplicate those dependencies in the repository's
 development requirements or export the complete Home Assistant environment to
