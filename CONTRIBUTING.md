@@ -118,6 +118,18 @@ than optional host-side coverage collectors. Workflow runner versions are pinned
 to the verified Ubuntu 26.04 baseline; update them deliberately alongside the
 verification environment.
 
+The default-branch Coverage Reporting workflow reads only the exact producer
+commit's Git tree metadata and materializes empty, non-executable inventory
+files outside the trusted reporter checkout. It normalizes Docker report paths
+to repository-relative names and keeps candidate programs, hooks and caches out
+of the credentialed job. Codecov plugins and file fixes remain disabled because
+the inventory contains names, not source contents. Upload success must be
+followed by processed coverage matching the producer's file/line/hit counts and
+separately processed JUnit for that run and attempt. An empty report, unusable
+report or processing timeout fails reporting. Changes to this reporter can only
+be verified live after the trusted workflow reaches main; use a fresh producer
+commit for that check because Codecov may retain an errored first attempt.
+
 ## Dependency Ownership
 
 Keep the Home Assistant image and matching test plugin aligned. They supply
