@@ -5,22 +5,30 @@ services:
       context: ../..
       dockerfile: devtools/docker/Dockerfile
       args:
-        HA_IMAGE: ${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.10.0@sha256:1b64d38f38d922bf9d59336451fd6453e1d614f934456af4ee3d2a51061be3a4}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56}
+        HA_VERSION: ${HA_VERSION:-2026.10.0}
         REQUIREMENTS_FILE: ${HA_GROQ_REQUIREMENTS_FILE:-requirements-dev.txt}
         PYTHON_VERSION: ${PYTHON_VERSION:-3.14}
         TEST_ENVIRONMENT_HASH: ${HA_GROQ_TEST_ENVIRONMENT_HASH:-manual}
+      secrets:
+        - proxy_ca
     volumes:
       - ../..:/workspace:delegated
       - ${HA_GROQ_GIT_COMMON_DIR:-../../.git}:${HA_GROQ_GIT_COMMON_DIR:-/workspace/.git}
       - ../../.test-cache/pre-commit:/root/.cache/pre-commit
+      - ${HA_GROQ_CA_BUNDLE:-./empty-ca.pem}:/run/ha-groq-ca.pem:ro
     working_dir: /workspace
     command: sleep infinity
     environment:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+      - SSL_CERT_FILE=${HA_GROQ_CONTAINER_CA:-/etc/ssl/certs/ca-certificates.crt}
+      - REQUESTS_CA_BUNDLE=${HA_GROQ_CONTAINER_CA:-/etc/ssl/certs/ca-certificates.crt}
+      - PIP_CERT=${HA_GROQ_CONTAINER_CA:-/etc/ssl/certs/ca-certificates.crt}
+      - GIT_SSL_CAINFO=${HA_GROQ_CONTAINER_CA:-/etc/ssl/certs/ca-certificates.crt}
 
   ha-runtime:
-    image: ghcr.io/home-assistant/home-assistant:stable@sha256:56690a89c79a0de98035e1719f8324a92d5859c1192ff45adb0230ea81cb42a5
+    image: ghcr.io/home-assistant/home-assistant:2026.10.0@sha256:1b64d38f38d922bf9d59336451fd6453e1d614f934456af4ee3d2a51061be3a4
     restart: unless-stopped
     ports:
       - "8123:8123"
@@ -29,3 +37,7 @@ services:
     volumes:
       - ../../.ha-config:/config
       - ../../custom_components/groq:/config/custom_components/groq:ro
+
+secrets:
+  proxy_ca:
+    file: ${HA_GROQ_CA_BUNDLE:-./empty-ca.pem}

@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+# Saved cloud install: scripts/cloud-environment install
+# Saved session startup: scripts/cloud-environment start
+set -eu
+cd "$(dirname "$0")/.."
+
+case "${1:-}" in
+  install|start|reset) action=$1 ;;
+  *) echo 'Usage: scripts/cloud-environment {install|start|reset}' >&2; exit 2 ;;
+esac
+[ "$#" -eq 1 ] || { echo 'Expected one action' >&2; exit 2; }
+
+# Select only this managed instance's daemon. Preserve DOCKER_CONFIG and all
+# inherited proxy/credential settings; never start a competing daemon.
+unset DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS DOCKER_TLS_VERIFY DOCKER_CERT_PATH
+export DOCKER_HOST=unix:///var/run/docker.sock
+docker --host=unix:///var/run/docker.sock info >/dev/null
+
+case "$action" in
+  install) exec scripts/test python -m pip check ;;
+  start) exec scripts/test --recreate python -m pip check ;;
+  reset)
+    scripts/test --stop
+    exec scripts/test --rebuild --recreate python -m pip check
+    ;;
+esac

@@ -1,4 +1,4 @@
-# Keep this plugin aligned with the pinned Home Assistant dev image.
+# Keep this plugin aligned with HA_VERSION in the Docker build.
 # It supplies pytest, asyncio/coverage plugins, and freezegun; Core supplies PyYAML.
 pytest-homeassistant-custom-component==0.13.371
 mypy==2.3.1

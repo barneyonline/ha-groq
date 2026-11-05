@@ -166,13 +166,18 @@ claims about actual device or provider performance.
 ## Validation and performance evidence
 
 The primary and minimum Docker harnesses currently run HA 2026.10.0 with pytest
-helper 0.13.371. Image digests are pinned. Both verify
-the original image's Core version after dependency installation and check package
-consistency. An incompatible `HA_IMAGE` override fails instead of silently testing
-a downgraded Core. `scripts/test --minimum` selects the separate minimum container. The disposable
-Groq test image removes the unrelated bundled Sure Petcare `surepy` package,
-whose Rich dependency conflicts with the HA pytest helper; dependency validation
-remains enabled.
+helper 0.13.371 on a digest-pinned Python 3.14 slim image. Both install an explicit
+Core version with its matching helper and verify that version after dependency
+installation, including package consistency. An incompatible `HA_VERSION`
+override fails instead of silently testing a downgraded Core. Component runtime
+dependencies come from the installed Core's manifests. The test image includes
+Git, ffmpeg and libturbojpeg, without unrelated integrations' dependencies.
+`scripts/test --minimum` selects the separate minimum container.
+
+Managed cloud install and session hooks live in `scripts/cloud-environment`.
+They use the same Docker harness as CI, keep tests out of startup, and recreate
+the container each session to refresh proxy settings. Session CA trust is supplied
+through a build secret and runtime mount. Only explicit resets bypass caching.
 
 Assist uses HA's prepared ChatLog prompt, current tool results and Probatio tool
 schemas directly. Streaming returns the completed assistant content supplied by HA
