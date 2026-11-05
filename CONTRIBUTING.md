@@ -118,6 +118,22 @@ than optional host-side coverage collectors. Workflow runner versions are pinned
 to the verified Ubuntu 26.04 baseline; update them deliberately alongside the
 verification environment.
 
+Both PR test profiles check out the PR head SHA so their reports and reporting
+attribution refer to the same source. Coverage.py stores relative file paths.
+The isolated default-branch reporter fetches Git metadata and loads the verified
+commit into Git's index with `git read-tree`, without checking out candidate
+files. Codecov reads that native Git inventory using `root_dir`, `GIT_DIR` and
+`GIT_WORK_TREE`; its working directory stays separate. Plugins, file fixes and
+report discovery remain disabled, and uploads use OIDC. No checkout safety guard
+is bypassed. A bounded public API check requires the exact attempt's merged,
+nonempty coverage and processed JUnit. Verify the fresh main commit after merging
+a reporter change; the pre-merge reporter still comes from current main.
+
+See Codecov's [source inventory guidance](https://docs.codecov.com/docs/error-reference),
+[action inputs](https://github.com/codecov/codecov-action#arguments) and
+[Git index loading](https://git-scm.com/docs/git-read-tree) and
+[coverage.py relative paths](https://coverage.readthedocs.io/en/latest/config.html#run-relative-files).
+
 ## Dependency Ownership
 
 Keep the Home Assistant image and matching test plugin aligned. They supply

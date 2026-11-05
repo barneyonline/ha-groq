@@ -1,7 +1,7 @@
 name: Coverage Reporting
 
 # Test jobs have no reporting credentials. This default-branch workflow only
-# downloads their report files; it never checks out or executes pull-request code.
+# reads Git metadata without checking out or executing candidate files.
 on:
   workflow_run:
     workflows: [Tests]
@@ -75,6 +75,21 @@ jobs:
             core.setOutput('sha', run.head_sha);
             core.setOutput('branch', branch);
             core.setOutput('pr', prNumber);
+      - name: Prepare the verified Git inventory without a source checkout
+        if: ${{ steps.source.outputs.artifact_id != '' }}
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          CODECOV_SOURCE: ${{ runner.temp }}/codecov-source
+        run: |
+          mkdir -m 700 "$CODECOV_SOURCE" "$RUNNER_TEMP/codecov-work"
+          git init --quiet "$CODECOV_SOURCE"
+          git -C "$CODECOV_SOURCE" -c core.hooksPath=/dev/null fetch \
+            --filter=blob:none --depth=1 --no-tags "$SOURCE_URL" "$SOURCE_SHA"
+          test "$(git -C "$CODECOV_SOURCE" rev-parse FETCH_HEAD)" = "$SOURCE_SHA"
+          # read-tree updates only Git's index; no -u and no candidate checkout.
+          git -C "$CODECOV_SOURCE" -c core.hooksPath=/dev/null read-tree FETCH_HEAD
+          git -C "$CODECOV_SOURCE" -c core.hooksPath=/dev/null update-ref HEAD "$SOURCE_SHA"
       - name: Download only the selected producer reports
         if: ${{ steps.source.outputs.artifact_id != '' }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -111,12 +126,18 @@ jobs:
               raise SystemExit('Report aggregate budget exceeded')
           PYTHON
       - name: Upload coverage to Codecov
+        id: coverage_upload
         if: ${{ steps.source.outputs.artifact_id != '' }}
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
+        env:
+          GIT_DIR: ${{ runner.temp }}/codecov-source/.git
+          GIT_WORK_TREE: ${{ runner.temp }}/codecov-source
         with:
           use_oidc: true
           files: ${{ runner.temp }}/reports/coverage.xml
-          root_dir: ${{ runner.temp }}/reports
+          root_dir: ${{ runner.temp }}/codecov-source
+          network_filter: custom_components/groq/
+          working-directory: ${{ runner.temp }}/codecov-work
           name: coverage-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
           plugins: noop
           disable_search: true
@@ -129,12 +150,18 @@ jobs:
           slug: ${{ github.repository }}
           fail_ci_if_error: true
       - name: Upload test results to Codecov
+        id: junit_upload
         if: ${{ steps.source.outputs.artifact_id != '' }}
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
+        env:
+          GIT_DIR: ${{ runner.temp }}/codecov-source/.git
+          GIT_WORK_TREE: ${{ runner.temp }}/codecov-source
         with:
           use_oidc: true
           files: ${{ runner.temp }}/reports/junit.xml
-          root_dir: ${{ runner.temp }}/reports
+          root_dir: ${{ runner.temp }}/codecov-source
+          network_filter: custom_components/groq/
+          working-directory: ${{ runner.temp }}/codecov-work
           name: junit-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
           job_code: junit-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
           report_type: test_results
@@ -148,3 +175,64 @@ jobs:
           override_build_url: ${{ github.event.workflow_run.html_url }}
           slug: ${{ github.repository }}
           fail_ci_if_error: true
+      - name: Verify processed coverage and test results for this attempt
+        if: ${{ steps.source.outputs.artifact_id != '' && steps.coverage_upload.outcome == 'success' && steps.junit_upload.outcome == 'success' }}
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+
+          owner, repo = os.environ['GITHUB_REPOSITORY'].split('/')
+          sha = os.environ['SOURCE_SHA']
+          run, attempt = os.environ['SOURCE_RUN_ID'], os.environ['SOURCE_RUN_ATTEMPT']
+          base = f'https://api.codecov.io/api/v2/github/{owner}/repos/{repo}/commits/{sha}/'
+
+          def read(url):
+              # Public repository API; never send GitHub or OIDC credentials.
+              with urllib.request.urlopen(url, timeout=15) as response:
+                  return json.load(response)
+
+          retries = 0
+          for poll in range(12):
+              try:
+                  commit = read(base + '?format=json')
+                  uploads, url = [], base + 'uploads/?format=json&page_size=100'
+                  for page in range(10):
+                      result = read(url)
+                      uploads.extend(result['results'])
+                      url = result.get('next')
+                      if not url:
+                          break
+                      if not url.startswith(base + 'uploads/?'):
+                          raise SystemExit('Unexpected Codecov pagination URL')
+                  else:
+                      raise SystemExit('Codecov pagination budget exceeded')
+                  coverage = [u for u in uploads if u.get('name') == f'coverage-{run}-{attempt}']
+                  junit = [u for u in uploads if u.get('job_code') == f'junit-{run}-{attempt}']
+                  if any(u.get('state') in {'error', 'failed'} for u in coverage + junit):
+                      raise SystemExit('Codecov rejected this attempt')
+                  nonempty = lambda totals: bool(totals and totals.get('files', 0) > 0 and totals.get('lines', 0) > 0)
+                  if (commit.get('commitid') == sha and commit.get('state') == 'complete'
+                      and nonempty(commit.get('totals')) and (commit.get('report') or {}).get('files')
+                      and any(u.get('state') == 'merged' and nonempty(u.get('totals')) for u in coverage)
+                      and any(u.get('state') == 'processed' for u in junit)):
+                      print(f'Codecov processed coverage and JUnit for {sha}, producer {run}.{attempt}')
+                      break
+              except urllib.error.HTTPError as error:
+                  error.close()
+                  if error.code != 404:
+                      if error.code not in {429, 500, 502, 503, 504} or retries >= 2:
+                          raise
+                      retries += 1
+              if poll < 11:
+                  time.sleep(10)
+          else:
+              raise SystemExit('Timed out waiting for processed coverage and JUnit')
+          PYTHON
