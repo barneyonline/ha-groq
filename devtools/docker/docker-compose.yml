@@ -16,7 +16,7 @@ services:
       - ../..:/workspace:delegated
       - ${HA_GROQ_GIT_COMMON_DIR:-../../.git}:${HA_GROQ_GIT_COMMON_DIR:-/workspace/.git}
       - ../../.test-cache/pre-commit:/root/.cache/pre-commit
-      - ${HA_GROQ_CA_BUNDLE:-/dev/null}:/run/ha-groq-ca.pem:ro
+      - ${HA_GROQ_CA_BUNDLE:-./empty-ca.pem}:/run/ha-groq-ca.pem:ro
     working_dir: /workspace
     command: sleep infinity
     environment:
@@ -40,4 +40,4 @@ services:
 
 secrets:
   proxy_ca:
-    file: ${HA_GROQ_CA_BUNDLE:-/dev/null}
+    file: ${HA_GROQ_CA_BUNDLE:-./empty-ca.pem}

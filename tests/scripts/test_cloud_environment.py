@@ -3,12 +3,29 @@
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).parents[2]
+
+
+def test_default_ca_is_an_empty_regular_file_inside_the_build_context():
+    """Bake must not require external filesystem access on non-cloud runners."""
+    directory = ROOT / "devtools/docker"
+    compose = yaml.safe_load((directory / "docker-compose.yml").read_text())
+    source = compose["secrets"]["proxy_ca"]["file"]
+    default = re.fullmatch(r"\$\{HA_GROQ_CA_BUNDLE:-(.+)\}", source)[1]
+    path = (directory / default).resolve()
+
+    assert path.is_relative_to(ROOT)
+    assert path.is_file()
+    assert path.read_bytes() == b""
+    volumes = compose["services"]["ha-dev"]["volumes"]
+    assert f"{source}:/run/ha-groq-ca.pem:ro" in volumes
 
 
 @pytest.fixture
