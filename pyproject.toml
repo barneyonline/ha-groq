@@ -27,3 +27,8 @@ module = [
   "referencing.*",
 ]
 ignore_missing_imports = true
+
+[tool.coverage.run]
+# Preserve repository-relative paths when Docker reports are uploaded elsewhere.
+source = ["custom_components.groq"]
+relative_files = true
