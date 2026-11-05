@@ -1,6 +1,7 @@
 .ha-config/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 .test-cache/
 __pycache__/
 *.py[cod]

@@ -85,13 +85,17 @@ def test_image_and_hacs_minimum_pins_match_test_environments():
     root = Path(__file__).parents[2]
     dockerfile = (root / "devtools/docker/Dockerfile").read_text()
     compose = (root / "devtools/docker/docker-compose.yml").read_text()
-    image = dockerfile.splitlines()[0].removeprefix("ARG HA_IMAGE=")
+    image = re.search(r"^ARG PYTHON_IMAGE=(.+)$", dockerfile, re.MULTILINE)[1]
     assert image in compose
-    current = re.search(r"home-assistant:([0-9.]+)@", image)[1]
+    current = re.search(r"^ARG HA_VERSION=([0-9.]+)$", dockerfile, re.MULTILINE)[1]
     assert current == "2026.10.0"
+    assert f"HA_VERSION: ${{HA_VERSION:-{current}}}" in compose
+    assert f"home-assistant:{current}@" in compose
     minimum = json.loads((root / "hacs.json").read_text())["homeassistant"]
     assert (
         f"homeassistant=={minimum}"
         in (root / "devtools/docker/requirements-min-ha.txt").read_text()
     )
-    assert f"home-assistant:{minimum}@" in (root / "scripts/test").read_text()
+    assert (
+        f"HA_VERSION=${{HA_VERSION:-{minimum}}}" in (root / "scripts/test").read_text()
+    )

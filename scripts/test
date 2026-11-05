@@ -3,13 +3,38 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
+if [ -n "${HA_IMAGE:-}" ]; then
+  echo 'HA_IMAGE is no longer supported; select Core with HA_VERSION and the base with PYTHON_IMAGE.' >&2
+  exit 2
+fi
+
+# Docker supplies reachable proxy addresses. Supply trust separately, without
+# recording a session certificate in an image or changing Docker credentials.
+if [ -n "${CODEX_PROXY_CERT:-}" ]; then
+  export HA_GROQ_CA_BUNDLE=${HA_GROQ_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}
+fi
+if [ -n "${HA_GROQ_CA_BUNDLE:-}" ]; then
+  [ -r "$HA_GROQ_CA_BUNDLE" ] || { echo 'CA bundle is not readable' >&2; exit 1; }
+  export HA_GROQ_CONTAINER_CA=/run/ha-groq-ca.pem
+fi
+
 compose_file=devtools/docker/docker-compose.yml
 project_hash=$(printf '%s\n' "$(pwd -P)" | git hash-object --stdin | cut -c1-12)
 if [ "${1:-}" = "--minimum" ]; then
   shift
   project_hash="$project_hash-minimum"
-  export HA_IMAGE=${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.10.0@sha256:1b64d38f38d922bf9d59336451fd6453e1d614f934456af4ee3d2a51061be3a4}
+  export HA_VERSION=${HA_VERSION:-2026.10.0}
   export HA_GROQ_REQUIREMENTS_FILE=requirements-min-ha.txt
+fi
+rebuild=false
+recreate=false
+if [ "${1:-}" = "--rebuild" ]; then
+  rebuild=true
+  shift
+fi
+if [ "${1:-}" = "--recreate" ]; then
+  recreate=true
+  shift
 fi
 compose_project="ha-groq-$project_hash"
 git_common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
@@ -51,11 +76,17 @@ image_environment_hash=$(
     "$HA_GROQ_TEST_IMAGE" 2>/dev/null || true
 )
 
-if [ "$image_environment_hash" != "$environment_hash" ]; then
+if [ "$rebuild" = true ]; then
+  docker compose -f "$compose_file" build --pull --no-cache ha-dev
+elif [ "$image_environment_hash" != "$environment_hash" ]; then
   docker compose -f "$compose_file" build ha-dev
 fi
 
-docker compose -f "$compose_file" up -d --no-build --remove-orphans ha-dev
+if [ "$recreate" = true ]; then
+  docker compose -f "$compose_file" up -d --no-build --remove-orphans --force-recreate ha-dev
+else
+  docker compose -f "$compose_file" up -d --no-build --remove-orphans ha-dev
+fi
 
 current_image_id=$(docker image inspect --format '{{.Id}}' "$HA_GROQ_TEST_IMAGE")
 if [ -n "$previous_image_id" ] && [ "$previous_image_id" != "$current_image_id" ]; then
