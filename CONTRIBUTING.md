@@ -120,16 +120,18 @@ verification environment.
 
 Both PR test profiles check out the PR head SHA so their reports and reporting
 attribution refer to the same source. Coverage.py stores relative file paths.
-The isolated default-branch reporter checks out the verified source only for
-Codecov path matching. It runs the uploader from an empty temporary directory,
-with report discovery, plugins, file fixes, submodules and credential persistence
-disabled. Candidate files, hooks and caches are never executed.
-It uses the documented Codecov action inputs with OIDC. A bounded public API check requires the exact attempt's
-merged, nonempty coverage and processed JUnit. Verify the fresh main commit after
-merging a reporter change; the pre-merge reporter still comes from current main.
+The isolated default-branch reporter fetches Git metadata and loads the verified
+commit into Git's index with `git read-tree`, without checking out candidate
+files. Codecov reads that native Git inventory using `root_dir`, `GIT_DIR` and
+`GIT_WORK_TREE`; its working directory stays separate. Plugins, file fixes and
+report discovery remain disabled, and uploads use OIDC. No checkout safety guard
+is bypassed. A bounded public API check requires the exact attempt's merged,
+nonempty coverage and processed JUnit. Verify the fresh main commit after merging
+a reporter change; the pre-merge reporter still comes from current main.
 
 See Codecov's [source inventory guidance](https://docs.codecov.com/docs/error-reference),
 [action inputs](https://github.com/codecov/codecov-action#arguments) and
+[Git index loading](https://git-scm.com/docs/git-read-tree) and
 [coverage.py relative paths](https://coverage.readthedocs.io/en/latest/config.html#run-relative-files).
 
 ## Dependency Ownership

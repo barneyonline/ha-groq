@@ -35,12 +35,8 @@ def step(name):
     )
 
 
-def test_source_checkout_and_uploader_keep_candidate_execution_isolated(tmp_path):
-    checkout = step("Check out the verified source for Codecov path matching")["with"]
-    assert checkout["ref"] == "${{ steps.source.outputs.sha }}"
-    assert checkout["persist-credentials"] == "false"
-    assert checkout["lfs"] == checkout["submodules"] == "false"
-    repo = tmp_path / "producer"
+def test_git_inventory_never_materializes_candidate_files(tmp_path):
+    repo, inventory = tmp_path / "producer", tmp_path / "inventory"
     repo.mkdir()
 
     def git(*args):
@@ -51,11 +47,10 @@ def test_source_checkout_and_uploader_keep_candidate_execution_isolated(tmp_path
     git("init", "--initial-branch=base")
     git("config", "user.name", "Coverage regression")
     git("config", "user.email", "coverage@example.invalid")
+    git("config", "uploadpack.allowFilter", "true")
     source = repo / SOURCE
     source.parent.mkdir(parents=True)
     source.write_text("raise RuntimeError('candidate code must never run')\n")
-    # Candidate tool/config names stay in the source checkout, away from the
-    # uploader's CWD, executable download and automatic configuration discovery.
     (repo / "codecov").symlink_to(tmp_path / "outside")
     (repo / "codecov.yml").write_text("candidate configuration\n")
     git("add", ".")
@@ -70,31 +65,46 @@ def test_source_checkout_and_uploader_keep_candidate_execution_isolated(tmp_path
     git("commit", "-m", "Add base source")
     git("merge", "--no-ff", "pr-head", "-m", "Synthetic PR merge")
     assert "base_only.py" in git("ls-files").splitlines()
-    selected = tmp_path / "source"
-    git("worktree", "add", "--detach", str(selected), head)
-    assert (selected / SOURCE).exists()
-    assert not (selected / "base_only.py").exists()
+    script = step("Prepare the verified Git inventory without a source checkout")["run"]
     subprocess.run(
-        [
-            "bash",
-            "-eu",
-            "-c",
-            step("Prepare isolated uploader working directory")["run"],
-        ],
-        env={**os.environ, "RUNNER_TEMP": str(tmp_path)},
+        ["bash", "-eu", "-c", script],
         check=True,
+        capture_output=True,
+        env={
+            **os.environ,
+            "RUNNER_TEMP": str(tmp_path),
+            "SOURCE_SHA": head,
+            "SOURCE_URL": repo.as_uri(),
+            "CODECOV_SOURCE": str(inventory),
+        },
     )
+    assert {path.name for path in inventory.iterdir()} == {".git"}
     work = tmp_path / "codecov-work"
     assert list(work.iterdir()) == []
     for name in ("codecov", "codecov.SHA256SUM", "codecov.SHA256SUM.sig"):
         (work / name).write_text("wrapper artifact")
+    env = {
+        **os.environ,
+        "GIT_DIR": str(inventory / ".git"),
+        "GIT_WORK_TREE": str(inventory),
+    }
+    actual = subprocess.check_output(
+        ["git", "-C", str(inventory), "ls-files"], env=env, text=True
+    ).splitlines()
+    assert set(actual) == {SOURCE, "codecov", "codecov.yml"}
     assert not (tmp_path / "outside").exists()
+    assert not (inventory / SOURCE).exists()
+    assert subprocess.check_output(
+        ["git", "-C", str(work), "rev-parse", "--show-toplevel"], env=env, text=True
+    ).strip() == str(inventory)
     for item in workflow()["jobs"]["upload"]["steps"]:
+        assert "checkout@" not in item.get("uses", "")
         if "codecov-action@" in item.get("uses", ""):
             options = item["with"]
             assert options["working-directory"] == "${{ runner.temp }}/codecov-work"
-            assert options["root_dir"] == "${{ github.workspace }}/codecov-source"
-            assert options["network_filter"] == "custom_components/groq/"
+            assert options["root_dir"] == "${{ runner.temp }}/codecov-source"
+            assert item["env"]["GIT_DIR"] == "${{ runner.temp }}/codecov-source/.git"
+            assert item["env"]["GIT_WORK_TREE"] == options["root_dir"]
             assert options["plugins"] == "noop"
             assert options["disable_file_fixes"] == options["disable_search"] == "true"
             assert options["use_oidc"] == "true"
@@ -111,6 +121,7 @@ def test_source_checkout_and_uploader_keep_candidate_execution_isolated(tmp_path
             checkout["with"]["ref"]
             == "${{ github.event.pull_request.head.sha || github.sha }}"
         )
+        assert "allow-unsafe-pr-checkout" not in checkout["with"]
 
 
 def test_coverage_py_emits_repository_paths_and_preserves_uncovered_lines(tmp_path):
