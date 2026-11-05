@@ -98,3 +98,5 @@ The user guide covers [supported functionality](docs/user-guide.md#supported-fun
 [![License](https://img.shields.io/github/license/barneyonline/ha-groq)](LICENSE)
 [![Open Issues](https://img.shields.io/github/issues/barneyonline/ha-groq)](https://github.com/barneyonline/ha-groq/issues)
 ![Development Status](https://img.shields.io/badge/development-active-success?style=flat-square)
+
+[Development and cloud environment setup](CONTRIBUTING.md#managed-cloud-environment)
