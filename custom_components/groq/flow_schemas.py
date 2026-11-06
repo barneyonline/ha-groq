@@ -24,6 +24,7 @@ from .const import (
     CONF_MODEL,
     CONF_NAME,
     CONF_NORMALIZE_AUDIO,
+    CONF_PROMPT,
     CONF_PROMPT_CACHING,
     CONF_PROTECT_FREE_TIER,
     CONF_REASONING_EFFORT,
@@ -423,6 +424,12 @@ def speech_to_text_schema(
                 CONF_LANGUAGE,
                 default=language_default,
             ): selector({"select": {"options": STT_LANGUAGE_OPTIONS}}),
+            # A suggested value, not a default: a default would restore the saved
+            # prompt when the user clears the field during reconfiguration.
+            probatio.Optional(
+                CONF_PROMPT,
+                description={"suggested_value": values.get(CONF_PROMPT)},
+            ): selector({"text": {"multiline": True}}),
             protect_field: protect_selector,
         }
     )
@@ -780,6 +787,7 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_ADVANCED_OPTIONS,
         CONF_LLM_HASS_API,
         CONF_LANGUAGE,
+        CONF_PROMPT,
         CONF_REASONING_EFFORT,
         CONF_REASONING_FORMAT,
         CONF_RESPONSE_FORMAT,
@@ -790,6 +798,10 @@ def clean_service_input(user_input: dict[str, Any]) -> dict[str, Any]:
     ):
         if data.get(key) in ("", None):
             data.pop(key, None)
+    if isinstance(data.get(CONF_PROMPT), str):
+        data[CONF_PROMPT] = data[CONF_PROMPT].strip()
+        if not data[CONF_PROMPT]:
+            data.pop(CONF_PROMPT, None)
     if isinstance(data.get(CONF_RESPONSE_FORMAT), str):
         data[CONF_RESPONSE_FORMAT] = data[CONF_RESPONSE_FORMAT].strip().lower()
         if not data[CONF_RESPONSE_FORMAT]:

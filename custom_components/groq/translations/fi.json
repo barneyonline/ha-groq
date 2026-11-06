@@ -172,6 +172,9 @@
                 "no_compatible_models": "Tällä Groq-tilillä ei ole palvelun kanssa yhteensopivia aktiivisia malleja. Tarkista mallien käyttöoikeudet Groq-konsolista ja yritä uudelleen.",
                 "model_unavailable": "Valittu malli ei ole enää käytettävissä tässä palvelussa. Aloita määritys uudelleen ja valitse käytettävissä oleva malli."
             },
+            "error": {
+                "prompt_too_long": "Käytä enintään {max_length} merkkiä. Groq lukee vain noin 224 tokenia."
+            },
             "step": {
                 "speech_to_text": {
                     "title": "Puhe tekstiksi",
@@ -179,12 +182,14 @@
                         "name": "Nimi",
                         "model": "Malli",
                         "language": "Kieli",
+                        "prompt": "Sanasto ja konteksti",
                         "protect_free_tier": "Free-Tier Protection"
                     },
                     "data_description": {
                         "name": "Ystävällinen nimi tälle puhetekstiksi -palvelun esiintymälle.",
                         "model": "Groq Whisper -malli, jota käytetään äänen litteroimiseen.",
                         "language": "Kielivinkki lähetetty numeroon Groq transkriptiota varten. Oletusasetus on Home Assistant:ssä määritetty kieli, kun se on saatavilla.",
+                        "prompt": "Valinnaisia nimiä ja erikoistermejä, jotka Whisper kirjoittaa väärin, lyhyenä lauseena, esimerkiksi: Keskustelu käsittelee aiheita Home Assistant, Zigbee ja Philips Hue. Kirjoita samalla kielellä, jota puhut. Älä luettele komentoja: tämän tekstin sanat voivat näkyä tunnistettuna puheena hiljaisuuden tai epäselvän puheen aikana.",
                         "protect_free_tier": "Kun Groq ilmoittaa, että tämä palvelu on saavuttanut pyynnön tai tunnuksen rajan, Home Assistant keskeyttää vain tämän palvelun Groq:n nollausaikaan asti ennen kuin lähettää lisää pyyntöjä."
                     }
                 }
@@ -743,7 +748,7 @@
                 },
                 "prompt": {
                     "name": "Prompt",
-                    "description": "Optional context or spelling hints for the transcription."
+                    "description": "Optional context or spelling hints for the transcription. Leave out to use the selected service's vocabulary and context."
                 },
                 "response_format": {
                     "name": "Response format",

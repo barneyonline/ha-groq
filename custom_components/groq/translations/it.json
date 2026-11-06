@@ -172,6 +172,9 @@
                 "no_compatible_models": "Questo account Groq non ha modelli attivi compatibili con questo servizio. Verifica gli accessi nella console Groq e riprova.",
                 "model_unavailable": "Il modello selezionato non è più disponibile per questo servizio. Riavvia la configurazione e scegli un modello disponibile."
             },
+            "error": {
+                "prompt_too_long": "Usa al massimo {max_length} caratteri. Groq legge solo circa 224 token."
+            },
             "step": {
                 "speech_to_text": {
                     "title": "Da voce a testo",
@@ -179,12 +182,14 @@
                         "name": "Nome",
                         "model": "Modello",
                         "language": "Lingua",
+                        "prompt": "Vocabolario e contesto",
                         "protect_free_tier": "Protezione a livello gratuito"
                     },
                     "data_description": {
                         "name": "Un nome descrittivo per questa istanza del servizio Speech-to-Text.",
                         "model": "Il modello Groq Whisper utilizzato per trascrivere l'audio.",
                         "language": "Suggerimento linguistico inviato a Groq per la trascrizione. Il valore predefinito è la lingua configurata in Home Assistant quando disponibile.",
+                        "prompt": "Nomi e termini specialistici facoltativi che Whisper scrive male, in una breve frase, ad esempio: La conversazione riguarda Home Assistant, Zigbee e Philips Hue. Scrivi nella lingua che parli. Non elencare comandi: le parole di questo testo possono comparire come parlato riconosciuto in caso di silenzio o parlato poco chiaro.",
                         "protect_free_tier": "Quando Groq segnala che questo servizio ha raggiunto un limite di richieste o token, Home Assistant mette in pausa solo questo servizio fino al tempo di ripristino di Groq prima di inviare ulteriori richieste."
                     }
                 }
@@ -743,7 +748,7 @@
                 },
                 "prompt": {
                     "name": "Prompt",
-                    "description": "Optional context or spelling hints for the transcription."
+                    "description": "Optional context or spelling hints for the transcription. Leave out to use the selected service's vocabulary and context."
                 },
                 "response_format": {
                     "name": "Response format",
