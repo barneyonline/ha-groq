@@ -189,7 +189,7 @@
                         "name": "Selle kõneteksti teenuse eksemplari sõbralik nimi.",
                         "model": "Heli transkribeerimiseks kasutatav mudel Groq Whisper.",
                         "language": "Keelevihje saadeti transkriptsiooniks numbrile Groq. Vaikimisi on Home Assistant-s konfigureeritud keel, kui see on saadaval.",
-                        "prompt": "Valikulised nimed, terminid või lühike lause, mis aitavad Whisperil öeldut õigesti kirjutada, näiteks: Vestlus käsitleb teemasid Home Assistant, Zigbee ja Philips Hue. Kirjuta keeles, mida räägid. See on vihje, mitte käsk.",
+                        "prompt": "Valikulised nimed ja erialaterminid, mida Whisper valesti kirjutab, lühikese lausena, näiteks: Vestlus käsitleb teemasid Home Assistant, Zigbee ja Philips Hue. Kirjuta keeles, mida räägid. Ära loetle käske: selle teksti sõnad võivad vaikuse või ebaselge kõne korral ilmuda tuvastatud kõnena.",
                         "protect_free_tier": "Kui Groq teatab, et see teenus on jõudnud päringu või lubade limiidini, peatab Home Assistant ainult selle teenuse kuni Groq lähtestamisajani, enne kui saadab rohkem päringuid."
                     }
                 }

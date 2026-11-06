@@ -189,7 +189,7 @@
                         "name": "Un nume prietenos pentru această instanță de serviciu Speech-to-Text.",
                         "model": "Modelul Groq Whisper folosit pentru a transcrie sunetul.",
                         "language": "Sugestie de limbă trimisă către Groq pentru transcriere. Limba configurată în Home Assistant este implicită atunci când este disponibilă.",
-                        "prompt": "Nume, termeni sau o propoziție scurtă opționale care ajută Whisper să scrie corect ceea ce spuneți, de exemplu: Conversația este despre Home Assistant, Zigbee și Philips Hue. Scrieți în limba pe care o vorbiți. Acesta este un indiciu, nu o comandă.",
+                        "prompt": "Nume și termeni de specialitate opționali pe care Whisper îi scrie greșit, într-o propoziție scurtă, de exemplu: Conversația este despre Home Assistant, Zigbee și Philips Hue. Scrieți în limba pe care o vorbiți. Nu enumerați comenzi: cuvintele din acest text pot apărea ca vorbire recunoscută în timpul liniștii sau al vorbirii neclare.",
                         "protect_free_tier": "Când Groq raportează că acest serviciu a atins o limită de solicitare sau de simbol, Home Assistant întrerupe numai acest serviciu până la timpul de resetare a lui Groq înainte de a trimite mai multe solicitări."
                     }
                 }

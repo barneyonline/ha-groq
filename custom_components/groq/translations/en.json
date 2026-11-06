@@ -189,7 +189,7 @@
                         "name": "A friendly name for this Speech-to-Text service instance.",
                         "model": "The Groq Whisper model used to transcribe audio.",
                         "language": "Language hint sent to Groq for transcription. Defaults to the language configured in Home Assistant when available.",
-                        "prompt": "Optional names, terms, or a short sentence that help Whisper spell what you say correctly, for example: The conversation is about Home Assistant, Zigbee, and Philips Hue. Write it in the language you speak. This is a hint, not a command.",
+                        "prompt": "Optional names and specialist terms that Whisper misspells, in a short sentence, for example: The conversation is about Home Assistant, Zigbee, and Philips Hue. Write it in the language you speak. Do not list commands: words from this text can appear as recognized speech during silence or unclear speech.",
                         "protect_free_tier": "When Groq reports that this service has reached a request or token limit, Home Assistant pauses only this service until Groq's reset time before sending more requests."
                     }
                 }

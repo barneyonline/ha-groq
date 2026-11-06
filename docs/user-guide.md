@@ -122,7 +122,9 @@ Whisper should spell correctly, for example
 `The conversation is about Home Assistant, Zigbee, and Philips Hue.` Write it in the
 language you speak and keep it short: Groq reads at most 224 tokens, and the form
 accepts up to 896 characters as an estimate of that limit. The text is a hint that
-guides spelling and style, not a command or a guaranteed word list. Assist pipelines
+guides spelling and style, not a command or a guaranteed word list. Do not list
+commands: Whisper can output words from this text during silence or unclear speech,
+and Assist may then act on them. Assist pipelines
 and `groq.transcribe_audio` use it automatically. A `prompt` in the action replaces
 it for that call, and an empty `prompt` sends none. `groq.translate_audio` ignores
 the saved text because Groq expects translation prompts in English; pass an English

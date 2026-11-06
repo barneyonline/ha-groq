@@ -189,7 +189,7 @@
                         "name": "Ystävällinen nimi tälle puhetekstiksi -palvelun esiintymälle.",
                         "model": "Groq Whisper -malli, jota käytetään äänen litteroimiseen.",
                         "language": "Kielivinkki lähetetty numeroon Groq transkriptiota varten. Oletusasetus on Home Assistant:ssä määritetty kieli, kun se on saatavilla.",
-                        "prompt": "Valinnaisia nimiä, termejä tai lyhyt lause, jotka auttavat Whisperiä kirjoittamaan puheesi oikein, esimerkiksi: Keskustelu käsittelee aiheita Home Assistant, Zigbee ja Philips Hue. Kirjoita samalla kielellä, jota puhut. Tämä on vihje, ei komento.",
+                        "prompt": "Valinnaisia nimiä ja erikoistermejä, jotka Whisper kirjoittaa väärin, lyhyenä lauseena, esimerkiksi: Keskustelu käsittelee aiheita Home Assistant, Zigbee ja Philips Hue. Kirjoita samalla kielellä, jota puhut. Älä luettele komentoja: tämän tekstin sanat voivat näkyä tunnistettuna puheena hiljaisuuden tai epäselvän puheen aikana.",
                         "protect_free_tier": "Kun Groq ilmoittaa, että tämä palvelu on saavuttanut pyynnön tai tunnuksen rajan, Home Assistant keskeyttää vain tämän palvelun Groq:n nollausaikaan asti ennen kuin lähettää lisää pyyntöjä."
                     }
                 }

@@ -189,7 +189,7 @@
                         "name": "A beszéd-szöveg szolgáltatáspéldány barátságos neve.",
                         "model": "A hang átírására használt Groq Whisper modell.",
                         "language": "Nyelvi tipp elküldve a Groq számára átírás céljából. Alapértelmezés szerint a Home Assistant-ben konfigurált nyelv, ha elérhető.",
-                        "prompt": "Opcionális nevek, kifejezések vagy egy rövid mondat, amelyek segítenek a Whispernek helyesen leírni, amit mond, például: A beszélgetés témája a Home Assistant, a Zigbee és a Philips Hue. Azon a nyelven írja, amelyen beszél. Ez egy tipp, nem parancs.",
+                        "prompt": "Opcionális nevek és szakkifejezések, amelyeket a Whisper hibásan ír le, egy rövid mondatban, például: A beszélgetés témája a Home Assistant, a Zigbee és a Philips Hue. Azon a nyelven írja, amelyen beszél. Ne soroljon fel parancsokat: a szöveg szavai csend vagy nem tiszta beszéd esetén felismert beszédként jelenhetnek meg.",
                         "protect_free_tier": "Amikor a Groq azt jelenti, hogy ez a szolgáltatás elérte a kérések vagy token korlátot, a Home Assistant csak ezt a szolgáltatást szünetelteti a Groq visszaállítási idejéig, mielőtt további kéréseket küldene."
                     }
                 }

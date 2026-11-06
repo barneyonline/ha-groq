@@ -189,7 +189,7 @@
                         "name": "Przyjazna nazwa tej instancji usługi zamiany mowy na tekst.",
                         "model": "Model Groq Whisper używany do transkrypcji dźwięku.",
                         "language": "Wskazówka dotycząca języka wysłana do Groq w celu transkrypcji. Domyślnie ustawiony jest język skonfigurowany w Home Assistant, jeśli jest dostępny.",
-                        "prompt": "Opcjonalne nazwy, terminy lub krótkie zdanie, które pomagają Whisperowi poprawnie zapisać to, co mówisz, na przykład: Rozmowa dotyczy Home Assistant, Zigbee i Philips Hue. Pisz w języku, którym mówisz. To wskazówka, a nie polecenie.",
+                        "prompt": "Opcjonalne nazwy i terminy specjalistyczne, które Whisper zapisuje błędnie, w krótkim zdaniu, na przykład: Rozmowa dotyczy Home Assistant, Zigbee i Philips Hue. Pisz w języku, którym mówisz. Nie wymieniaj poleceń: słowa z tego tekstu mogą pojawić się jako rozpoznana mowa podczas ciszy lub niewyraźnej mowy.",
                         "protect_free_tier": "Kiedy Groq zgłosi, że ta usługa osiągnęła limit żądań lub tokenów, Home Assistant wstrzymuje tylko tę usługę do czasu zresetowania Groq, zanim wyśle ​​więcej żądań."
                     }
                 }

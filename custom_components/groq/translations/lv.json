@@ -189,7 +189,7 @@
                         "name": "Vienkāršs nosaukums šai runas pārveides pakalpojuma gadījumam.",
                         "model": "Groq Whisper modelis, ko izmanto audio transkribēšanai.",
                         "language": "Valodas padoms nosūtīts uz Groq transkripcijai. Pēc noklusējuma ir valoda, kas konfigurēta Home Assistant, ja tā ir pieejama.",
-                        "prompt": "Neobligāti vārdi, termini vai īss teikums, kas palīdz Whisper pareizi uzrakstīt teikto, piemēram: Saruna ir par Home Assistant, Zigbee un Philips Hue. Rakstiet valodā, kurā runājat. Tas ir mājiens, nevis komanda.",
+                        "prompt": "Neobligāti vārdi un speciāli termini, ko Whisper uzraksta nepareizi, īsā teikumā, piemēram: Saruna ir par Home Assistant, Zigbee un Philips Hue. Rakstiet valodā, kurā runājat. Neuzskaitiet komandas: šī teksta vārdi klusuma vai neskaidras runas laikā var parādīties kā atpazīta runa.",
                         "protect_free_tier": "Kad Groq ziņo, ka šis pakalpojums ir sasniedzis pieprasījuma vai pilnvaras ierobežojumu, Home Assistant aptur tikai šo pakalpojumu līdz Groq atiestatīšanas laikam, pirms tiek nosūtīti papildu pieprasījumi."
                     }
                 }

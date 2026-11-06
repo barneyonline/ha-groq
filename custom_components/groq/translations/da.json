@@ -189,7 +189,7 @@
                         "name": "Et venligt navn for denne tale-til-tekst-tjenesteinstans.",
                         "model": "Groq Whisper-modellen bruges til at transskribere lyd.",
                         "language": "Sprogtip sendt til Groq til transskription. Standard til det sprog, der er konfigureret i Home Assistant, når det er tilgængeligt.",
-                        "prompt": "Valgfrie navne, termer eller en kort sætning, der hjælper Whisper med at stave det, du siger, korrekt, for eksempel: Samtalen handler om Home Assistant, Zigbee og Philips Hue. Skriv på det sprog, du taler. Dette er et hint, ikke en kommando.",
+                        "prompt": "Valgfrie navne og fagtermer, som Whisper staver forkert, i en kort sætning, for eksempel: Samtalen handler om Home Assistant, Zigbee og Philips Hue. Skriv på det sprog, du taler. Angiv ikke kommandoer: ord fra denne tekst kan optræde som genkendt tale ved stilhed eller utydelig tale.",
                         "protect_free_tier": "Når Groq rapporterer, at denne tjeneste har nået en anmodning eller token-grænse, sætter Home Assistant kun denne tjeneste på pause, indtil Groq's nulstillingstidspunkt, før den sender flere anmodninger."
                     }
                 }
