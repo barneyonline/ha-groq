@@ -69,6 +69,8 @@ jobs:
         run: scripts/test --prepare
       - name: Verify Home Assistant dependencies
         run: scripts/test python -m pip check
+      - name: Test coverage source attribution
+        run: node --test tests/scripts/test_coverage_attribution.cjs
       - name: Run pre-commit in Home Assistant Docker
         run: scripts/test pre-commit run --all-files
       - name: Restore pre-commit cache ownership for the runner
