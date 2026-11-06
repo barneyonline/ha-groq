@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### ✨ New features
 
-- None
+- Add an optional Vocabulary and context field to Speech-to-Text services, so Whisper can spell names and specialist terms correctly in Assist and `groq.transcribe_audio`.
 
 ### 🐛 Bug fixes
 

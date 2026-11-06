@@ -34,6 +34,7 @@ from .const import (
     CONF_MODEL,
     CONF_NAME,
     CONF_NORMALIZE_AUDIO,
+    CONF_PROMPT,
     CONF_RESPONSE_FORMAT,
     CONF_SAMPLE_RATE,
     CONF_SCHEMA,
@@ -50,6 +51,7 @@ from .const import (
     FEATURE_SPEECH_TO_TEXT,
     FEATURE_TEXT_GENERATION,
     FEATURE_TEXT_TO_SPEECH,
+    MAX_STT_PROMPT_LENGTH,
     RESPONSE_FORMATS,
     SETUP_FEATURES,
     TTS_SAMPLE_RATES,
@@ -757,18 +759,23 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
             return self.async_abort(reason="no_compatible_models")
         if user_input is not None and user_input.get(CONF_MODEL) not in model_options:
             return self.async_abort(reason="model_unavailable")
+        errors: dict[str, str] = {}
         if user_input is not None:
             user_input = clean_service_input(user_input)
-            return self._create_service_entry(FEATURE_SPEECH_TO_TEXT, user_input)
+            if len(user_input.get(CONF_PROMPT, "")) <= MAX_STT_PROMPT_LENGTH:
+                return self._create_service_entry(FEATURE_SPEECH_TO_TEXT, user_input)
+            errors[CONF_PROMPT] = "prompt_too_long"
 
         hass_language = getattr(getattr(self.hass, "config", None), "language", None)
         return self.async_show_form(
             step_id=FEATURE_SPEECH_TO_TEXT,
             data_schema=speech_to_text_schema(
-                self._existing_service_data(),
+                user_input or self._existing_service_data(),
                 model_options,
                 stt_language_default(hass_language),
             ),
+            errors=errors,
+            description_placeholders={"max_length": str(MAX_STT_PROMPT_LENGTH)},
         )
 
     def _show_tts_form(

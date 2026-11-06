@@ -172,6 +172,9 @@
                 "no_compatible_models": "Det här Groq-kontot har inga aktiva modeller som stöder tjänsten. Kontrollera modellåtkomsten i Groq-konsolen och försök igen.",
                 "model_unavailable": "Den valda modellen är inte längre tillgänglig för tjänsten. Starta konfigurationen igen och välj en tillgänglig modell."
             },
+            "error": {
+                "prompt_too_long": "Använd högst {max_length} tecken. Groq läser bara ungefär 224 tokens."
+            },
             "step": {
                 "speech_to_text": {
                     "title": "Tal-till-text",
@@ -179,12 +182,14 @@
                         "name": "Namn",
                         "model": "Modell",
                         "language": "Språk",
+                        "prompt": "Ordförråd och sammanhang",
                         "protect_free_tier": "Free-Leer Protection"
                     },
                     "data_description": {
                         "name": "Ett vänligt namn för denna Tal-till-Text-tjänsteinstans.",
                         "model": "Groq Whisper-modellen som används för att transkribera ljud.",
                         "language": "Språktips skickas till Groq för transkription. Standard för språket som är konfigurerat i Home Assistant när det är tillgängligt.",
+                        "prompt": "Valfria namn, termer eller en kort mening som hjälper Whisper att stava det du säger rätt, till exempel: Samtalet handlar om Home Assistant, Zigbee och Philips Hue. Skriv på det språk du talar. Detta är en ledtråd, inte ett kommando.",
                         "protect_free_tier": "När Groq rapporterar att den här tjänsten har nått en begäran eller token-gräns, pausar Home Assistant endast denna tjänst tills Groq återställer tid innan fler förfrågningar skickas."
                     }
                 }
@@ -743,7 +748,7 @@
                 },
                 "prompt": {
                     "name": "Prompt",
-                    "description": "Optional context or spelling hints for the transcription."
+                    "description": "Optional context or spelling hints for the transcription. Leave out to use the selected service's vocabulary and context."
                 },
                 "response_format": {
                     "name": "Response format",

@@ -230,6 +230,9 @@ STT_LANGUAGE_OPTIONS = [
 ]
 STT_LANGUAGES = [option["value"] for option in STT_LANGUAGE_OPTIONS]
 DEFAULT_STT_LANGUAGE = "en-US"
+# Groq limits the prompt to 224 tokens and publishes no character limit. Four
+# characters per token is an estimate; only Groq can count the tokens exactly.
+MAX_STT_PROMPT_LENGTH = 896
 
 VISION_MODELS = [
     "meta-llama/llama-4-scout-17b-16e-instruct",

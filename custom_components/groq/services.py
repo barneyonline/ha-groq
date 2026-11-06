@@ -1267,7 +1267,13 @@ def _handle_transcribe_audio(
             filename=filename,
             model=model,
             language=language,
-            prompt=call.data.get(ATTR_PROMPT),
+            # Translation prompts must be in English, unlike the saved prompt,
+            # which matches the audio language.
+            prompt=(
+                call.data.get(ATTR_PROMPT)
+                if translate
+                else _service_value(call, service_data, ATTR_PROMPT)
+            ),
             service_id=service_data.get(UNIQUE_ID),
             protect_free_tier=_service_protect_free_tier(service_data),
         )

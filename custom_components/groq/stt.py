@@ -19,6 +19,7 @@ from .const import (
     CONF_LANGUAGE,
     CONF_MODEL,
     CONF_NAME,
+    CONF_PROMPT,
     CONF_PROTECT_FREE_TIER,
     CONF_SERVICE_TYPE,
     CONF_SUBENTRY_ID,
@@ -182,6 +183,7 @@ class GroqSTTEntity(stt.SpeechToTextEntity):
                 filename=filename,
                 model=self._service_data.get(CONF_MODEL, DEFAULT_STT_MODEL),
                 language=language,
+                prompt=self._service_data.get(CONF_PROMPT),
                 service_id=self._service_data.get(UNIQUE_ID),
                 protect_free_tier=bool(
                     self._service_data.get(
