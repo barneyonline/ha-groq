@@ -4,13 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v2.2.0 - 2026-11-07
+
 ### 🚧 Breaking changes
 
 - None
 
 ### ✨ New features
 
-- Add an optional Vocabulary and context field to Speech-to-Text services, so Whisper can spell names and specialist terms correctly in Assist and `groq.transcribe_audio`.
+- Add an optional Vocabulary and context field to Speech-to-Text services, so Whisper can spell names and specialist terms correctly in Assist and `groq.transcribe_audio`. Allow action-level overrides and clearing saved prompts; keep translation prompts separate. (#78)
 
 ### 🐛 Bug fixes
 
@@ -22,10 +24,13 @@ All notable changes to this project will be documented in this file.
 
 ### 🔄 Other changes
 
-- Evaluate a smaller Home Assistant Core test image in isolated native amd64 CI while retaining the current default harness.
-
-- Refresh the README with wiki-style light and dark banners, a concise feature overview, fresh Home Assistant screenshots, an expandable gallery and a direct HACS link. Keep project badges visible at the bottom and preserve the detailed reference in `docs/user-guide.md` alongside links to the wiki.
-- Add maintenance workflows and merge checks for HAL-managed issues and PR feedback, with shared operating instructions and changelog/release templates maintained in the central HAL plugin. Keep unattended activation gated by verification.
+- Add the AI and voice Marketplace category. (#63)
+- Refresh the README with light and dark banners, a concise feature overview, Home Assistant screenshots and an expandable gallery. Preserve the detailed reference in `docs/user-guide.md` alongside links to the wiki. (#69, #70)
+- Make the Docker test environment reproducible with digest-pinned Python, matched Home Assistant dependencies, reusable containers and cloud startup hooks. (#67, #76)
+- Strengthen CI warning checks and repair lifecycle test fixtures; fix Codecov source inventory, processed reporting and fork pull request attribution. (#68, #75, #79)
+- Simplify maintenance to source repository workflows and add isolated release-candidate packaging and release-asset verification.
+- Update Black to `26.10.1`. (#66)
+- Bumped the integration manifest version to `2.2.0`.
 
 ## v2.1.0 - 2026-10-24
 
