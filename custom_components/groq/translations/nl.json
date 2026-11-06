@@ -172,6 +172,9 @@
                 "no_compatible_models": "Dit Groq-account heeft geen actieve modellen die bij deze dienst passen. Controleer de modeltoegang in de Groq-console en probeer het opnieuw.",
                 "model_unavailable": "Het geselecteerde model is niet meer beschikbaar voor deze dienst. Start de configuratie opnieuw en kies een beschikbaar model."
             },
+            "error": {
+                "prompt_too_long": "Gebruik maximaal {max_length} tekens. Groq leest slechts ongeveer 224 tokens."
+            },
             "step": {
                 "speech_to_text": {
                     "title": "Spraak-naar-tekst",
@@ -179,12 +182,14 @@
                         "name": "Naam",
                         "model": "Model",
                         "language": "Taal",
+                        "prompt": "Woordenschat en context",
                         "protect_free_tier": "Gratis Tier-bescherming"
                     },
                     "data_description": {
                         "name": "Een beschrijvende naam voor dit exemplaar van de spraak-naar-tekst-service.",
                         "model": "Het Groq Whisper-model dat wordt gebruikt om audio te transcriberen.",
                         "language": "Taalhint verzonden naar Groq voor transcriptie. Standaard ingesteld op de taal die is geconfigureerd in Home Assistant, indien beschikbaar.",
+                        "prompt": "Optionele namen en vaktermen die Whisper verkeerd schrijft, in een korte zin, bijvoorbeeld: Het gesprek gaat over Home Assistant, Zigbee en Philips Hue. Schrijf in de taal die je spreekt. Noem geen opdrachten: woorden uit deze tekst kunnen bij stilte of onduidelijke spraak als herkende spraak verschijnen.",
                         "protect_free_tier": "Wanneer Groq meldt dat deze service een verzoek- of tokenlimiet heeft bereikt, pauzeert Home Assistant alleen deze service tot de resettijd van Groq voordat er meer verzoeken worden verzonden."
                     }
                 }
@@ -743,7 +748,7 @@
                 },
                 "prompt": {
                     "name": "Prompt",
-                    "description": "Optional context or spelling hints for the transcription."
+                    "description": "Optional context or spelling hints for the transcription. Leave out to use the selected service's vocabulary and context."
                 },
                 "response_format": {
                     "name": "Response format",

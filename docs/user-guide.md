@@ -95,7 +95,7 @@ Initial account setup asks for:
 After adding an account, open the Groq integration page and add one or more services:
 
 - Text Generation: name, model, system prompt, temperature, free-tier protection, and optional additional request options.
-- Speech-to-Text: name, model, language hint, and free-tier protection.
+- Speech-to-Text: name, model, language hint, optional vocabulary and context, and free-tier protection.
 - Text-to-Speech: name, model, voice, output format, optional sample rate, optional speed, optional vocal directions, optional audio normalization, optional Long TTS, and free-tier protection.
 - Image Recognition: name, model, system prompt, and free-tier protection.
 
@@ -116,6 +116,19 @@ You can add more than one Groq account. The integration prevents adding the same
 For Romanian Assist pipelines, select **Romanian** (`ro-RO`) in the Groq
 Speech-to-Text service. Romanian is also available in `groq.transcribe_audio`;
 the integration sends the ISO language hint `ro` to Groq.
+
+Use **Vocabulary and context** in the Speech-to-Text service for names and terms
+Whisper should spell correctly, for example
+`The conversation is about Home Assistant, Zigbee, and Philips Hue.` Write it in the
+language you speak and keep it short: Groq reads at most 224 tokens, and the form
+accepts up to 896 characters as an estimate of that limit. The text is a hint that
+guides spelling and style, not a command or a guaranteed word list. Do not list
+commands: Whisper can output words from this text during silence or unclear speech,
+and Assist may then act on them. Assist pipelines
+and `groq.transcribe_audio` use it automatically. A `prompt` in the action replaces
+it for that call, and an empty `prompt` sends none. `groq.translate_audio` ignores
+the saved text because Groq expects translation prompts in English; pass an English
+`prompt` in the action instead.
 
 Existing `groq.transcribe_audio` calls keep their text response. Select
 `response_format: verbose_json` to also return the provider's detected language,
