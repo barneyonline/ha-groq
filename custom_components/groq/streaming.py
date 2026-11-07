@@ -3,9 +3,30 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from typing import Any
 
 from .errors import GroqResponseError
+
+
+@dataclass(slots=True)
+class _ToolCallFragments:
+    """Accumulate tool fragments without repeatedly copying earlier bytes."""
+
+    id: str = ""
+    name: list[str] = field(default_factory=list)
+    arguments: list[str] = field(default_factory=list)
+
+    def message(self) -> dict[str, Any]:
+        """Return a fresh normalized call without consuming its fragments."""
+        return {
+            "id": self.id,
+            "type": "function",
+            "function": {
+                "name": "".join(self.name),
+                "arguments": "".join(self.arguments),
+            },
+        }
 
 
 class ChatStream:
@@ -15,7 +36,7 @@ class ChatStream:
         self.model = model
         self.content: list[str] = []
         self.reasoning: list[str] = []
-        self.calls: dict[int, dict[str, Any]] = {}
+        self.calls: dict[int, _ToolCallFragments] = {}
         self.usage: dict[str, Any] = {}
         self.metadata: dict[str, Any] = {}
         self.finish_reason: str | None = None
@@ -72,18 +93,15 @@ class ChatStream:
         index = delta.get("index")
         if type(index) is not int or not 0 <= index < 64:
             raise GroqResponseError("Groq returned an invalid tool index")
-        call = self.calls.setdefault(
-            index,
-            {"id": "", "type": "function", "function": {"name": "", "arguments": ""}},
-        )
+        call = self.calls.get(index)
+        if call is None:
+            call = self.calls[index] = _ToolCallFragments()
         if delta.get("type") not in (None, "function"):
             raise GroqResponseError("Groq returned an unsupported local tool type")
         if delta.get("id") is not None:
-            if not isinstance(delta["id"], str) or (
-                call["id"] and call["id"] != delta["id"]
-            ):
+            if not isinstance(delta["id"], str) or (call.id and call.id != delta["id"]):
                 raise GroqResponseError("Groq changed a streamed tool id")
-            call["id"] = delta["id"]
+            call.id = delta["id"]
         function = delta.get("function", {})
         if function is None:
             return
@@ -93,15 +111,18 @@ class ChatStream:
             if function.get(key) is not None:
                 if not isinstance(function[key], str):
                     raise GroqResponseError("Groq returned an invalid tool fragment")
-                call["function"][key] += function[key]
+                if function[key]:
+                    fragments = call.name if key == "name" else call.arguments
+                    fragments.append(function[key])
 
     def result(self) -> dict[str, Any]:
         """Reject unfinished/malformed operations before producing tool calls."""
-        if self.calls:
+        calls = [self.calls[i].message() for i in sorted(self.calls)]
+        if calls:
             if self.finish_reason != "tool_calls":
                 raise GroqResponseError("Groq did not finish the streamed tool calls")
             ids: set[str] = set()
-            for call in self.calls.values():
+            for call in calls:
                 function = call["function"]
                 try:
                     arguments = json.loads(function["arguments"])
@@ -121,7 +142,7 @@ class ChatStream:
             **self.metadata,
             "content": "".join(self.content),
             "reasoning": "".join(self.reasoning),
-            "tool_calls": [self.calls[i] for i in sorted(self.calls)],
+            "tool_calls": calls,
         }
         return {
             "model": self.model,
