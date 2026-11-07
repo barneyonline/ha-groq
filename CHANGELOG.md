@@ -20,7 +20,8 @@ All notable changes to this project will be documented in this file.
 
 ### 🔧 Improvements
 
-- None
+- On Home Assistant 2026.11+, attach repair issues to their account entries and refresh only obsolete notices while preserving ignored repairs. Keep compatible cleanup on 2026.10 and adopt existing persistent issues without resetting their ignored status.
+- Keep usage sensor subscriptions and measurements through in-place entity ID renames on Home Assistant 2026.11+, with removal and unload cleanup covered on both supported lifecycle paths.
 
 ### 🔄 Other changes
 

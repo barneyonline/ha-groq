@@ -62,6 +62,8 @@ Configure an Assist agent and a voice for your announcements.
 
 Requires **Home Assistant 2026.10.0+**, a Groq API key and internet access. Some audio processing options require `ffmpeg`.
 
+On Home Assistant 2026.11+, repair notices follow their account entry and usage sensors keep their update subscription when renamed. Home Assistant 2026.10 retains compatible repair cleanup and entity rename behavior. See the [user guide](docs/user-guide.md#troubleshooting) for repair recovery.
+
 ## Documentation
 
 [Open the wiki](https://github.com/barneyonline/ha-groq/wiki) for setup, usage and troubleshooting.
