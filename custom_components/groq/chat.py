@@ -106,7 +106,9 @@ def _tool_call_id(tool_call: Any) -> str:
     return str(tool_id) if tool_id else "tool_call"
 
 
-def _tool_call_message(tool_call: Any) -> dict[str, Any] | None:
+def _tool_call_message(
+    tool_call: Any, *, serialize: bool = True
+) -> dict[str, Any] | None:
     """Return an OpenAI-compatible tool call from a Home Assistant ToolInput."""
     if isinstance(tool_call, dict):
         tool_name = tool_call.get("tool_name")
@@ -121,12 +123,16 @@ def _tool_call_message(tool_call: Any) -> dict[str, Any] | None:
         "type": "function",
         "function": {
             "name": tool_name,
-            "arguments": json.dumps(tool_args, separators=(",", ":")),
+            "arguments": (
+                json.dumps(tool_args, separators=(",", ":")) if serialize else tool_args
+            ),
         },
     }
 
 
-def _tool_result_message(content: Any) -> dict[str, str] | None:
+def _tool_result_message(
+    content: Any, *, serialize: bool = True
+) -> dict[str, Any] | None:
     """Return an OpenAI-compatible tool result message from chat-log content."""
     tool_call_id = getattr(content, "tool_call_id", None)
     tool_name = getattr(content, "tool_name", None)
@@ -147,7 +153,11 @@ def _tool_result_message(content: Any) -> dict[str, str] | None:
         "role": "tool",
         "tool_call_id": tool_call_id,
         "name": tool_name,
-        "content": json.dumps(tool_result, separators=(",", ":"), default=str),
+        "content": (
+            json.dumps(tool_result, separators=(",", ":"), default=str)
+            if serialize
+            else tool_result
+        ),
     }
 
 
@@ -166,7 +176,7 @@ async def _async_chat_log_messages(
         if getattr(item, "role", None) == "tool_result" or (
             isinstance(item, dict) and item.get("role") == "tool_result"
         ):
-            if tool_result := _tool_result_message(item):
+            if tool_result := _tool_result_message(item, serialize=False):
                 messages.append(tool_result)
             continue
         role = _content_role(item)
@@ -184,7 +194,9 @@ async def _async_chat_log_messages(
         )
         if role == "assistant" and tool_calls:
             converted = [
-                call for tool in tool_calls if (call := _tool_call_message(tool))
+                call
+                for tool in tool_calls
+                if (call := _tool_call_message(tool, serialize=False))
             ]
             if converted:
                 message["tool_calls"] = converted
@@ -221,6 +233,17 @@ async def _async_chat_log_messages(
         )
     messages = [*system_messages, *turn_messages]
     for message in messages:
+        # Only retained history incurs serialization or attachment I/O. These
+        # descriptors own their dictionaries, leaving HA's chat log untouched.
+        if message["role"] == "tool":
+            message["content"] = json.dumps(
+                message["content"], separators=(",", ":"), default=str
+            )
+        for tool_call in message.get("tool_calls", []):
+            function = tool_call["function"]
+            function["arguments"] = json.dumps(
+                function["arguments"], separators=(",", ":")
+            )
         attachments = message.pop("_attachments", None)
         if not attachments:
             continue

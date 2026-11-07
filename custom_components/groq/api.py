@@ -9,8 +9,8 @@ import logging
 import time
 from asyncio import CancelledError
 from collections import OrderedDict, deque
-from collections.abc import AsyncIterator, Callable, Mapping
-from contextlib import suppress
+from collections.abc import AsyncGenerator, Callable, Mapping
+from contextlib import aclosing, suppress
 from dataclasses import dataclass, field
 from hashlib import sha256
 from secrets import token_bytes
@@ -246,7 +246,7 @@ async def _iter_limited_response_lines(
     response: aiohttp.ClientResponse,
     limit: int,
     response_type: str,
-) -> AsyncIterator[bytes]:
+) -> AsyncGenerator[bytes]:
     """Yield response lines while bounding chunked and single-line streams."""
     _ensure_response_content_length(response, limit, response_type)
     total_bytes = 0
@@ -660,29 +660,33 @@ class GroqApiClient:
     async def async_stream_text(
         self,
         request: TextGenerationRequest,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncGenerator[str]:
         """Stream generated text chunks from the chat completions API."""
-        async for chunk in self.async_stream_chat(request):
-            if isinstance(chunk, str):
-                yield chunk
+        async with aclosing(self.async_stream_chat(request)) as chunks:
+            async for chunk in chunks:
+                if isinstance(chunk, str):
+                    yield chunk
 
     async def async_stream_chat(
         self, request: TextGenerationRequest
-    ) -> AsyncIterator[str | ChatCompletionResult]:
+    ) -> AsyncGenerator[str | ChatCompletionResult]:
         """Stream text followed by one fully assembled result with metadata."""
         payload = build_text_generation_payload(request)
         payload["stream"] = True
         stream = ChatStream(request.model)
-        async for event in self._request_stream(
-            "POST",
-            CHAT_COMPLETIONS_PATH,
-            json_payload=payload,
-            api_key=request.api_key,
-            guard_key=self._guard_key(request),
-            repair_service_id=request.service_id,
-        ):
-            if content := stream.add(event):
-                yield content
+        async with aclosing(
+            self._request_stream(
+                "POST",
+                CHAT_COMPLETIONS_PATH,
+                json_payload=payload,
+                api_key=request.api_key,
+                guard_key=self._guard_key(request),
+                repair_service_id=request.service_id,
+            )
+        ) as events:
+            async for event in events:
+                if content := stream.add(event):
+                    yield content
         yield self._chat_result(stream.result(), request.service_id)
 
     async def async_generate_structured(
@@ -886,9 +890,12 @@ class GroqApiClient:
             return cache[cache_key]
 
         guard_key = self._tts_guard_key(request)
-        self._rate_limiter.raise_if_blocked(guard_key)
-        token_estimate = self._check_local_tts_free_tier_limit(request)
-        self._record_local_tts_usage(request, token_estimate)
+
+        def record_attempt() -> None:
+            """Reserve local quota atomically before each transport attempt."""
+            token_estimate = self._check_local_tts_free_tier_limit(request)
+            self._record_local_tts_usage(request, token_estimate)
+
         payload: dict[str, Any] = {
             "model": request.model,
             "input": request.text,
@@ -907,6 +914,7 @@ class GroqApiClient:
             api_key=request.api_key,
             guard_key=guard_key,
             repair_service_id=request.service_id,
+            before_attempt=record_attempt,
         )
         api_duration = (time.monotonic() - api_start) * 1000
         _LOGGER.debug(
@@ -1075,7 +1083,7 @@ class GroqApiClient:
         api_key: str | None = None,
         guard_key: str | None = None,
         repair_service_id: str | None = None,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncGenerator[dict[str, Any]]:
         """Perform an SSE request and yield decoded JSON events."""
         session = self._session or async_get_clientsession(self._hass)
         self._rate_limiter.raise_if_blocked(guard_key)
@@ -1110,40 +1118,43 @@ class GroqApiClient:
 
                 self._mark_available()
                 completed = False
-                async for raw_line in _iter_limited_response_lines(
-                    response, MAX_STREAM_RESPONSE_BYTES, "stream"
-                ):
-                    try:
-                        line = raw_line.decode("utf-8").strip()
-                    except UnicodeDecodeError as err:
-                        raise GroqResponseError(
-                            "Groq stream returned invalid UTF-8"
-                        ) from err
-                    if not line or not line.startswith("data:"):
-                        continue
-                    data = line.removeprefix("data:").strip()
-                    if data == "[DONE]":
-                        completed = True
-                        break
-                    # Each data line is a standalone JSON event; do not buffer
-                    # across lines because SSE framing has already done that.
-                    try:
-                        event = json.loads(data)
-                    except json.JSONDecodeError as err:
-                        raise GroqResponseError(
-                            "Groq stream returned invalid JSON"
-                        ) from err
-                    if isinstance(event, dict):
-                        if "error" in event:
-                            raise self._api_error(200, event)
-                        choices = event.get("choices")
-                        if isinstance(choices, list) and any(
-                            isinstance(choice, dict)
-                            and choice.get("finish_reason") is not None
-                            for choice in choices
-                        ):
+                async with aclosing(
+                    _iter_limited_response_lines(
+                        response, MAX_STREAM_RESPONSE_BYTES, "stream"
+                    )
+                ) as lines:
+                    async for raw_line in lines:
+                        try:
+                            line = raw_line.decode("utf-8").strip()
+                        except UnicodeDecodeError as err:
+                            raise GroqResponseError(
+                                "Groq stream returned invalid UTF-8"
+                            ) from err
+                        if not line or not line.startswith("data:"):
+                            continue
+                        data = line.removeprefix("data:").strip()
+                        if data == "[DONE]":
                             completed = True
-                        yield event
+                            break
+                        # Each data line is a standalone JSON event; do not buffer
+                        # across lines because SSE framing has already done that.
+                        try:
+                            event = json.loads(data)
+                        except json.JSONDecodeError as err:
+                            raise GroqResponseError(
+                                "Groq stream returned invalid JSON"
+                            ) from err
+                        if isinstance(event, dict):
+                            if "error" in event:
+                                raise self._api_error(200, event)
+                            choices = event.get("choices")
+                            if isinstance(choices, list) and any(
+                                isinstance(choice, dict)
+                                and choice.get("finish_reason") is not None
+                                for choice in choices
+                            ):
+                                completed = True
+                            yield event
                 if not completed:
                     raise GroqResponseError("Groq stream ended before completion")
                 self._clear_model_access_issue(json_payload, repair_service_id)
@@ -1164,12 +1175,15 @@ class GroqApiClient:
         api_key: str | None = None,
         guard_key: str | None = None,
         repair_service_id: str | None = None,
+        before_attempt: Callable[[], None] | None = None,
     ) -> bytes:
         """Perform an audio request and return audio bytes."""
         session = self._session or async_get_clientsession(self._hass)
-        self._rate_limiter.raise_if_blocked(guard_key)
         attempt = 0
         while True:
+            self._rate_limiter.raise_if_blocked(guard_key)
+            if before_attempt is not None:
+                before_attempt()
             try:
                 async with session.request(
                     method,

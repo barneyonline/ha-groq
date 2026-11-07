@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any, Literal
 
 from homeassistant.components import conversation
@@ -267,29 +268,33 @@ class GroqConversationEntity(ConversationEntity):
             if tool.get("type") == "function"
         }
 
-        async def content_stream() -> AsyncIterator[AssistantContentDeltaDict]:
+        async def content_stream() -> AsyncGenerator[AssistantContentDeltaDict]:
             yield {"role": "assistant"}
-            async for chunk in self._client.async_stream_chat(request):
-                if isinstance(chunk, str):
-                    yield {"content": chunk}
-                else:
-                    tool_calls = _result_tool_calls(chunk)
-                    if any(call.tool_name not in allowed_tools for call in tool_calls):
-                        raise translated_error(
-                            "Groq returned an unexposed Home Assistant tool",
-                            "invalid_request_options",
-                        )
-                    yield {
-                        "tool_calls": tool_calls or None,
-                        "thinking_content": chunk.reasoning,
-                        "native": _assistant_native(chunk) or None,
-                    }
+            async with aclosing(self._client.async_stream_chat(request)) as chunks:
+                async for chunk in chunks:
+                    if isinstance(chunk, str):
+                        yield {"content": chunk}
+                    else:
+                        tool_calls = _result_tool_calls(chunk)
+                        if any(
+                            call.tool_name not in allowed_tools for call in tool_calls
+                        ):
+                            raise translated_error(
+                                "Groq returned an unexposed Home Assistant tool",
+                                "invalid_request_options",
+                            )
+                        yield {
+                            "tool_calls": tool_calls or None,
+                            "thinking_content": chunk.reasoning,
+                            "native": _assistant_native(chunk) or None,
+                        }
 
         completed: list[str] = []
-        async for content in chat_log.async_add_delta_content_stream(
-            user_input.agent_id,
-            content_stream(),
-        ):
-            if isinstance(content, AssistantContent) and content.content:
-                completed.append(content.content)
+        async with aclosing(content_stream()) as deltas:
+            async with aclosing(
+                chat_log.async_add_delta_content_stream(user_input.agent_id, deltas)
+            ) as contents:
+                async for content in contents:
+                    if isinstance(content, AssistantContent) and content.content:
+                        completed.append(content.content)
         return "".join(completed)

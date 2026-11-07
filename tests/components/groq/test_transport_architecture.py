@@ -628,7 +628,11 @@ async def test_speech_cache_isolates_credentials_within_the_same_service():
 
 @pytest.mark.asyncio
 async def test_batch_preflight_uses_the_synthesis_credential_namespace():
-    client = GroqApiClient(Hass(), api_key="account-key")
+    client = GroqApiClient(
+        Hass(),
+        api_key="account-key",
+        session=Session(Response(body=b"audio", headers={"content-type": "audio/wav"})),
+    )
     requests = [
         SpeechRequest(
             text="hello",
@@ -645,10 +649,7 @@ async def test_batch_preflight_uses_the_synthesis_credential_namespace():
         "tokens_per_minute": 1000,
         "tokens_per_day": 1000,
     }
-    with (
-        patch.object(client, "_free_tier_limits", return_value=limits),
-        patch.object(client, "_request_audio", return_value=b"audio"),
-    ):
+    with patch.object(client, "_free_tier_limits", return_value=limits):
         assert await client.async_synthesize_speech(requests[0]) == b"audio"
         assert client.check_tts_batch([requests[0]]) == [5]
         with pytest.raises(GroqApiError, match="batch usage"):
