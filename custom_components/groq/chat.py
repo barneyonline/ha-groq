@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any
 
 import probatio
@@ -22,15 +23,12 @@ MAX_TOOL_ITERATIONS = 10
 
 def _content_role(content: Any) -> str | None:
     """Return a chat role for a Home Assistant chat-log content item."""
-    if isinstance(content, dict):
-        role = content.get("role")
-        return (
-            role
-            if isinstance(role, str) and role in {"system", "user", "assistant"}
-            else None
-        )
-    role = getattr(content, "role", None)
-    if role in {"system", "user", "assistant"}:
+    role = (
+        content.get("role")
+        if isinstance(content, dict)
+        else getattr(content, "role", None)
+    )
+    if isinstance(role, str) and role in ("system", "user", "assistant", "tool_result"):
         return str(role)
     return None
 
@@ -51,26 +49,17 @@ def _content_attachments(content: Any) -> Any:
     return getattr(content, "attachments", None)
 
 
-def _trim_turn_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return recent messages without orphaning tool responses."""
-    if len(messages) <= MAX_HISTORY_MESSAGES:
-        return messages
-    start = len(messages) - MAX_HISTORY_MESSAGES
-    user_indices = [
-        index for index, message in enumerate(messages) if message.get("role") == "user"
-    ]
-    if user_indices:
-        start = min(start, user_indices[-1])
-    trimmed = messages[start:]
+def _drop_orphan_tool_results(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove tool results whose originating calls fell outside the retained history."""
     valid_tool_call_ids = {
         tool_call["id"]
-        for message in trimmed
+        for message in messages
         for tool_call in message.get("tool_calls", [])
         if isinstance(tool_call, dict) and isinstance(tool_call.get("id"), str)
     }
     return [
         message
-        for message in trimmed
+        for message in messages
         if message.get("role") != "tool"
         or message.get("tool_call_id") in valid_tool_call_ids
     ]
@@ -110,14 +99,10 @@ def _tool_call_message(
     tool_call: Any, *, serialize: bool = True
 ) -> dict[str, Any] | None:
     """Return an OpenAI-compatible tool call from a Home Assistant ToolInput."""
-    if isinstance(tool_call, dict):
-        tool_name = tool_call.get("tool_name")
-        tool_args = tool_call.get("tool_args")
-    else:
-        tool_name = getattr(tool_call, "tool_name", None)
-        tool_args = getattr(tool_call, "tool_args", None)
-    if not isinstance(tool_name, str) or not isinstance(tool_args, dict):
+    parts = _tool_call_parts(tool_call)
+    if parts is None:
         return None
+    tool_name, tool_args = parts
     return {
         "id": _tool_call_id(tool_call),
         "type": "function",
@@ -134,21 +119,16 @@ def _tool_result_message(
     content: Any, *, serialize: bool = True
 ) -> dict[str, Any] | None:
     """Return an OpenAI-compatible tool result message from chat-log content."""
-    tool_call_id = getattr(content, "tool_call_id", None)
-    tool_name = getattr(content, "tool_name", None)
-    if isinstance(content, dict):
-        tool_call_id = content.get("tool_call_id", tool_call_id)
-        tool_name = content.get("tool_name", tool_name)
-        result = content["result"]
-    else:
-        result = content.result
+    identity = _tool_result_identity(content)
+    if identity is None:
+        return None
+    tool_call_id, tool_name = identity
+    result = content["result"] if isinstance(content, dict) else content.result
     tool_result = (
         {"data": result["data"], "error": result.get("error", False)}
         if isinstance(result, dict)
         else {"data": result.data, "error": result.error}
     )
-    if not isinstance(tool_call_id, str) or not isinstance(tool_name, str):
-        return None
     return {
         "role": "tool",
         "tool_call_id": tool_call_id,
@@ -161,6 +141,108 @@ def _tool_result_message(
     }
 
 
+def _tool_result_identity(content: Any) -> tuple[str, str] | None:
+    """Check that a tool result can be included without reading its data."""
+    if isinstance(content, dict):
+        call_id = content.get("tool_call_id")
+        name = content.get("tool_name")
+    else:
+        call_id = getattr(content, "tool_call_id", None)
+        name = getattr(content, "tool_name", None)
+    if isinstance(call_id, str) and isinstance(name, str):
+        return call_id, name
+    return None
+
+
+def _assistant_tool_calls(content: Any) -> Any:
+    """Return the raw tool calls on an assistant item."""
+    return (
+        content.get("tool_calls")
+        if isinstance(content, dict)
+        else getattr(content, "tool_calls", None)
+    )
+
+
+def _tool_call_parts(tool_call: Any) -> tuple[str, dict[str, Any]] | None:
+    """Return the name and arguments of a valid Home Assistant tool call."""
+    if isinstance(tool_call, dict):
+        tool_name = tool_call.get("tool_name")
+        tool_args = tool_call.get("tool_args")
+    else:
+        tool_name = getattr(tool_call, "tool_name", None)
+        tool_args = getattr(tool_call, "tool_args", None)
+    if isinstance(tool_name, str) and isinstance(tool_args, dict):
+        return tool_name, tool_args
+    return None
+
+
+def _chat_log_history(
+    chat_log: conversation.ChatLog,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build descriptors for system instructions and the retained history tail."""
+    system_messages: list[dict[str, Any]] = []
+    selected: list[tuple[Any, str]] = []
+    newest_user_offset = next(
+        (
+            offset
+            for offset, item in enumerate(reversed(chat_log.content))
+            if _content_role(item) == "user"
+            and (_content_text(item) or _content_attachments(item))
+        ),
+        -1,
+    )
+    discarded = False
+    for offset, item in enumerate(reversed(chat_log.content)):
+        role = _content_role(item)
+        if role == "system":
+            if text := _content_text(item):
+                system_messages.append({"role": role, "content": text})
+            continue
+        if role is None or discarded:
+            continue
+        if role == "tool_result":
+            if _tool_result_identity(item) is None:
+                continue
+        elif not (
+            _content_text(item)
+            or (role == "user" and _content_attachments(item))
+            or (
+                role == "assistant"
+                and any(
+                    _tool_call_parts(call) for call in _assistant_tool_calls(item) or ()
+                )
+            )
+        ):
+            continue
+        if offset > newest_user_offset and len(selected) >= MAX_HISTORY_MESSAGES:
+            discarded = True
+            continue
+        selected.append((item, role))
+
+    system_messages.reverse()
+    turns: list[dict[str, Any]] = []
+    for item, role in reversed(selected):
+        if role == "tool_result":
+            if result := _tool_result_message(item, serialize=False):
+                turns.append(result)
+            continue
+        message: dict[str, Any] = {"role": role, "content": _content_text(item) or ""}
+        if role == "user" and (attachments := _content_attachments(item)):
+            message["_attachments"] = attachments
+        if role == "assistant":
+            calls = [
+                call
+                for tool in _assistant_tool_calls(item) or ()
+                if (call := _tool_call_message(tool, serialize=False))
+            ]
+            if calls:
+                message["tool_calls"] = calls
+        turns.append(message)
+    if discarded or len(turns) > MAX_HISTORY_MESSAGES:
+        turns = _drop_orphan_tool_results(turns)
+    return system_messages, turns
+
+
 async def _async_chat_log_messages(
     hass: HomeAssistant,
     model_registry: GroqModelRegistry,
@@ -171,41 +253,7 @@ async def _async_chat_log_messages(
     attachment_cache: dict[tuple[str, str], Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Return OpenAI-compatible messages, including supported image attachments."""
-    messages: list[dict[str, Any]] = []
-    for item in chat_log.content:
-        if getattr(item, "role", None) == "tool_result" or (
-            isinstance(item, dict) and item.get("role") == "tool_result"
-        ):
-            if tool_result := _tool_result_message(item, serialize=False):
-                messages.append(tool_result)
-            continue
-        role = _content_role(item)
-        text = _content_text(item)
-        if not role:
-            continue
-        message: dict[str, Any] = {"role": role, "content": text or ""}
-        attachments = _content_attachments(item) if role == "user" else None
-        if attachments:
-            message["_attachments"] = attachments
-        tool_calls = (
-            item.get("tool_calls")
-            if isinstance(item, dict)
-            else getattr(item, "tool_calls", None)
-        )
-        if role == "assistant" and tool_calls:
-            converted = [
-                call
-                for tool in tool_calls
-                if (call := _tool_call_message(tool, serialize=False))
-            ]
-            if converted:
-                message["tool_calls"] = converted
-        if text or message.get("tool_calls") or attachments:
-            messages.append(message)
-    system_messages = [message for message in messages if message["role"] == "system"]
-    turn_messages = _trim_turn_messages(
-        [message for message in messages if message["role"] != "system"]
-    )
+    system_messages, turn_messages = _chat_log_history(chat_log)
     # HA normally already added the current input. Match the latest user turn,
     # not an identical prompt from an older conversation turn.
     latest_user = next(
@@ -299,18 +347,20 @@ def _result_tool_calls(result: ChatCompletionResult) -> list[llm.ToolInput]:
         if not isinstance(function, dict):
             continue
         tool_name = function.get("name")
-        arguments = function.get("arguments", {})
         if not isinstance(tool_name, str):
             continue
-        if isinstance(arguments, str):
+        wire_arguments = function.get("arguments", {})
+        if isinstance(wire_arguments, str):
+            # Decode an independent copy for tools that mutate their arguments.
             try:
-                tool_args = json.loads(arguments) if arguments else {}
+                tool_args = json.loads(wire_arguments) if wire_arguments else {}
             except json.JSONDecodeError as err:
                 raise translated_error(
-                    "Groq returned malformed tool arguments", "invalid_request_options"
+                    "Groq returned malformed tool arguments",
+                    "invalid_request_options",
                 ) from err
         else:
-            tool_args = arguments
+            tool_args = wire_arguments
         call_id = tool_call.get("id")
         if (
             not isinstance(tool_args, dict)
@@ -323,6 +373,12 @@ def _result_tool_calls(result: ChatCompletionResult) -> list[llm.ToolInput]:
                 "invalid_request_options",
             )
         call_ids.add(call_id)
+        if not isinstance(wire_arguments, str):
+            try:
+                tool_args = deepcopy(tool_args)
+            except RecursionError:
+                # Python's JSON decoder accepts deeper arguments than deepcopy.
+                tool_args = json.loads(json.dumps(tool_args))
         tool_inputs.append(
             llm.ToolInput(
                 tool_name=tool_name,

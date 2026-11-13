@@ -11,7 +11,6 @@ import re
 import struct
 import time
 from asyncio import CancelledError
-from contextlib import suppress
 from typing import Any
 
 from homeassistant.components.tts import TextToSpeechEntity
@@ -21,7 +20,11 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import GroqApiClient, SpeechRequest, async_preload_clientsession_helper
-from .audio_files import async_audio_chunk_paths, async_communicate_audio
+from .audio_files import (
+    async_audio_chunk_paths,
+    async_communicate_audio,
+    async_stop_audio_process,
+)
 from .const import (
     CONF_CACHE_SIZE,
     CONF_ENABLE_LONG_TTS,
@@ -382,11 +385,7 @@ class GroqTTSEntity(TextToSpeechEntity):
             async with asyncio.timeout(FFMPEG_TIMEOUT_SECONDS):
                 stdout, stderr = await async_communicate_audio(process, input_bytes)
         except (CancelledError, TimeoutError, HomeAssistantError, OSError) as err:
-            if process.returncode is None:
-                with suppress(ProcessLookupError):
-                    process.kill()
-                with suppress(Exception, CancelledError):
-                    await process.wait()
+            await async_stop_audio_process(process)
             if isinstance(err, TimeoutError):
                 _LOGGER.error(
                     "ffmpeg timed out after %s seconds", FFMPEG_TIMEOUT_SECONDS
@@ -718,38 +717,28 @@ class GroqTTSEntity(TextToSpeechEntity):
             if len(input_chunks) > 1:
                 self._client.check_tts_batch(speech_requests)
 
-            audio_chunks = []
-            synthesis_start = time.monotonic()
+            synthesis_duration = 0.0
             chunk_count = len(speech_requests)
-            for chunk_index, speech_request in enumerate(speech_requests, start=1):
-                chunk_start = time.monotonic()
-                audio_chunks.append(
-                    await self._client.async_synthesize_speech(speech_request)
-                )
-                chunk_duration = (time.monotonic() - chunk_start) * 1000
+
+            async def synthesize_chunk(index: int, request: SpeechRequest) -> bytes:
+                nonlocal synthesis_duration
+                started = time.monotonic()
+                chunk = await self._client.async_synthesize_speech(request)
+                duration = (time.monotonic() - started) * 1000
+                synthesis_duration += duration
                 _LOGGER.debug(
                     "TTS synthesis chunk %d/%d completed in %.2f ms",
-                    chunk_index,
+                    index,
                     chunk_count,
-                    chunk_duration,
+                    duration,
                 )
-            synthesis_duration = (time.monotonic() - synthesis_start) * 1000
-            _LOGGER.debug(
-                "TTS synthesis phase completed: chunks=%d duration_ms=%.2f",
-                chunk_count,
-                synthesis_duration,
-            )
-            audio_content = audio_chunks[0]
-            postprocess_start = time.monotonic()
-            if (
-                not needs_ffmpeg
-                and output_format == ORPHEUS_RESPONSE_FORMAT
-                and _audio_needs_compatibility_transcode(audio_content)
-            ):
-                _LOGGER.debug("Rewriting Groq WAV audio for media player compatibility")
-                needs_ffmpeg = True
-                await self._async_check_ffmpeg(
-                    output_format, normalize_audio, sample_rate
+                return chunk
+
+            def log_synthesis_phase() -> None:
+                _LOGGER.debug(
+                    "TTS synthesis phase completed: chunks=%d duration_ms=%.2f",
+                    chunk_count,
+                    synthesis_duration,
                 )
 
             async def convert_audio_chunk(input_bytes: bytes) -> bytes:
@@ -767,54 +756,36 @@ class GroqTTSEntity(TextToSpeechEntity):
                     cmd.extend(["-af", FFMPEG_LOUDNORM_FILTER])
                 cmd.extend(_ffmpeg_output_args(output_format, sample_rate))
                 cmd.append("pipe:1")
-                return await self._async_run_ffmpeg(
-                    cmd,
-                    input_bytes,
-                    create_repair=False,
+                return await postprocess(cmd, input_bytes)
+
+            async def stitch_audio_chunks(chunk_paths: list[str]) -> bytes:
+                """Stitch multiple Orpheus WAV files into the playback format."""
+                input_args = [
+                    arg for chunk_path in chunk_paths for arg in ("-i", chunk_path)
+                ]
+                filter_inputs = "".join(
+                    f"[{index}:a]" for index in range(len(chunk_paths))
                 )
+                filter_complex = f"{filter_inputs}concat=n={len(chunk_paths)}:v=0:a=1"
+                if normalize_audio:
+                    filter_complex = f"{filter_complex},{FFMPEG_LOUDNORM_FILTER}"
+                cmd = [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    *input_args,
+                    "-filter_complex",
+                    filter_complex,
+                    *_ffmpeg_output_args(output_format, sample_rate),
+                    "pipe:1",
+                ]
+                return await postprocess(cmd)
 
-            async def stitch_audio_chunks(
-                input_chunks: list[bytes],
-            ) -> bytes:
-                """Stitch multiple Orpheus WAV chunks into the playback format."""
-                async with async_audio_chunk_paths(
-                    self.hass, input_chunks
-                ) as chunk_paths:
-                    input_args = [
-                        arg for chunk_path in chunk_paths for arg in ("-i", chunk_path)
-                    ]
-                    filter_inputs = "".join(
-                        f"[{index}:a]" for index in range(len(chunk_paths))
-                    )
-                    filter_complex = (
-                        f"{filter_inputs}concat=n={len(chunk_paths)}:v=0:a=1"
-                    )
-                    if normalize_audio:
-                        filter_complex = f"{filter_complex},{FFMPEG_LOUDNORM_FILTER}"
-                    cmd = [
-                        "ffmpeg",
-                        "-hide_banner",
-                        "-loglevel",
-                        "error",
-                        "-y",
-                        *input_args,
-                        "-filter_complex",
-                        filter_complex,
-                        *_ffmpeg_output_args(output_format, sample_rate),
-                        "pipe:1",
-                    ]
-                    return await self._async_run_ffmpeg(
-                        cmd,
-                        create_repair=False,
-                    )
-
-            if needs_ffmpeg:
+            async def postprocess(cmd: list[str], data: bytes | None = None) -> bytes:
                 try:
-                    audio_content = (
-                        await convert_audio_chunk(audio_content)
-                        if len(audio_chunks) == 1
-                        else await stitch_audio_chunks(audio_chunks)
-                    )
+                    return await self._async_run_ffmpeg(cmd, data, create_repair=False)
                 except HomeAssistantError:
                     self._ffmpeg_capabilities.discard(
                         (output_format, normalize_audio, sample_rate)
@@ -823,14 +794,38 @@ class GroqTTSEntity(TextToSpeechEntity):
                         self.hass, self._config, self._service_data
                     )
                     raise
+
+            if chunk_count > 1:
+                chunks = (
+                    await synthesize_chunk(index, request)
+                    for index, request in enumerate(speech_requests, start=1)
+                )
+                async with async_audio_chunk_paths(self.hass, chunks) as paths:
+                    log_synthesis_phase()
+                    postprocess_start = time.monotonic()
+                    audio_content = await stitch_audio_chunks(paths)
+            else:
+                audio_content = await synthesize_chunk(1, speech_requests[0])
+                log_synthesis_phase()
+                postprocess_start = time.monotonic()
+                if (
+                    not needs_ffmpeg
+                    and output_format == ORPHEUS_RESPONSE_FORMAT
+                    and _audio_needs_compatibility_transcode(audio_content)
+                ):
+                    _LOGGER.debug(
+                        "Rewriting Groq WAV audio for media player compatibility"
+                    )
+                    needs_ffmpeg = True
+                    await self._async_check_ffmpeg(
+                        output_format, normalize_audio, sample_rate
+                    )
+                if needs_ffmpeg:
+                    audio_content = await convert_audio_chunk(audio_content)
+            if needs_ffmpeg or not self._configured_audio_needs_ffmpeg():
                 async_delete_ffmpeg_missing_issue(
                     self.hass, self._config, self._service_data
                 )
-            else:
-                if not self._configured_audio_needs_ffmpeg():
-                    async_delete_ffmpeg_missing_issue(
-                        self.hass, self._config, self._service_data
-                    )
 
             postprocess_duration = (time.monotonic() - postprocess_start) * 1000
             overall_duration = (time.monotonic() - overall_start) * 1000
