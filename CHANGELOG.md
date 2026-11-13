@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v2.2.1 - 2026-11-10
+
+### 🚧 Breaking changes
+
+- None
+
+### ✨ New features
+
+- None
+
+### 🐛 Bug fixes
+
+- Avoid serializing discarded conversation tool data before applying the existing history limit. (#81)
+- Assemble fragmented streamed tool calls without repeatedly copying earlier fragments, preserving validation before execution. (#81)
+- Count every attempted TTS HTTP request, including retries, toward local free-tier protection. Cached speech adds no local usage, and shared synthesis counts once per HTTP attempt. (#81)
+- Release streamed responses promptly when streams finish, close, fail or are cancelled, including when Assist stops consuming them early. (#81)
+
+### 🔧 Improvements
+
+- None
+
+### 🔄 Other changes
+
+- Bumped the integration manifest version to `2.2.1`.
+
 ## v2.2.0 - 2026-11-07
 
 ### 🚧 Breaking changes
