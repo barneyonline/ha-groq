@@ -5,7 +5,8 @@ from __future__ import annotations
 import io
 import logging
 import wave
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, Callable
+from contextlib import ExitStack
 from typing import Any
 
 from homeassistant.components import stt
@@ -153,28 +154,29 @@ class GroqSTTEntity(stt.SpeechToTextEntity):
         stream: AsyncIterable[bytes],
     ) -> stt.SpeechResult:
         """Transcribe an audio stream."""
-        audio = bytearray()
-        async for chunk in stream:
-            if len(audio) + len(chunk) > MAX_STT_AUDIO_BYTES:
-                _LOGGER.warning(
-                    "Groq speech transcription audio exceeded %d MB limit",
-                    MAX_STT_AUDIO_BYTES // 1024 // 1024,
-                )
-                return stt.SpeechResult(None, stt.SpeechResultState.ERROR)
-            audio.extend(chunk)
-        audio_data = bytes(audio)
-        filename = f"audio.{metadata.format.value}"
-
-        if metadata.format == stt.AudioFormats.WAV:
-            # HA streams WAV frames without a container header here, so wrap the
-            # raw PCM bytes before sending them to Groq's transcription endpoint.
-            wav_buffer = io.BytesIO()
-            with wave.open(wav_buffer, "wb") as wav_file:
+        with io.BytesIO() as buffer, ExitStack() as stack:
+            write_chunk: Callable[[bytes], object] = buffer.write
+            if metadata.format == stt.AudioFormats.WAV:
+                # HA supplies raw PCM frames. Write them directly into the WAV
+                # buffer and finalize its header before retrieving upload bytes.
+                wav_file = stack.enter_context(wave.open(buffer, "wb"))
                 wav_file.setnchannels(metadata.channel.value)
                 wav_file.setsampwidth(metadata.bit_rate.value // 8)
                 wav_file.setframerate(metadata.sample_rate.value)
-                wav_file.writeframes(audio_data)
-            audio_data = wav_buffer.getvalue()
+                write_chunk = wav_file.writeframesraw
+            total_bytes = 0
+            async for chunk in stream:
+                total_bytes += len(chunk)
+                if total_bytes > MAX_STT_AUDIO_BYTES:
+                    _LOGGER.warning(
+                        "Groq speech transcription audio exceeded %d MB limit",
+                        MAX_STT_AUDIO_BYTES // 1024 // 1024,
+                    )
+                    return stt.SpeechResult(None, stt.SpeechResultState.ERROR)
+                write_chunk(chunk)
+            stack.close()
+            audio_data = buffer.getvalue()
+        filename = f"audio.{metadata.format.value}"
 
         language = self._service_data.get(CONF_LANGUAGE) or metadata.language
         try:

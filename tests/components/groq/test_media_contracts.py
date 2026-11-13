@@ -180,3 +180,41 @@ async def test_real_ffmpeg_conversion_and_stitching(
     # Piped FLAC has no duration header; decoded samples work for every codec.
     duration = sum(frame["nb_samples"] for frame in probe["frames"]) / rate
     assert duration == pytest.approx(chunks, abs=0.1)
+
+
+async def test_large_wav_drops_input_storage_before_transcription():
+    import tracemalloc
+
+    chunk = bytes(64 * 1024)
+    size = 4 * 1024 * 1024
+
+    async def stream():
+        for _ in range(size // len(chunk)):
+            yield chunk
+
+    async def transcribe(**kwargs):
+        assert len(kwargs["audio"]) == size + 44
+        current, peak = tracemalloc.get_traced_memory()
+        assert current < size + size // 2
+        assert peak < size * 2
+        return "ok"
+
+    entity = GroqSTTEntity(
+        DummyEntry(),
+        {"model": "whisper-large-v3"},
+        Mock(async_transcribe_audio=transcribe),
+    )
+    metadata = stt.SpeechMetadata(
+        language="en-US",
+        format=stt.AudioFormats.WAV,
+        codec=stt.AudioCodecs.PCM,
+        bit_rate=stt.AudioBitRates.BITRATE_16,
+        sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
+        channel=stt.AudioChannels.CHANNEL_MONO,
+    )
+    tracemalloc.start()
+    try:
+        result = await entity.async_process_audio_stream(metadata, stream())
+    finally:
+        tracemalloc.stop()
+    assert result.text == "ok"

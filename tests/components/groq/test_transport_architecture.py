@@ -56,7 +56,17 @@ def test_invalid_numeric_tts_defaults_remain_selector_safe(value):
 
 @pytest.mark.asyncio
 async def test_ffmpeg_pipe_failure_kills_and_reaps_process():
-    process = SimpleNamespace(returncode=None, kill=Mock(), wait=AsyncMock())
+    stdout, stderr = asyncio.StreamReader(), asyncio.StreamReader()
+    stdout.feed_eof()
+    stderr.feed_eof()
+    process = SimpleNamespace(
+        returncode=None,
+        kill=Mock(),
+        wait=AsyncMock(),
+        stdin=Mock(),
+        stdout=stdout,
+        stderr=stderr,
+    )
     with (
         patch.object(tts.asyncio, "create_subprocess_exec", return_value=process),
         patch.object(
@@ -68,6 +78,7 @@ async def test_ffmpeg_pipe_failure_kills_and_reaps_process():
             SimpleNamespace(), ["ffmpeg"], create_repair=False
         )
     process.kill.assert_called_once()
+    process.stdin.close.assert_called_once()
     process.wait.assert_awaited_once()
 
 
@@ -422,7 +433,7 @@ async def test_temp_audio_files_are_cleaned_after_cancellation(
     real_write = Path.write_bytes
     directory = tmp_path / "audio"
 
-    def mkdtemp(**_kwargs):
+    def mkdtemp(*_args):
         directory.mkdir()
         if cancel_during == "create":
             started.set()
@@ -438,8 +449,11 @@ async def test_temp_audio_files_are_cleaned_after_cancellation(
     monkeypatch.setattr(audio_files.tempfile, "mkdtemp", mkdtemp)
     monkeypatch.setattr(Path, "write_bytes", write)
 
+    async def chunks():
+        yield b"audio"
+
     async def use():
-        async with audio_files.async_audio_chunk_paths(Hass(), [b"audio"]) as paths:
+        async with audio_files.async_audio_chunk_paths(Hass(), chunks()) as paths:
             assert Path(paths[0]).exists()
             started.set()
             await asyncio.Event().wait()
@@ -453,12 +467,26 @@ async def test_temp_audio_files_are_cleaned_after_cancellation(
     assert not directory.exists()
 
 
-def test_audio_creation_failure_cleans_directory(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_audio_write_failure_closes_source_and_cleans_directory(
+    tmp_path, monkeypatch
+):
     directory = tmp_path / "audio"
     directory.mkdir()
-    monkeypatch.setattr(audio_files.tempfile, "mkdtemp", lambda **_: str(directory))
+    monkeypatch.setattr(audio_files.tempfile, "mkdtemp", lambda *_: str(directory))
+    closed = False
+
+    async def chunks():
+        nonlocal closed
+        try:
+            yield b"audio"
+        finally:
+            closed = True
+
     with patch.object(Path, "write_bytes", side_effect=OSError), pytest.raises(OSError):
-        audio_files._prepare_audio_chunks([b"audio"])
+        async with audio_files.async_audio_chunk_paths(Hass(), chunks()):
+            pytest.fail("Unexpected stitch")
+    assert closed
     assert not directory.exists()
 
 
@@ -727,8 +755,11 @@ async def test_temp_cleanup_finishes_despite_repeated_cancellation(
 
     monkeypatch.setattr(audio_files.shutil, "rmtree", remove)
 
+    async def chunks():
+        yield b"audio"
+
     async def use():
-        async with audio_files.async_audio_chunk_paths(Hass(), [b"audio"]):
+        async with audio_files.async_audio_chunk_paths(Hass(), chunks()):
             pass
 
     task = asyncio.create_task(use())
@@ -923,3 +954,181 @@ async def test_stt_success_clears_repair_without_adding_json_to_multipart():
     )
     assert "json" not in session.calls[0][1]
     assert "data" in session.calls[0][1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("end", ["overflow", "timeout", "cancel"])
+async def test_ffmpeg_failure_closes_paused_real_pipe(monkeypatch, end):
+    import sys
+
+    spawn = asyncio.create_subprocess_exec
+    process = None
+    ready = asyncio.Event()
+
+    async def spawn_with_full_pipe(*args, **kwargs):
+        nonlocal process
+        process = await spawn(*args, **kwargs)
+        async with asyncio.timeout(3):
+            while not process.stdout._paused:
+                await asyncio.sleep(0.001)
+        ready.set()
+        return process
+
+    monkeypatch.setattr(tts.asyncio, "create_subprocess_exec", spawn_with_full_pipe)
+    if end == "overflow":
+        monkeypatch.setattr(audio_files, "MAX_FFMPEG_OUTPUT_BYTES", 16 * 1024)
+    elif end == "timeout":
+        monkeypatch.setattr(tts, "FFMPEG_TIMEOUT_SECONDS", 0)
+    if end != "overflow":
+
+        async def wait_for_cancel(*_args):
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(tts, "async_communicate_audio", wait_for_cancel)
+
+    cmd = [
+        sys.executable,
+        "-c",
+        "import os\nfor _ in range(4096):\n os.write(1, b'x' * 4096)",
+    ]
+    try:
+        async with asyncio.timeout(5):
+            task = asyncio.create_task(
+                tts.GroqTTSEntity._async_run_ffmpeg(
+                    SimpleNamespace(), cmd, create_repair=False
+                )
+            )
+            if end == "cancel":
+                await ready.wait()
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+            else:
+                match = "byte limit" if end == "overflow" else "timed out"
+                with pytest.raises(HomeAssistantError, match=match):
+                    await task
+        assert process.returncode is not None
+        assert process.stdout.at_eof()
+        assert process.stderr.at_eof()
+    finally:
+        if process is not None:
+            if process.returncode is None:
+                process.kill()
+            await asyncio.wait_for(process.communicate(), 3)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("end", ["timeout", "cancel"])
+async def test_ffmpeg_cleanup_releases_inherited_pipes(tmp_path, monkeypatch, end):
+    import sys
+
+    release = tmp_path / "release"
+    child_done = tmp_path / "child-done"
+    child = (
+        "from pathlib import Path\n"
+        "import sys, time\n"
+        "release, done = map(Path, sys.argv[1:])\n"
+        "deadline = time.monotonic() + 10\n"
+        "while not release.exists() and time.monotonic() < deadline:\n"
+        "    time.sleep(0.01)\n"
+        "done.touch()\n"
+    )
+    wrapper = (
+        "import subprocess, sys\n"
+        "subprocess.Popen([sys.executable, '-c', *sys.argv[1:]], "
+        "stdin=subprocess.DEVNULL)\n"
+    )
+    cmd = [sys.executable, "-c", wrapper, child, str(release), str(child_done)]
+    spawn = asyncio.create_subprocess_exec
+    process = None
+    exited = asyncio.Event()
+
+    async def spawn_wrapper(*args, **kwargs):
+        nonlocal process
+        process = await spawn(*args, **kwargs)
+        async with asyncio.timeout(3):
+            # Process.wait() can wait for pipe EOF if the exit has not arrived.
+            while process.returncode is None:
+                await asyncio.sleep(0.001)
+        exited.set()
+        return process
+
+    monkeypatch.setattr(tts.asyncio, "create_subprocess_exec", spawn_wrapper)
+    if end == "timeout":
+        monkeypatch.setattr(tts, "FFMPEG_TIMEOUT_SECONDS", 0.05)
+    task = asyncio.create_task(
+        tts.GroqTTSEntity._async_run_ffmpeg(SimpleNamespace(), cmd, create_repair=False)
+    )
+    try:
+        await asyncio.wait_for(exited.wait(), 3)
+        if end == "cancel":
+            task.cancel()
+        done, _ = await asyncio.wait({task}, timeout=2)
+        assert done == {task}
+        if end == "timeout":
+            with pytest.raises(HomeAssistantError, match="timed out"):
+                await task
+        else:
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        assert process.returncode == 0
+        assert not child_done.exists()
+        assert process.stdout.at_eof()
+        assert process.stderr.at_eof()
+    finally:
+        release.touch()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 3)
+        if process is not None:
+            await asyncio.wait_for(process.communicate(), 3)
+            if process.returncode == 0:
+                async with asyncio.timeout(3):
+                    while not child_done.exists():
+                        await asyncio.sleep(0.01)
+
+
+@pytest.mark.asyncio
+async def test_long_tts_spools_in_order_before_synthesizing_next_chunk(
+    tmp_path, monkeypatch
+):
+    temp = tmp_path / "audio"
+
+    def make_directory(*_args):
+        temp.mkdir()
+        return str(temp)
+
+    monkeypatch.setattr(audio_files.tempfile, "mkdtemp", make_directory)
+    starts = []
+
+    async def synthesize(request):
+        paths = sorted(temp.glob("*.wav"))
+        assert [path.read_bytes() for path in paths] == starts
+        audio = request.text.encode()
+        starts.append(audio)
+        return audio
+
+    async def stitch(cmd, *_args, **_kwargs):
+        paths = [Path(cmd[i + 1]) for i, arg in enumerate(cmd) if arg == "-i"]
+        assert [path.read_bytes() for path in paths] == starts
+        return b"stitched"
+
+    entity = tts.GroqTTSEntity(
+        Hass(),
+        SimpleNamespace(unique_id="test", options={}, data={}),
+        SimpleNamespace(
+            check_tts_batch=lambda _: None, async_synthesize_speech=synthesize
+        ),
+        {
+            tts.CONF_MODEL: "fake",
+            tts.CONF_VOICE: "fake",
+            tts.CONF_ENABLE_LONG_TTS: True,
+        },
+    )
+    monkeypatch.setattr(entity, "_async_check_ffmpeg", AsyncMock())
+    monkeypatch.setattr(entity, "_async_run_ffmpeg", stitch)
+    monkeypatch.setattr(tts, "async_delete_ffmpeg_missing_issue", Mock())
+    assert await entity.async_get_tts_audio("a" * 200 + "b" * 200, "en") == (
+        "wav",
+        b"stitched",
+    )
+    assert starts == [b"a" * 200, b"b" * 200]
+    assert not temp.exists()

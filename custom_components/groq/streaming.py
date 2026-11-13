@@ -32,8 +32,9 @@ class _ToolCallFragments:
 class ChatStream:
     """Collect one bounded response; tool calls are complete only at stream end."""
 
-    def __init__(self, model: str) -> None:
+    def __init__(self, model: str, *, collect_text: bool = True) -> None:
         self.model = model
+        self._collect_text = collect_text
         self.content: list[str] = []
         self.reasoning: list[str] = []
         self.calls: dict[int, _ToolCallFragments] = {}
@@ -82,7 +83,8 @@ class ChatStream:
             self._add_call(call)
         content = delta.get("content")
         if isinstance(content, str) and content:
-            self.content.append(content)
+            if self._collect_text:
+                self.content.append(content)
             return content
         return None
 
@@ -115,7 +117,9 @@ class ChatStream:
                     fragments = call.name if key == "name" else call.arguments
                     fragments.append(function[key])
 
-    def result(self) -> dict[str, Any]:
+    def result(
+        self, *, parsed_arguments: dict[str, dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """Reject unfinished/malformed operations before producing tool calls."""
         calls = [self.calls[i].message() for i in sorted(self.calls)]
         if calls:
@@ -138,6 +142,8 @@ class ChatStream:
                 ):
                     raise GroqResponseError("Groq returned invalid streamed tool calls")
                 ids.add(call["id"])
+                if parsed_arguments is not None:
+                    parsed_arguments[call["id"]] = arguments
         message = {
             **self.metadata,
             "content": "".join(self.content),

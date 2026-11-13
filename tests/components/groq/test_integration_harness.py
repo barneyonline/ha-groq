@@ -489,6 +489,8 @@ class CancelledProc:
 
 class HangingProc(CancelledProc):
     async def read(self, size):
+        if self.killed:
+            return b""
         await asyncio.Event().wait()
 
 
@@ -1415,7 +1417,8 @@ async def test_tts_long_stitching_temp_file_work_uses_executor(monkeypatch, capl
 
     assert ext == "wav"
     assert payload == b"processed-audio"
-    assert "_prepare_audio_chunks" in calls
+    assert "mkdtemp" in calls
+    assert calls.count("write_bytes") == 2
     assert "rmtree" in calls
     assert "TTS synthesis chunk 1/2 completed" in caplog.text
     assert "TTS synthesis chunk 2/2 completed" in caplog.text

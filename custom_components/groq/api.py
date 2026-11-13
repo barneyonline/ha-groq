@@ -6,6 +6,7 @@ import asyncio
 import hmac
 import json
 import logging
+import random
 import time
 from asyncio import CancelledError
 from collections import OrderedDict, deque
@@ -21,6 +22,7 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
+from .async_utils import async_await_owned
 from .citations import extract_citations
 from .compound_tools import (
     compound_builtin_tools_payload_value,
@@ -47,6 +49,7 @@ STREAM_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60)
 TTS_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 AUDIO_REQUEST_RETRIES = 1
 AUDIO_RETRY_DELAY_SECONDS = 1
+AUDIO_RETRY_JITTER_SECONDS = 0.5
 MODEL_DETAIL_CONCURRENCY = 5
 MAX_SPEECH_CACHE_BYTES = 64 * 1024 * 1024
 MAX_SPEECH_INFLIGHT = 8
@@ -166,10 +169,10 @@ class _TTSUsageState:
 
 
 @dataclass(slots=True)
-class _SpeechFlight:
-    """One shared synthesis task and the callers that still need its result."""
+class _RequestFlight[T]:
+    """One shared request task and the callers that still need its result."""
 
-    task: asyncio.Task[bytes]
+    task: asyncio.Task[T]
     waiters: int = 0
 
 
@@ -439,7 +442,11 @@ def extract_chat_reasoning(payload: dict[str, Any]) -> str | None:
     return reasoning if isinstance(reasoning, str) else None
 
 
-def extract_tool_calls(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
+def extract_tool_calls(
+    payload: dict[str, Any],
+    *,
+    parsed_arguments: Mapping[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]] | None:
     """Extract assistant tool calls from an OpenAI-compatible chat response."""
     message = _extract_chat_message(payload)
     if message is None:
@@ -456,8 +463,11 @@ def extract_tool_calls(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
         function = parsed_call.get("function")
         if isinstance(function, dict):
             parsed_function = dict(function)
+            parsed_function.pop("parsed_arguments", None)
             arguments = parsed_function.get("arguments")
-            if isinstance(arguments, str):
+            if parsed_arguments is not None:
+                parsed_function["parsed_arguments"] = parsed_arguments[tool_call["id"]]
+            elif isinstance(arguments, str):
                 with suppress(json.JSONDecodeError):
                     parsed_function["parsed_arguments"] = json.loads(arguments)
             parsed_call["function"] = parsed_function
@@ -529,22 +539,30 @@ class GroqApiClient:
         )
         self._speech_cache_bytes = 0
         self._speech_namespace_context = token_bytes(32)
-        self._speech_inflight: dict[SpeechRequest, _SpeechFlight] = {}
+        self._speech_inflight: dict[SpeechRequest, _RequestFlight[bytes]] = {}
         self._speech_slots = asyncio.Semaphore(MAX_SPEECH_INFLIGHT)
+        self._model_refresh: _RequestFlight[list[GroqModel]] | None = None
 
     async def async_shutdown(self) -> None:
-        """Cancel owned synthesis work and release caches when the entry unloads."""
+        """Cancel owned requests and release caches when the entry unloads."""
         self._closed = True
-        tasks = [flight.task for flight in self._speech_inflight.values()]
+        tasks: list[asyncio.Task[Any]] = [
+            flight.task for flight in self._speech_inflight.values()
+        ]
+        if self._model_refresh is not None:
+            tasks.append(self._model_refresh.task)
         for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        self._speech_caches.clear()
-        self._speech_cache_order.clear()
-        self._speech_cache_bytes = 0
-        self._tts_usage.clear()
-        self.usage.clear()
+            if not task.cancelling():
+                task.cancel()
+        try:
+            if tasks:
+                await async_await_owned(asyncio.gather(*tasks, return_exceptions=True))
+        finally:
+            self._speech_caches.clear()
+            self._speech_cache_order.clear()
+            self._speech_cache_bytes = 0
+            self._tts_usage.clear()
+            self.usage.clear()
 
     def _speech_finished(
         self, request: SpeechRequest, task: asyncio.Task[bytes]
@@ -570,7 +588,57 @@ class GroqApiClient:
         return self._available
 
     async def async_list_models(self, *, hydrate: bool = True) -> list[GroqModel]:
-        """Return models visible to the configured Groq API key."""
+        """Return available models, sharing overlapping detail refreshes."""
+        if not hydrate:
+            return await self._async_list_models(hydrate=False)
+        while True:
+            if self._closed:
+                raise GroqApiError("Groq config entry has been unloaded")
+            flight = self._model_refresh
+            if flight is None or flight.task.done():
+                flight = _RequestFlight(
+                    asyncio.create_task(self._async_list_models(hydrate=True))
+                )
+                self._model_refresh = flight
+                flight.task.add_done_callback(self._model_refresh_finished)
+                break
+            if not flight.task.cancelling():
+                break
+            await asyncio.shield(asyncio.gather(flight.task, return_exceptions=True))
+        flight.waiters += 1
+        try:
+            return list(await asyncio.shield(flight.task))
+        except CancelledError:
+            caller = asyncio.current_task()
+            if (
+                self._closed
+                and flight.task.cancelled()
+                and not (caller and caller.cancelling())
+            ):
+                raise GroqApiError("Groq config entry has been unloaded") from None
+            raise
+        finally:
+            flight.waiters -= 1
+            if (
+                flight.waiters == 0
+                and not flight.task.done()
+                and not flight.task.cancelling()
+            ):
+                flight.task.cancel()
+                await async_await_owned(
+                    asyncio.gather(flight.task, return_exceptions=True)
+                )
+
+    def _model_refresh_finished(self, task: asyncio.Task[list[GroqModel]]) -> None:
+        """Drop the completed refresh without retaining catalog data or exceptions."""
+        if not task.cancelled():
+            # The last shielded waiter may have cancelled as the worker failed.
+            task.exception()
+        if self._model_refresh is not None and self._model_refresh.task is task:
+            self._model_refresh = None
+
+    async def _async_list_models(self, *, hydrate: bool) -> list[GroqModel]:
+        """Fetch the catalog and fill in missing token limits when requested."""
         payload = await self._request_json("GET", MODELS_PATH)
         data = payload.get("data")
         if not isinstance(data, list):
@@ -633,14 +701,18 @@ class GroqApiClient:
             async with semaphore:
                 return await self._async_hydrate_model(model, raw_model)
 
-        return list(
-            await asyncio.gather(
-                *(
-                    hydrate(model, raw_model)
-                    for model, raw_model in zip(models, raw_model_items)
-                )
-            )
-        )
+        tasks = [
+            asyncio.create_task(hydrate(model, raw_model))
+            for model, raw_model in zip(models, raw_model_items)
+        ]
+        try:
+            return await asyncio.gather(*tasks)
+        except BaseException:
+            for task in tasks:
+                if not task.done() and not task.cancelling():
+                    task.cancel()
+            await async_await_owned(asyncio.gather(*tasks, return_exceptions=True))
+            raise
 
     async def async_generate_text(
         self,
@@ -662,7 +734,9 @@ class GroqApiClient:
         request: TextGenerationRequest,
     ) -> AsyncGenerator[str]:
         """Stream generated text chunks from the chat completions API."""
-        async with aclosing(self.async_stream_chat(request)) as chunks:
+        async with aclosing(
+            self._async_stream_completion(request, collect_text=False)
+        ) as chunks:
             async for chunk in chunks:
                 if isinstance(chunk, str):
                     yield chunk
@@ -671,9 +745,19 @@ class GroqApiClient:
         self, request: TextGenerationRequest
     ) -> AsyncGenerator[str | ChatCompletionResult]:
         """Stream text followed by one fully assembled result with metadata."""
+        async with aclosing(
+            self._async_stream_completion(request, collect_text=True)
+        ) as chunks:
+            async for chunk in chunks:
+                yield chunk
+
+    async def _async_stream_completion(
+        self, request: TextGenerationRequest, *, collect_text: bool
+    ) -> AsyncGenerator[str | ChatCompletionResult]:
+        """Drive and validate the response for both public streaming adapters."""
         payload = build_text_generation_payload(request)
         payload["stream"] = True
-        stream = ChatStream(request.model)
+        stream = ChatStream(request.model, collect_text=collect_text)
         async with aclosing(
             self._request_stream(
                 "POST",
@@ -687,7 +771,15 @@ class GroqApiClient:
             async for event in events:
                 if content := stream.add(event):
                     yield content
-        yield self._chat_result(stream.result(), request.service_id)
+        if collect_text:
+            parsed_arguments: dict[str, dict[str, Any]] = {}
+            result = stream.result(parsed_arguments=parsed_arguments)
+            yield self._chat_result(
+                result, request.service_id, parsed_arguments=parsed_arguments
+            )
+        else:
+            stream.result()  # Validate tool completion even for text-only callers.
+            self.usage.record(request.service_id, stream.usage)
 
     async def async_generate_structured(
         self,
@@ -846,7 +938,7 @@ class GroqApiClient:
             flight = self._speech_inflight.get(request)
             if flight is None:
                 task = asyncio.create_task(self._async_synthesize_speech(request))
-                flight = _SpeechFlight(task)
+                flight = _RequestFlight(task)
                 self._speech_inflight[request] = flight
                 task.add_done_callback(
                     lambda task: self._speech_finished(request, task)
@@ -972,7 +1064,11 @@ class GroqApiClient:
             self._evict_speech(*next(iter(self._speech_cache_order)))
 
     def _chat_result(
-        self, payload: dict[str, Any], service_id: str | None = None
+        self,
+        payload: dict[str, Any],
+        service_id: str | None = None,
+        *,
+        parsed_arguments: Mapping[str, dict[str, Any]] | None = None,
     ) -> ChatCompletionResult:
         """Normalize a chat completion response."""
         usage = payload.get("usage")
@@ -997,7 +1093,7 @@ class GroqApiClient:
             raw=payload,
             reasoning=extract_chat_reasoning(payload),
             citations=citations,
-            tool_calls=extract_tool_calls(payload),
+            tool_calls=extract_tool_calls(payload, parsed_arguments=parsed_arguments),
             executed_tools=extract_executed_tools(payload),
             usage_breakdown=(
                 payload.get("usage_breakdown")
@@ -1231,7 +1327,10 @@ class GroqApiClient:
             except (aiohttp.ClientError, TimeoutError) as err:
                 if attempt < AUDIO_REQUEST_RETRIES:
                     attempt += 1
-                    await asyncio.sleep(AUDIO_RETRY_DELAY_SECONDS)
+                    await asyncio.sleep(
+                        AUDIO_RETRY_DELAY_SECONDS
+                        + random.uniform(0, AUDIO_RETRY_JITTER_SECONDS)
+                    )
                     _LOGGER.debug("Retrying audio HTTP call (attempt %d)", attempt + 1)
                     continue
                 reason = (
