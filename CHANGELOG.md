@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v2.2.2 - 2026-11-13
+
+### 🚧 Breaking changes
+
+- None
+
+### ✨ New features
+
+- None
+
+### 🐛 Bug fixes
+
+- Wait for pending model requests to finish cleaning up when a refresh is abandoned or the integration unloads. Cancel outstanding detail requests if an unexpected error aborts the refresh. (#83)
+- Clean up ffmpeg processes and temporary audio files when speech generation fails, times out or is cancelled. (#83)
+- Give Assist tools their own copy of call arguments so changes made by a tool do not alter the conversation record. (#83)
+
+### 🔧 Improvements
+
+- Reduce memory use for long text-to-speech announcements by writing each audio chunk to a temporary file as it arrives. Use a single audio buffer for WAV transcription. (#83)
+- Share one fetch across overlapping model refreshes and stagger retries after transient audio request failures. (#83)
+- Process only the retained conversation history for Assist and AI tasks, and skip assembling the full response for text-only streams. (#83)
+
+### 🔄 Other changes
+
+- Bumped the integration manifest version to `2.2.2`.
+
 ## v2.2.1 - 2026-11-10
 
 ### 🚧 Breaking changes
