@@ -6,7 +6,7 @@ from types import MappingProxyType
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
 from homeassistant.data_entry_flow import InvalidData
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
 from homeassistant.helpers import entity_registry as er
@@ -66,13 +66,22 @@ TEXT_MODEL = "llama-3.3-70b-versatile"
 TTS_MODEL = "canopylabs/orpheus-v1-english"
 
 
-def account(hass, *, entry_id="account-a", services=(), options=None, data=None):
+def account(
+    hass,
+    *,
+    entry_id="account-a",
+    services=(),
+    options=None,
+    data=None,
+    disabled_by=None,
+):
     """Register a real HA entry with immutable service data."""
     entry = MockConfigEntry(
         domain="groq",
         entry_id=entry_id,
         unique_id=entry_id,
         minor_version=2,
+        disabled_by=disabled_by,
         data=data or {"api_key": "test-key", "name": "Test Groq"},
         options=options or {},
         subentries_data=list(services),
@@ -994,8 +1003,6 @@ async def test_ignored_repairs_survive_reload_and_clear_only_after_recovery(
 )
 async def test_native_repair_refresh_and_config_entry_ownership(hass):
     """Exercise actual Core refresh, ownership, disabled visibility and removal."""
-    from homeassistant.config_entries import ConfigEntryDisabler
-
     first = account(hass, services=[text_service()])
     second = account(hass, entry_id="account-b")
     service = service_data_for_type(first, "text_generation")[0]
@@ -1033,6 +1040,56 @@ async def test_native_repair_refresh_and_config_entry_ownership(hass):
         await hass.config_entries.async_remove(second.entry_id)
     await hass.async_block_till_done()
     assert not own_issues(hass)
+
+
+@pytest.mark.parametrize("emulate_native_ownership", [False, True])
+async def test_startup_adopts_legacy_repairs_before_account_setup(
+    hass, monkeypatch, emulate_native_ownership
+):
+    native = hasattr(ir, "async_refresh_issues")
+    if emulate_native_ownership == native:
+        pytest.skip("Tests the native API or the compatibility test double")
+    disabled = account(
+        hass, services=[text_service()], disabled_by=ConfigEntryDisabler.USER
+    )
+    enabled = account(hass, entry_id="account-b", services=[text_service()])
+    with monkeypatch.context() as old_core:
+        old_core.delattr(ir, "async_refresh_issues", raising=False)
+        for entry in (disabled, enabled):
+            service = service_data_for_type(entry, "text_generation")[0]
+            async_create_model_access_issue(
+                hass, TEXT_MODEL, service["unique_id"], entry_id=entry.entry_id
+            )
+    registry = ir.async_get(hass)
+    originals = own_issues(hass)
+    assert len(originals) == 2
+    if emulate_native_ownership:
+        monkeypatch.setattr(ir, "async_refresh_issues", MagicMock(), raising=False)
+    with (
+        patch.object(
+            ir, "async_create_issue", wraps=ir.async_create_issue if native else None
+        ) as create,
+        patch.object(
+            GroqApiClient, "async_list_models", side_effect=GroqApiError("offline")
+        ) as list_models,
+    ):
+        assert await async_setup_component(hass, "groq", {})
+        await hass.async_block_till_done()
+        list_models.assert_awaited_once()
+    assert disabled.state is ConfigEntryState.NOT_LOADED
+    assert enabled.state is ConfigEntryState.SETUP_RETRY
+    assert {call.kwargs["config_entry_id"] for call in create.call_args_list} == {
+        disabled.entry_id,
+        enabled.entry_id,
+    }
+    if native:
+        for key, original in originals.items():
+            issue = registry.issues[key]
+            assert issue.config_entry_id == original.data["entry_id"]
+            assert issue.created == original.created
+            assert registry.async_is_hidden(issue) == (
+                issue.config_entry_id == disabled.entry_id
+            )
 
 
 async def test_usage_sensor_registry_rename_keeps_subscription_until_unload(hass):

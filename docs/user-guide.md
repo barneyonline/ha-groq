@@ -233,8 +233,11 @@ Repair notices retain their ignored status across account reloads. Request-time
 failures remain until a matching request succeeds or the affected service/model
 configuration is removed. On Home Assistant 2026.11 and newer, repairs also belong
 to their account entry: disabling the account hides its notices, and removing it
-deletes them. Existing persistent notices gain native ownership during
-reconciliation without being deleted and recreated. Home Assistant 2026.10 uses
+deletes them. Existing persistent notices gain native ownership when Groq
+loads, even if their account is disabled or Groq cannot reach the provider.
+When every account is already disabled at startup, Home Assistant skips loading
+Groq. Legacy notices then gain ownership the next time Groq loads.
+Home Assistant 2026.10 uses
 the integration's metadata-based cleanup; native ownership, disabled-account
 visibility and issue refresh require 2026.11. The advertised minimum remains
 2026.10.0 pending the owner's separate version bump.

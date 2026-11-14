@@ -235,6 +235,60 @@ def async_delete_model_configuration_issue(
     )
 
 
+def _adopt_legacy_issue(
+    hass: HomeAssistant, issue_id: str, issue: ir.IssueEntry, entry_id: str
+) -> bool:
+    """Link an active legacy repair in place, preserving its dismissal."""
+    if (
+        getattr(issue, "config_entry_id", None) is not None
+        or not issue.active
+        or issue.is_fixable is None
+        or issue.severity is None
+        or issue.translation_key is None
+    ):
+        return False
+    ownership: dict[str, Any] = {"config_entry_id": entry_id}
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        **ownership,
+        breaks_in_ha_version=issue.breaks_in_ha_version,
+        data=issue.data,
+        is_fixable=issue.is_fixable,
+        is_persistent=issue.is_persistent,
+        issue_domain=issue.issue_domain,
+        learn_more_url=issue.learn_more_url,
+        severity=issue.severity,
+        translation_key=issue.translation_key,
+        translation_placeholders=issue.translation_placeholders,
+    )
+    return True
+
+
+def async_reconcile_startup_issues(hass: HomeAssistant) -> None:
+    """Link stored repairs before account setup without rechecking their status."""
+    if not hasattr(ir, "async_refresh_issues"):
+        return
+
+    def adopt() -> None:
+        entry_ids = {
+            entry.entry_id for entry in hass.config_entries.async_entries(DOMAIN)
+        }
+        registry = ir.async_get(hass)
+        for (domain, issue_id), issue in list(registry.issues.items()):
+            entry_id = (issue.data or {}).get("entry_id")
+            if (
+                domain == DOMAIN
+                and issue_id.startswith(tuple(f"{kind}_" for kind in _ISSUE_TYPES))
+                and isinstance(entry_id, str)
+                and entry_id in entry_ids
+            ):
+                _adopt_legacy_issue(hass, issue_id, issue, entry_id)
+
+    _update_issue(adopt)
+
+
 def async_reconcile_entry_issues(
     hass: HomeAssistant,
     entry: GroqConfigEntry,
@@ -313,33 +367,9 @@ def async_reconcile_entry_issues(
                     if refresh is None:
                         ir.async_delete_issue(hass, DOMAIN, issue_id)
                     continue
-                if refresh is not None:
-                    if (
-                        getattr(issue, "config_entry_id", None) == entry.entry_id
-                        or not issue.active
-                        or issue.is_fixable is None
-                        or issue.severity is None
-                        or issue.translation_key is None
-                    ):
-                        refresh.async_keep([issue_id])
-                        continue
-                    # Adopt pre-2026.11 persistent issues in place, preserving
-                    # their created timestamp and the user's ignored status.
-                    ownership: dict[str, Any] = {"config_entry_id": entry.entry_id}
-                    ir.async_create_issue(
-                        hass,
-                        DOMAIN,
-                        issue_id,
-                        **ownership,
-                        breaks_in_ha_version=issue.breaks_in_ha_version,
-                        data=issue.data,
-                        is_fixable=issue.is_fixable,
-                        is_persistent=issue.is_persistent,
-                        issue_domain=issue.issue_domain,
-                        learn_more_url=issue.learn_more_url,
-                        severity=issue.severity,
-                        translation_key=issue.translation_key,
-                        translation_placeholders=issue.translation_placeholders,
-                    )
+                if refresh is not None and not _adopt_legacy_issue(
+                    hass, issue_id, issue, entry.entry_id
+                ):
+                    refresh.async_keep([issue_id])
 
     _update_issue(reconcile)
