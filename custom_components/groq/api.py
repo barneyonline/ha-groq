@@ -13,6 +13,7 @@ from asyncio import CancelledError
 from collections import OrderedDict, deque
 from collections.abc import AsyncGenerator, Callable, Iterator, Mapping
 from contextlib import aclosing, suppress
+from contextvars import copy_context
 from dataclasses import dataclass, field
 from hashlib import sha256
 from secrets import token_bytes
@@ -530,10 +531,11 @@ class GroqApiClient:
         stream_timeout: aiohttp.ClientTimeout | None = None,
         auth_failure_callback: Callable[[], None] | None = None,
         entry_id: str | None = None,
+        audio_spool_budget: AudioSpoolBudget | None = None,
     ) -> None:
         self._hass = hass
         self.usage = GroqUsage()
-        self.audio_spool_budget = AudioSpoolBudget()
+        self.audio_spool_budget = audio_spool_budget or AudioSpoolBudget()
         self._entry_id = entry_id
         self._closed = False
         self._api_key = api_key
@@ -1375,7 +1377,7 @@ class GroqApiClient:
                 return encode_bytes(payload)
             return session.json_serialize(payload).encode("utf-8")
 
-        body = await self._hass.async_add_executor_job(encode)
+        body = await self._hass.async_add_executor_job(copy_context().run, encode)
         self._rate_limiter.raise_if_blocked(guard_key)
         return {"data": body}
 

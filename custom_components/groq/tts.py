@@ -81,6 +81,7 @@ FFMPEG_DEFAULT_SAMPLE_RATES = {
 }
 FFMPEG_LOUDNORM_FILTER = "loudnorm=I=-16:TP=-1:LRA=5"
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+_WHITESPACE = re.compile(r"\s+")
 _WORD = re.compile(r"\S+")
 _WAV_FORMAT_PCM = 1
 _WAV_BITS_PER_SAMPLE = 16
@@ -188,9 +189,10 @@ def _tts_input_chunks(
     limit = MAX_LONG_TTS_CHUNKS if enable_long_tts else 1
     capacity = limit * available_chars
     if len(text) > 2 * capacity:
-        # Every non-whitespace character requires space in the final chunks.
-        # A bounded prefix can rule out very large inputs before scanning them.
-        if sum(not char.isspace() for char in text[: 2 * capacity]) > capacity:
+        # Collapsing whitespace gives a lower bound on the space needed by
+        # this prefix. Each chunk boundary can discard one more separator.
+        prefix_text = _WHITESPACE.sub(" ", text[: 2 * capacity].strip())
+        if len(prefix_text) > capacity + limit - 1:
             raise _tts_length_error(enable_long_tts, max_chars)
     chunks: list[str] = []
     for chunk in _split_tts_text(text, available_chars):

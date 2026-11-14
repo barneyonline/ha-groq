@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import aclosing
+from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import replace
 import json
@@ -13,8 +14,9 @@ import aiohttp
 import pytest
 from homeassistant.components.conversation import SystemContent
 from homeassistant.exceptions import HomeAssistantError
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.groq import api, audio_files, chat, tts
+from custom_components.groq import api, audio_files, chat, runtime, tts
 from custom_components.groq.api import (
     GroqApiClient,
     SpeechRequest,
@@ -95,7 +97,7 @@ async def test_cached_speech_bypasses_saturated_worker_pool(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_audio_timeout_after_response_starts_does_not_retry(monkeypatch):
+async def test_audio_timeout_after_response_starts_does_not_retry(monkeypatch, caplog):
     class InterruptedResponse(Response):
         async def iter_chunked(self, _size):
             yield b"partial audio"
@@ -112,6 +114,10 @@ async def test_audio_timeout_after_response_starts_does_not_retry(monkeypatch):
     assert len(session.calls) == 1
     assert len(client._tts_usage_state(request).request_timestamps) == 1
     backoff.assert_not_awaited()
+    assert (
+        "Timed out calling Groq API; the next request will check connectivity again"
+        in caplog.text
+    )
 
 
 @pytest.mark.asyncio
@@ -326,10 +332,13 @@ async def test_audio_spool_budget_released_after_overflow_and_success(monkeypatc
 @pytest.mark.asyncio
 @pytest.mark.parametrize("removed_externally", [False, True])
 async def test_audio_spool_stays_charged_until_failed_removal_succeeds(
-    monkeypatch, caplog, removed_externally
+    hass, monkeypatch, caplog, removed_externally
 ):
     monkeypatch.setattr(audio_files, "MAX_AUDIO_SPOOL_BYTES", 8)
-    budget = audio_files.AudioSpoolBudget()
+    entry = MockConfigEntry(domain="groq", data={"api_key": "fixture"})
+    entry.add_to_hass(hass)
+    client = runtime.build_runtime(hass, entry).client
+    budget = client.audio_spool_budget
     real_remove = audio_files.shutil.rmtree
     failed_path = None
 
@@ -347,15 +356,17 @@ async def test_audio_spool_stays_charged_until_failed_removal_succeeds(
 
     try:
         async with audio_files.async_audio_chunk_paths(
-            Hass(), chunks(b"123456"), budget
+            hass, chunks(b"123456"), budget
         ) as paths:
             failed_path = Path(paths[0]).parent
         assert failed_path.exists()
         assert budget.used == 6
         assert "fixture denied removal" in caplog.text
+        await client.async_shutdown()
+        budget = runtime.build_runtime(hass, entry).client.audio_spool_budget
         with pytest.raises(GroqApiError, match="temporary audio storage"):
             async with audio_files.async_audio_chunk_paths(
-                Hass(), chunks(b"123"), budget
+                hass, chunks(b"123"), budget
             ):
                 pytest.fail("files left by failed cleanup still occupy the budget")
         assert budget.used == 6
@@ -363,7 +374,7 @@ async def test_audio_spool_stays_charged_until_failed_removal_succeeds(
         if removed_externally:
             real_remove(old_path)
         async with audio_files.async_audio_chunk_paths(
-            Hass(), chunks(b"12345678"), budget
+            hass, chunks(b"12345678"), budget
         ):
             assert not old_path.exists()
             assert budget.used == 8
@@ -384,13 +395,14 @@ def test_tts_stops_consuming_chunks_once_limit_is_exceeded(monkeypatch):
 
 
 @pytest.mark.parametrize("enable_long_tts", [False, True])
-def test_tts_rejects_large_dense_text_before_splitting(monkeypatch, enable_long_tts):
+@pytest.mark.parametrize("word", ["é", "a "])
+def test_tts_rejects_large_text_before_splitting(monkeypatch, enable_long_tts, word):
     def unexpected_split(*_):
         pytest.fail("a prefix already exceeds the total chunk capacity")
 
     monkeypatch.setattr(tts, "_split_tts_text", unexpected_split)
     with pytest.raises(ValueError, match="Groq Orpheus TTS"):
-        tts._tts_input_chunks("é" * 100_000, "", enable_long_tts=enable_long_tts)
+        tts._tts_input_chunks(word * 100_000, "", enable_long_tts=enable_long_tts)
 
 
 def test_tts_length_precheck_accepts_collapsible_whitespace():
@@ -515,10 +527,12 @@ async def test_json_uses_executor_for_large_bodies_and_keeps_session_serializer(
 
 
 @pytest.mark.asyncio
-async def test_large_json_preserves_aiohttp_bytes_serializer(monkeypatch):
+async def test_large_json_preserves_aiohttp_bytes_serializer(hass, monkeypatch, caplog):
     monkeypatch.setattr(api, "JSON_EXECUTOR_THRESHOLD", 64)
     payload = {"value": "é" * 256}
     bodies = []
+    locale = ContextVar("locale", default="en")
+    locale.set("fr")
 
     async def capture(request, _handler):
         assert request.body is not None
@@ -526,7 +540,9 @@ async def test_large_json_preserves_aiohttp_bytes_serializer(monkeypatch):
         raise aiohttp.ClientConnectionError("offline capture")
 
     def serialize(value):
-        return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
+        return json.dumps(
+            {**value, "locale": locale.get()}, ensure_ascii=False, separators=(",", ":")
+        ).encode()
 
     async with aiohttp.ClientSession(
         json_serialize_bytes=serialize, middlewares=(capture,)
@@ -536,11 +552,15 @@ async def test_large_json_preserves_aiohttp_bytes_serializer(monkeypatch):
             async with session.post(url, json=payload):
                 pytest.fail("the middleware must stop the request before network I/O")
         client = GroqApiClient(
-            Hass(), api_key="fake", base_url="http://localhost", session=session
+            hass, api_key="fake", base_url="http://localhost", session=session
         )
         with pytest.raises(GroqApiError, match="Network error"):
             await client._request_json("POST", "/test", json_payload=payload)
     assert bodies == [serialize(payload), serialize(payload)]
+    assert (
+        "Network error calling Groq API; the next request will check connectivity again"
+        in caplog.text
+    )
 
 
 class DiscardedValue:

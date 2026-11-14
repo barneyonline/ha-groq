@@ -9,8 +9,10 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.util.hass_dict import HassKey
 
 from .api import GroqApiClient, normalize_base_url
+from .audio_files import AudioSpoolBudget
 from .const import (
     CONF_API_KEY,
     CONF_BASE_URL,
@@ -45,6 +47,9 @@ CONF_PROMPT_CACHE_SIZE = "prompt_cache_size"
 CONF_PROMPT_CACHE_TTL = "prompt_cache_ttl"
 
 _LOGGER = logging.getLogger(__name__)
+_AUDIO_SPOOL_BUDGETS: HassKey[dict[str, AudioSpoolBudget]] = HassKey(
+    "groq_audio_spool_budgets"
+)
 
 
 def _start_runtime_reauth(hass: HomeAssistant, entry: GroqConfigEntry) -> None:
@@ -119,6 +124,9 @@ def build_runtime(hass: HomeAssistant, entry: GroqConfigEntry) -> GroqRuntimeDat
                     enabled_features.add(GroqFeature.REASONING)
 
     rate_limiter = GroqRateLimiter()
+    # A runtime reload must leave existing directories charged until cleanup.
+    budgets = hass.data.setdefault(_AUDIO_SPOOL_BUDGETS, {})
+    audio_spool_budget = budgets.setdefault(entry.entry_id, AudioSpoolBudget())
     return GroqRuntimeData(
         client=GroqApiClient(
             hass,
@@ -126,6 +134,7 @@ def build_runtime(hass: HomeAssistant, entry: GroqConfigEntry) -> GroqRuntimeDat
             entry_id=entry.entry_id,
             base_url=base_url,
             rate_limiter=rate_limiter,
+            audio_spool_budget=audio_spool_budget,
             auth_failure_callback=lambda: _start_runtime_reauth(hass, entry),
         ),
         model_registry=GroqModelRegistry(),
