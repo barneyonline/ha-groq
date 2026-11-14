@@ -3,10 +3,10 @@
 from copy import deepcopy
 from datetime import timedelta
 from types import MappingProxyType
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
 from homeassistant.data_entry_flow import InvalidData
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
 from homeassistant.helpers import entity_registry as er
@@ -66,13 +66,22 @@ TEXT_MODEL = "llama-3.3-70b-versatile"
 TTS_MODEL = "canopylabs/orpheus-v1-english"
 
 
-def account(hass, *, entry_id="account-a", services=(), options=None, data=None):
+def account(
+    hass,
+    *,
+    entry_id="account-a",
+    services=(),
+    options=None,
+    data=None,
+    disabled_by=None,
+):
     """Register a real HA entry with immutable service data."""
     entry = MockConfigEntry(
         domain="groq",
         entry_id=entry_id,
         unique_id=entry_id,
         minor_version=2,
+        disabled_by=disabled_by,
         data=data or {"api_key": "test-key", "name": "Test Groq"},
         options=options or {},
         subentries_data=list(services),
@@ -646,6 +655,7 @@ async def test_inactive_model_capability_guard():
 
 async def test_model_access_repairs_are_owned_and_clear_after_matching_success(hass):
     for entry_id in ("account-a", "account-b"):
+        account(hass, entry_id=entry_id)
         async_create_model_access_issue(
             hass, TEXT_MODEL, entry_id=entry_id, reason="model_permission_blocked_org"
         )
@@ -688,6 +698,7 @@ async def test_model_configuration_repair_recovers_and_tracks_service_changes(ha
 
 async def test_repair_removal_preserves_unrelated_issues(hass):
     entry = account(hass, services=[text_service()])
+    account(hass, entry_id="other-account")
     service = service_data_for_type(entry, "text_generation")[0]
     async_create_ffmpeg_missing_issue(hass, entry, service)
     async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
@@ -865,3 +876,386 @@ async def test_repair_registry_failure_preserves_inference_outcome(
     assert len(records) == 1
     assert records[0].getMessage() == "Could not update the Groq repair registry"
     assert records[0].exc_info[1] is failure
+
+
+async def test_repair_refresh_adopts_ignored_legacy_issue_in_place(hass, monkeypatch):
+    """Check native call arguments even on the currently supported Core minimum."""
+    entry = account(hass, services=[text_service()])
+    # Seed an issue created by the pre-2026.11 integration.
+    with monkeypatch.context() as old_core:
+        # Absence, rather than a None value, selects the legacy create API.
+        old_core.delattr(ir, "async_refresh_issues", raising=False)
+        async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
+    registry = ir.async_get(hass)
+    issue_id = next(iter(own_issues(hass)))[1]
+    ir.async_ignore_issue(hass, "groq", issue_id, True)
+    original = registry.async_get_issue("groq", issue_id)
+    create_issue = ir.async_create_issue
+    native_ownership = []
+
+    def create_owned_issue(*args, **kwargs):
+        native_ownership.append(kwargs["config_entry_id"])
+        # On 2026.10, mock just the new keyword boundary, retaining the real
+        # registry's create/update/ignore behavior. Native tests below use it as-is.
+        if not hasattr(original, "config_entry_id"):
+            kwargs.pop("config_entry_id")
+        return create_issue(*args, **kwargs)
+
+    refresh = MagicMock()
+    monkeypatch.setattr(ir, "async_refresh_issues", refresh, raising=False)
+    monkeypatch.setattr(ir, "async_create_issue", create_owned_issue)
+    async_reconcile_entry_issues(hass, entry)
+    refresh.assert_called_once_with(hass, "groq", issue_ids={issue_id: original})
+    assert native_ownership == [entry.entry_id]
+    retained = registry.async_get_issue("groq", issue_id)
+    assert retained.created == original.created
+    assert retained.dismissed_version == original.dismissed_version
+    assert retained.data == original.data
+    assert retained.translation_placeholders == original.translation_placeholders
+
+
+async def test_native_repair_creation_links_every_entry_issue(hass, monkeypatch):
+    """Exercise the new keyword without requiring it in the minimum Core API."""
+    entry = account(hass, services=[text_service()])
+    service = service_data_for_type(entry, "text_generation")[0]
+    create = Mock()
+    monkeypatch.setattr(ir, "async_refresh_issues", MagicMock(), raising=False)
+    monkeypatch.setattr(ir, "async_create_issue", create)
+    async_create_ffmpeg_missing_issue(hass, entry, service)
+    async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
+    async_create_model_configuration_issue(
+        hass, entry, service, TEXT_MODEL, "text_generation"
+    )
+    assert len(create.call_args_list) == 3
+    assert all(
+        call.kwargs["config_entry_id"] == entry.entry_id
+        for call in create.call_args_list
+    )
+
+
+async def test_sensor_rename_calls_parent_without_resubscribing(hass):
+    """Opt-in delegates to Core while retaining the original service listener."""
+    from homeassistant.components.sensor import SensorEntity
+
+    from custom_components.groq.sensor import GroqUsageSensor, SENSORS
+    from custom_components.groq.usage import GroqUsage
+
+    usage = GroqUsage()
+    entity = GroqUsageSensor(
+        {"unique_id": "service", "name": "Service", "model": TEXT_MODEL},
+        usage,
+        SENSORS[0],
+    )
+    entity.hass = hass
+    entity.entity_id = "sensor.renamed"
+    with (
+        patch.object(SensorEntity, "async_entity_id_changed", create=True) as parent,
+        patch.object(usage, "subscribe", wraps=usage.subscribe) as subscribe,
+    ):
+        await entity.async_added_to_hass()
+        entity.async_entity_id_changed("sensor.original")
+        parent.assert_called_once_with("sensor.original")
+        subscribe.assert_called_once()
+        assert len(usage._listeners) == 1
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_ignored_repairs_survive_reload_and_clear_only_after_recovery(
+    hass, monkeypatch, legacy
+):
+    """Neither reload nor configuration reconciliation rechecks failed requests."""
+    if legacy:
+        monkeypatch.delattr(ir, "async_refresh_issues", raising=False)
+    entry = account(hass, services=[text_service()])
+    service = service_data_for_type(entry, "text_generation")[0]
+    with patch(
+        "custom_components.groq.api.GroqApiClient.async_list_models",
+        return_value=list(BUILT_IN_MODELS.values()),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        async_create_model_access_issue(
+            hass, TEXT_MODEL, service["unique_id"], entry_id=entry.entry_id
+        )
+        async_create_ffmpeg_missing_issue(hass, entry, service)
+        registry = ir.async_get(hass)
+        for _, issue_id in own_issues(hass):
+            ir.async_ignore_issue(hass, "groq", issue_id, True)
+        originals = own_issues(hass)
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert own_issues(hass) == originals
+        for key, original in originals.items():
+            assert registry.issues[key].dismissed_version == original.dismissed_version
+        async_delete_model_access_issue(
+            hass, TEXT_MODEL, service["unique_id"], entry_id=entry.entry_id
+        )
+        assert len(own_issues(hass)) == 1
+        from custom_components.groq.repairs import async_delete_ffmpeg_missing_issue
+
+        async_delete_ffmpeg_missing_issue(hass, entry, service)
+        assert not own_issues(hass)
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.skipif(
+    not hasattr(ir, "async_refresh_issues"), reason="Requires Core 2026.11 issue API"
+)
+async def test_native_repair_refresh_and_config_entry_ownership(hass):
+    """Exercise actual Core refresh, ownership, disabled visibility and removal."""
+    first = account(hass, services=[text_service()])
+    second = account(hass, entry_id="account-b")
+    service = service_data_for_type(first, "text_generation")[0]
+    async_create_model_access_issue(hass, TEXT_MODEL, entry_id=second.entry_id)
+    async_create_model_access_issue(
+        hass, TEXT_MODEL, service["unique_id"], entry_id=first.entry_id
+    )
+    async_create_ffmpeg_missing_issue(hass, first, service)
+    registry = ir.async_get(hass)
+    for issue in own_issues(hass).values():
+        assert issue.config_entry_id == issue.data["entry_id"]
+        ir.async_ignore_issue(hass, "groq", issue.issue_id, True)
+    originals = own_issues(hass)
+    async_reconcile_entry_issues(hass, first)
+    assert own_issues(hass) == originals
+    await hass.config_entries.async_set_disabled_by(
+        first.entry_id, ConfigEntryDisabler.USER
+    )
+    first_issues = [
+        i for i in own_issues(hass).values() if i.config_entry_id == first.entry_id
+    ]
+    assert all(registry.async_is_hidden(i) for i in first_issues)
+    # Visibility belongs to the registry; enabling must not contact the provider.
+    with patch.object(hass.config_entries, "async_setup", return_value=True):
+        await hass.config_entries.async_set_disabled_by(first.entry_id, None)
+        await hass.async_block_till_done()
+    assert all(not registry.async_is_hidden(i) for i in first_issues)
+    hass.config_entries.async_remove_subentry(first, "text-service")
+    async_reconcile_entry_issues(hass, first)
+    remaining = list(own_issues(hass).values())
+    assert len(remaining) == 1
+    assert remaining[0].config_entry_id == second.entry_id
+    # Prove native removal handles issues even without Groq's legacy cleanup hook.
+    with patch("custom_components.groq.async_remove_entry"):
+        await hass.config_entries.async_remove(second.entry_id)
+    await hass.async_block_till_done()
+    assert not own_issues(hass)
+
+
+@pytest.mark.parametrize("emulate_native_ownership", [False, True])
+async def test_startup_adopts_legacy_repairs_before_account_setup(
+    hass, monkeypatch, emulate_native_ownership
+):
+    native = hasattr(ir, "async_refresh_issues")
+    if emulate_native_ownership == native:
+        pytest.skip("Tests the native API or the compatibility test double")
+    disabled = account(
+        hass, services=[text_service()], disabled_by=ConfigEntryDisabler.USER
+    )
+    enabled = account(hass, entry_id="account-b", services=[text_service()])
+    with monkeypatch.context() as old_core:
+        old_core.delattr(ir, "async_refresh_issues", raising=False)
+        for entry in (disabled, enabled):
+            service = service_data_for_type(entry, "text_generation")[0]
+            async_create_model_access_issue(
+                hass, TEXT_MODEL, service["unique_id"], entry_id=entry.entry_id
+            )
+    registry = ir.async_get(hass)
+    originals = own_issues(hass)
+    assert len(originals) == 2
+    if emulate_native_ownership:
+        monkeypatch.setattr(ir, "async_refresh_issues", MagicMock(), raising=False)
+    with (
+        patch.object(
+            ir, "async_create_issue", wraps=ir.async_create_issue if native else None
+        ) as create,
+        patch.object(
+            GroqApiClient, "async_list_models", side_effect=GroqApiError("offline")
+        ) as list_models,
+    ):
+        assert await async_setup_component(hass, "groq", {})
+        await hass.async_block_till_done()
+        list_models.assert_awaited_once()
+    assert disabled.state is ConfigEntryState.NOT_LOADED
+    assert enabled.state is ConfigEntryState.SETUP_RETRY
+    assert {call.kwargs["config_entry_id"] for call in create.call_args_list} == {
+        disabled.entry_id,
+        enabled.entry_id,
+    }
+    if native:
+        for key, original in originals.items():
+            issue = registry.issues[key]
+            assert issue.config_entry_id == original.data["entry_id"]
+            assert issue.created == original.created
+            assert registry.async_is_hidden(issue) == (
+                issue.config_entry_id == disabled.entry_id
+            )
+
+
+async def test_usage_sensor_registry_rename_keeps_subscription_until_unload(hass):
+    """Rename through HA's registry, then observe real pushed states and cleanup."""
+    entry = account(hass, services=[text_service()])
+    with patch(
+        "custom_components.groq.api.GroqApiClient.async_list_models",
+        return_value=list(BUILT_IN_MODELS.values()),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        registry = er.async_get(hass)
+        sensor_entry = next(
+            item
+            for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+            if item.domain == "sensor" and item.unique_id.endswith("_requests")
+        )
+        registry.async_update_entity(sensor_entry.entity_id, disabled_by=None)
+        await hass.async_block_till_done()
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        usage = entry.runtime_data.client.usage
+        component = hass.data["sensor"]
+        entity = component.get_entity(sensor_entry.entity_id)
+        assert entity is not None
+        assert len(usage._listeners) == 1
+        service_id = service_data_for_type(entry, "text_generation")[0]["unique_id"]
+        usage.record(service_id, {})
+        assert hass.states.get(entity.entity_id).state == "1"
+        with (
+            patch.object(usage, "subscribe", wraps=usage.subscribe) as subscribe,
+            patch.object(
+                entity, "async_added_to_hass", wraps=entity.async_added_to_hass
+            ) as added,
+            patch.object(
+                entity,
+                "async_will_remove_from_hass",
+                wraps=entity.async_will_remove_from_hass,
+            ) as removed,
+        ):
+            for new_id in ("sensor.groq_renamed_once", "sensor.groq_renamed_twice"):
+                old_id = entity.entity_id
+                registry.async_update_entity(old_id, new_entity_id=new_id)
+                await hass.async_block_till_done()
+                assert component.get_entity(new_id) is entity
+                assert hass.states.get(old_id) is None
+                assert len(usage._listeners) == 1
+                assert hass.states.get(new_id).state == "1"
+            # Core 2026.10 uses remove/add; Core 2026.11 must preserve the listener.
+            from homeassistant.helpers.entity import Entity
+
+            if hasattr(Entity, "async_entity_id_changed"):
+                subscribe.assert_not_called()
+                added.assert_not_awaited()
+                removed.assert_not_awaited()
+        with patch.object(
+            entity, "async_write_ha_state", wraps=entity.async_write_ha_state
+        ) as write:
+            usage.record(service_id, {})
+            write.assert_called_once()
+        assert hass.states.get(entity.entity_id).state == "2"
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert not usage._listeners
+        assert not usage.values
+        with patch.object(entity, "async_write_ha_state") as write:
+            usage.record(service_id, {})
+            write.assert_not_called()
+
+
+@pytest.mark.parametrize("native_boundary", [False, True])
+async def test_inactive_unowned_ignored_repair_keeps_dismissal(
+    hass, monkeypatch, native_boundary
+):
+    """Core's stored dismissal can lack all the old issue metadata."""
+    from dataclasses import replace
+
+    entry = account(hass, services=[text_service()])
+    async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
+    registry = ir.async_get(hass)
+    issue_id = next(iter(own_issues(hass)))[1]
+    ir.async_ignore_issue(hass, "groq", issue_id, True)
+    original = registry.async_get_issue("groq", issue_id)
+    values = {
+        "active": False,
+        "data": None,
+        "is_fixable": None,
+        "severity": None,
+        "translation_key": None,
+    }
+    if hasattr(original, "config_entry_id"):
+        values["config_entry_id"] = None
+    registry.issues[("groq", issue_id)] = inactive = replace(original, **values)
+    with monkeypatch.context() as api:
+        refresh = MagicMock()
+        if native_boundary:
+            api.setattr(ir, "async_refresh_issues", refresh, raising=False)
+        else:
+            api.delattr(ir, "async_refresh_issues", raising=False)
+        async_reconcile_entry_issues(hass, entry)
+        assert registry.async_get_issue("groq", issue_id) is inactive
+        if native_boundary:
+            refresh.return_value.__enter__.return_value.async_keep.assert_called_once_with(
+                [issue_id]
+            )
+    async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
+    recreated = registry.async_get_issue("groq", issue_id)
+    assert recreated.active
+    assert recreated.dismissed_version == original.dismissed_version
+
+
+@pytest.mark.parametrize(
+    "incomplete",
+    [
+        {"active": False},
+        {"is_fixable": None},
+        {"severity": None},
+        {"translation_key": None},
+    ],
+)
+async def test_incomplete_legacy_repair_waits_for_real_check(
+    hass, monkeypatch, incomplete
+):
+    """Do not turn an inactive or incomplete record into an asserted failure."""
+    from dataclasses import replace
+
+    entry = account(hass, services=[text_service()])
+    async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
+    registry = ir.async_get(hass)
+    issue_id = next(iter(own_issues(hass)))[1]
+    original = registry.async_get_issue("groq", issue_id)
+    if hasattr(original, "config_entry_id"):
+        incomplete = {**incomplete, "config_entry_id": None}
+    registry.issues[("groq", issue_id)] = original = replace(original, **incomplete)
+    refresh = MagicMock()
+    monkeypatch.setattr(ir, "async_refresh_issues", refresh, raising=False)
+    create = Mock()
+    monkeypatch.setattr(ir, "async_create_issue", create)
+    async_reconcile_entry_issues(hass, entry)
+    create.assert_not_called()
+    refresh.return_value.__enter__.return_value.async_keep.assert_called_once_with(
+        [issue_id]
+    )
+    assert registry.async_get_issue("groq", issue_id) is original
+
+
+@pytest.mark.skipif(
+    not hasattr(ir, "async_refresh_issues"), reason="Requires Core 2026.11 issue API"
+)
+async def test_native_refresh_cancels_stale_deletes_if_reconciliation_fails(
+    hass, expected_repair_errors
+):
+    """A partially checked issue set must survive an unexpected registry failure."""
+    entry = account(hass, services=[text_service()])
+    async_create_ffmpeg_missing_issue(hass, entry, {"unique_id": "removed-service"})
+    service = service_data_for_type(entry, "text_generation")[0]
+    async_create_model_configuration_issue(
+        hass, entry, service, TEXT_MODEL, "text_generation"
+    )
+    originals = own_issues(hass)
+    failure = OSError("injected capability reconciliation failure")
+    expected_repair_errors.append(failure)
+    model_registry = GroqModelRegistry()
+    with patch.object(model_registry, "supports", side_effect=failure):
+        async_reconcile_entry_issues(hass, entry, model_registry=model_registry)
+    assert own_issues(hass) == originals
+    assert not ir.async_get(hass)._refreshes
+    async_reconcile_entry_issues(hass, entry, model_registry=model_registry)
+    assert not own_issues(hass)
