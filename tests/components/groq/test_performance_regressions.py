@@ -2,22 +2,28 @@
 
 import asyncio
 from contextlib import aclosing
+from contextvars import ContextVar
 from copy import deepcopy
+from dataclasses import replace
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import aiohttp
 import pytest
+from homeassistant.components.conversation import SystemContent
 from homeassistant.exceptions import HomeAssistantError
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.groq import api
+from custom_components.groq import api, audio_files, chat, runtime, tts
 from custom_components.groq.api import (
     GroqApiClient,
     SpeechRequest,
     TextGenerationRequest,
 )
 from custom_components.groq.chat import (
+    ChatHistoryCache,
     _assistant_native,
     _async_chat_log_messages,
     _result_tool_calls,
@@ -26,8 +32,535 @@ from custom_components.groq.conversation import GroqConversationEntity
 from custom_components.groq.errors import GroqApiError, GroqRateLimitExceeded
 from custom_components.groq.model_registry import GroqModelRegistry
 from custom_components.groq.streaming import ChatStream
+from custom_components.groq.text_generation import request_context_window_error
 
 from .test_transport_architecture import Hass, Response, Session
+
+
+@pytest.mark.asyncio
+async def test_stream_framing_does_not_rescan_pending_bytes(monkeypatch):
+    searched = 0
+
+    class CountingBuffer(bytearray):
+        def find(self, value, start=0):
+            nonlocal searched
+            searched += len(self) - start
+            return super().find(value, start)
+
+    class FragmentedResponse(Response):
+        async def iter_chunked(self, _size):
+            for _ in range(128):
+                yield b"x" * 4096
+            yield b"\nlast"
+
+    monkeypatch.setattr(api, "bytearray", CountingBuffer, raising=False)
+    size = 128 * 4096
+    lines = [
+        line
+        async for line in api._iter_limited_response_lines(
+            FragmentedResponse(), size + 5, "stream"
+        )
+    ]
+    assert lines == [b"x" * size + b"\n", b"last"]
+    assert searched <= size + 10
+
+
+@pytest.mark.asyncio
+async def test_cached_speech_bypasses_saturated_worker_pool(monkeypatch):
+    monkeypatch.setattr(api, "MAX_SPEECH_INFLIGHT", 1)
+    client, request, session = speech_client(monkeypatch)
+    monkeypatch.setattr(api.asyncio, "sleep", AsyncMock())
+    assert await client.async_synthesize_speech(request) == b"audio"
+    worker_started, release = asyncio.Event(), asyncio.Event()
+
+    async def synthesize(_):
+        worker_started.set()
+        await release.wait()
+        return b"fresh"
+
+    monkeypatch.setattr(client, "_async_synthesize_speech", synthesize)
+    worker = asyncio.create_task(
+        client.async_synthesize_speech(replace(request, text="uncached"))
+    )
+    try:
+        await asyncio.wait_for(worker_started.wait(), 1)
+        assert (
+            await asyncio.wait_for(client.async_synthesize_speech(request), 0.1)
+            == b"audio"
+        )
+        assert not release.is_set()
+        assert session.calls == 2
+    finally:
+        release.set()
+        await worker
+        await client.async_shutdown()
+
+
+@pytest.mark.asyncio
+async def test_audio_timeout_after_response_starts_does_not_retry(monkeypatch, caplog):
+    class InterruptedResponse(Response):
+        async def iter_chunked(self, _size):
+            yield b"partial audio"
+            raise TimeoutError
+
+    response = InterruptedResponse(headers={"content-type": "audio/wav"})
+    session = Session(response)
+    client, request, _ = speech_client(monkeypatch, session=session)
+    backoff = AsyncMock()
+    monkeypatch.setattr(api.asyncio, "sleep", backoff)
+    with pytest.raises(GroqApiError, match="Timed out"):
+        await client.async_synthesize_speech(request)
+    assert response.closed
+    assert len(session.calls) == 1
+    assert len(client._tts_usage_state(request).request_timestamps) == 1
+    backoff.assert_not_awaited()
+    assert (
+        "Timed out calling Groq API; the next request will check connectivity again"
+        in caplog.text
+    )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_cold_ffmpeg_checks_share_probe(monkeypatch):
+    entity = tts.GroqTTSEntity(
+        Hass(), SimpleNamespace(data={}, options={}, unique_id="offline"), object()
+    )
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def run(_cmd):
+        started.set()
+        await release.wait()
+        return b""
+
+    ffmpeg = AsyncMock(side_effect=run)
+    monkeypatch.setattr(entity, "_async_run_ffmpeg", ffmpeg)
+    callers = [
+        asyncio.create_task(entity._async_check_ffmpeg("wav", True)) for _ in range(8)
+    ]
+    try:
+        await asyncio.wait_for(started.wait(), 1)
+        await asyncio.sleep(0)
+        callers[0].cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await callers[0]
+    finally:
+        release.set()
+        await asyncio.wait_for(asyncio.gather(*callers[1:]), 1)
+    assert ffmpeg.await_count == 2
+    await entity._async_check_ffmpeg("wav", True)
+    assert ffmpeg.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_probe_recovers_after_last_waiter_cancels(monkeypatch):
+    entity = tts.GroqTTSEntity(
+        Hass(), SimpleNamespace(data={}, options={}, unique_id="offline"), object()
+    )
+    started, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    async def ffmpeg(_):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                await release.wait()
+        return b""
+
+    monkeypatch.setattr(entity, "_async_run_ffmpeg", ffmpeg)
+    first = asyncio.create_task(entity._async_check_ffmpeg("wav", False))
+    await asyncio.wait_for(started.wait(), 1)
+    first.cancel()
+    await asyncio.wait_for(cleaning.wait(), 1)
+    replacement = asyncio.create_task(entity._async_check_ffmpeg("wav", False))
+    await asyncio.sleep(0)
+    assert calls == 1
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    await asyncio.wait_for(replacement, 1)
+    assert calls == 3
+    assert not entity._ffmpeg_probes
+
+
+@pytest.mark.asyncio
+async def test_failed_ffmpeg_probe_can_retry_and_profiles_are_independent(monkeypatch):
+    entity = tts.GroqTTSEntity(
+        Hass(), SimpleNamespace(data={}, options={}, unique_id="offline"), object()
+    )
+    ffmpeg = AsyncMock(side_effect=[HomeAssistantError("failed"), b"", b"", b"", b""])
+    monkeypatch.setattr(entity, "_async_run_ffmpeg", ffmpeg)
+    with pytest.raises(HomeAssistantError, match="failed"):
+        await entity._async_check_ffmpeg("wav", False)
+    await asyncio.gather(
+        entity._async_check_ffmpeg("wav", False),
+        entity._async_check_ffmpeg("mp3", False),
+    )
+    assert ffmpeg.await_count == 5
+    assert entity._ffmpeg_capabilities == {("wav", False, None), ("mp3", False, None)}
+
+
+@pytest.mark.asyncio
+async def test_speech_queue_rejects_excess_and_reclaims_cancelled_waiter(monkeypatch):
+    monkeypatch.setattr(api, "MAX_SPEECH_INFLIGHT", 1)
+    monkeypatch.setattr(api, "MAX_SPEECH_QUEUED", 1)
+    client, request, _ = speech_client(monkeypatch)
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def synthesize(_):
+        started.set()
+        await release.wait()
+        return b"audio"
+
+    monkeypatch.setattr(client, "_async_synthesize_speech", synthesize)
+    first = asyncio.create_task(client.async_synthesize_speech(request))
+    await asyncio.wait_for(started.wait(), 1)
+    queued = asyncio.create_task(
+        client.async_synthesize_speech(replace(request, text="queued"))
+    )
+    await asyncio.sleep(0)
+    with pytest.raises(GroqApiError, match="queue is full"):
+        await client.async_synthesize_speech(replace(request, text="overflow"))
+    queued.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await queued
+    assert set(client._speech_inflight) == {request}
+    release.set()
+    assert await first == b"audio"
+
+
+@pytest.mark.asyncio
+async def test_identical_queued_speech_shares_one_admission(monkeypatch):
+    monkeypatch.setattr(api, "MAX_SPEECH_INFLIGHT", 1)
+    monkeypatch.setattr(api, "MAX_SPEECH_QUEUED", 2)
+    client, request, _ = speech_client(monkeypatch)
+    started, release = asyncio.Event(), asyncio.Event()
+    shared = replace(request, text="shared", cache_max=0)
+    independent = replace(request, text="independent")
+    calls = []
+
+    async def synthesize(current):
+        calls.append(current.text)
+        if current == request:
+            started.set()
+            await release.wait()
+        return current.text.encode()
+
+    monkeypatch.setattr(client, "_async_synthesize_speech", synthesize)
+    first = asyncio.create_task(client.async_synthesize_speech(request))
+    await asyncio.wait_for(started.wait(), 1)
+    duplicates = [
+        asyncio.create_task(client.async_synthesize_speech(shared)) for _ in range(4)
+    ]
+    other = asyncio.create_task(client.async_synthesize_speech(independent))
+    try:
+        await asyncio.sleep(0)
+        duplicates[0].cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await duplicates[0]
+    finally:
+        release.set()
+        results = await asyncio.gather(
+            first, *duplicates[1:], other, return_exceptions=True
+        )
+        await client.async_shutdown()
+    assert results == [
+        request.text.encode(),
+        b"shared",
+        b"shared",
+        b"shared",
+        b"independent",
+    ]
+    assert calls == [request.text, "shared", "independent"]
+
+
+@pytest.mark.asyncio
+async def test_speech_queued_before_cache_fill_reuses_completed_result(monkeypatch):
+    monkeypatch.setattr(api, "MAX_SPEECH_INFLIGHT", 1)
+    client, request, session = speech_client(monkeypatch)
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def audio(*_args, **_kwargs):
+        started.set()
+        await release.wait()
+        return b"audio"
+
+    fetch = AsyncMock(side_effect=audio)
+    monkeypatch.setattr(client, "_request_audio", fetch)
+    first = asyncio.create_task(client.async_synthesize_speech(request))
+    await asyncio.wait_for(started.wait(), 1)
+    # Different synthesis settings give a distinct flight and the same cache key.
+    queued = asyncio.create_task(
+        client.async_synthesize_speech(replace(request, protect_free_tier=False))
+    )
+    await asyncio.sleep(0)
+    assert not queued.done()
+    release.set()
+    assert await asyncio.gather(first, queued) == [b"audio", b"audio"]
+    fetch.assert_awaited_once()
+    assert session.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_audio_spool_budget_released_after_overflow_and_success(monkeypatch):
+    monkeypatch.setattr(audio_files, "MAX_AUDIO_SPOOL_BYTES", 8)
+    budget = audio_files.AudioSpoolBudget()
+
+    async def chunks(*values):
+        for value in values:
+            yield value
+
+    async with audio_files.async_audio_chunk_paths(
+        Hass(), chunks(b"123456"), budget
+    ) as first:
+        assert budget.used == 6
+        with pytest.raises(GroqApiError, match="temporary audio storage"):
+            async with audio_files.async_audio_chunk_paths(
+                Hass(), chunks(b"1", b"23"), budget
+            ):
+                pytest.fail("the second announcement must exceed the shared budget")
+        assert budget.used == 6
+        assert Path(first[0]).read_bytes() == b"123456"
+    assert budget.used == 0
+    assert not Path(first[0]).exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("removed_externally", [False, True])
+async def test_audio_spool_stays_charged_until_failed_removal_succeeds(
+    hass, monkeypatch, caplog, removed_externally
+):
+    monkeypatch.setattr(audio_files, "MAX_AUDIO_SPOOL_BYTES", 8)
+    entry = MockConfigEntry(domain="groq", data={"api_key": "fixture"})
+    entry.add_to_hass(hass)
+    client = runtime.build_runtime(hass, entry).client
+    budget = client.audio_spool_budget
+    real_remove = audio_files.shutil.rmtree
+    failed_path = None
+
+    def remove(directory, ignore_errors=False):
+        if Path(directory) == failed_path:
+            if ignore_errors:
+                return
+            raise PermissionError("fixture denied removal")
+        real_remove(directory, ignore_errors=ignore_errors)
+
+    monkeypatch.setattr(audio_files.shutil, "rmtree", remove)
+
+    async def chunks(value):
+        yield value
+
+    try:
+        async with audio_files.async_audio_chunk_paths(
+            hass, chunks(b"123456"), budget
+        ) as paths:
+            failed_path = Path(paths[0]).parent
+        assert failed_path.exists()
+        assert budget.used == 6
+        assert "fixture denied removal" in caplog.text
+        await client.async_shutdown()
+        budget = runtime.build_runtime(hass, entry).client.audio_spool_budget
+        with pytest.raises(GroqApiError, match="temporary audio storage"):
+            async with audio_files.async_audio_chunk_paths(
+                hass, chunks(b"123"), budget
+            ):
+                pytest.fail("files left by failed cleanup still occupy the budget")
+        assert budget.used == 6
+        old_path, failed_path = failed_path, None
+        if removed_externally:
+            real_remove(old_path)
+        async with audio_files.async_audio_chunk_paths(
+            hass, chunks(b"12345678"), budget
+        ):
+            assert not old_path.exists()
+            assert budget.used == 8
+        assert budget.used == 0
+    finally:
+        if failed_path is not None:
+            real_remove(failed_path, ignore_errors=True)
+
+
+def test_tts_stops_consuming_chunks_once_limit_is_exceeded(monkeypatch):
+    def chunks(*_):
+        yield from ("chunk" for _ in range(tts.MAX_LONG_TTS_CHUNKS + 1))
+        pytest.fail("splitter consumed more than the first excess chunk")
+
+    monkeypatch.setattr(tts, "_split_tts_text", chunks)
+    with pytest.raises(ValueError, match="too many"):
+        tts._tts_input_chunks("oversized", "")
+
+
+@pytest.mark.parametrize("enable_long_tts", [False, True])
+@pytest.mark.parametrize("word", ["é", "a "])
+def test_tts_rejects_large_text_before_splitting(monkeypatch, enable_long_tts, word):
+    def unexpected_split(*_):
+        pytest.fail("a prefix already exceeds the total chunk capacity")
+
+    monkeypatch.setattr(tts, "_split_tts_text", unexpected_split)
+    with pytest.raises(ValueError, match="Groq Orpheus TTS"):
+        tts._tts_input_chunks(word * 100_000, "", enable_long_tts=enable_long_tts)
+
+
+def test_tts_length_precheck_accepts_collapsible_whitespace():
+    assert tts._tts_input_chunks("a" + " " * 500 + "b", "", enable_long_tts=False) == [
+        "a b"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_tool_iterations_reuse_serialization_and_token_estimates(monkeypatch):
+    result = {"data": "é" * 2048}
+    content = [
+        {"role": "system", "content": "instructions"},
+        {"role": "user", "content": "question"},
+        {
+            "role": "assistant",
+            "tool_calls": [{"id": "one", "tool_name": "Read", "tool_args": {"n": 1}}],
+        },
+        {
+            "role": "tool_result",
+            "tool_call_id": "one",
+            "tool_name": "Read",
+            "result": result,
+        },
+    ]
+    log = SimpleNamespace(content=content)
+    registry = GroqModelRegistry()
+    cache = ChatHistoryCache()
+    calls = []
+    real_dumps = json.dumps
+
+    def dumps(value, **kwargs):
+        if isinstance(value, str) and len(value) >= 1024:
+            calls.append(value)
+        return real_dumps(value, **kwargs)
+
+    monkeypatch.setattr(chat.json, "dumps", dumps)
+    for _ in range(2):
+        messages = await _async_chat_log_messages(
+            Hass(), registry, "openai/gpt-oss-20b", log, "question", history_cache=cache
+        )
+        request = TextGenerationRequest(
+            prompt="question", model="openai/gpt-oss-20b", messages=messages
+        )
+        assert (
+            request_context_window_error(
+                registry, request, string_estimates=cache.string_estimates
+            )
+            is None
+        )
+        assert json.loads(messages[3]["content"])["data"] == result["data"]
+        messages[0]["content"] = "changed request"
+        assert content[0]["content"] == "instructions"
+    assert len(calls) == 1
+    assert len(cache.tool_payloads) == 2
+
+
+@pytest.mark.asyncio
+async def test_tool_iteration_refreshes_replaced_home_assistant_system_prompt():
+    content = [
+        SystemContent(content="old instructions"),
+        SystemContent(content="another instruction"),
+        {"role": "user", "content": "question"},
+    ]
+    log = SimpleNamespace(content=content)
+    cache = ChatHistoryCache()
+    registry = GroqModelRegistry()
+    for prompt in ("old instructions", "replacement", "", "restored"):
+        content[0] = SystemContent(content=prompt)
+        messages = await _async_chat_log_messages(
+            Hass(), registry, "fake", log, "question", history_cache=cache
+        )
+        assert [message["content"] for message in messages] == [
+            *([prompt] if prompt else []),
+            "another instruction",
+            "question",
+        ]
+    content[:] = [
+        SystemContent(content="reset"),
+        {"role": "user", "content": "question"},
+    ]
+    messages = await _async_chat_log_messages(
+        Hass(), registry, "fake", log, "question", history_cache=cache
+    )
+    assert [message["content"] for message in messages] == ["reset", "question"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("size", [4, 2048])
+async def test_json_uses_executor_for_large_bodies_and_keeps_session_serializer(
+    monkeypatch, size
+):
+    calls = []
+    payload = {"value": "é" * size}
+
+    monkeypatch.setattr(api, "JSON_EXECUTOR_THRESHOLD", 1024)
+
+    def serialize(value):
+        calls.append(value)
+        return json.dumps(value, ensure_ascii=False)
+
+    def request(_session, _method, _url, **kwargs):
+        if size >= 1024:
+            assert kwargs["headers"]["Content-Type"] == "application/json"
+            assert json.loads(kwargs["data"]) == payload
+            assert "json" not in kwargs
+        else:
+            assert kwargs["json"] == payload
+        return Response(body=json.dumps(payload).encode())
+
+    monkeypatch.setattr(aiohttp.ClientSession, "request", request)
+    async with aiohttp.ClientSession(json_serialize=serialize) as session:
+        hass = Hass()
+        executor = AsyncMock(wraps=hass.async_add_executor_job)
+        monkeypatch.setattr(hass, "async_add_executor_job", executor)
+        client = GroqApiClient(hass, api_key="fake", session=session)
+        assert (
+            await client._request_json("POST", "/test", json_payload=payload) == payload
+        )
+        assert calls == ([payload] if size >= 1024 else [])
+        assert executor.await_count == (2 if size >= 1024 else 0)
+
+
+@pytest.mark.asyncio
+async def test_large_json_preserves_aiohttp_bytes_serializer(hass, monkeypatch, caplog):
+    monkeypatch.setattr(api, "JSON_EXECUTOR_THRESHOLD", 64)
+    payload = {"value": "é" * 256}
+    bodies = []
+    locale = ContextVar("locale", default="en")
+    locale.set("fr")
+
+    async def capture(request, _handler):
+        assert request.body is not None
+        bodies.append(await request.body.as_bytes())
+        raise aiohttp.ClientConnectionError("offline capture")
+
+    def serialize(value):
+        return json.dumps(
+            {**value, "locale": locale.get()}, ensure_ascii=False, separators=(",", ":")
+        ).encode()
+
+    async with aiohttp.ClientSession(
+        json_serialize_bytes=serialize, middlewares=(capture,)
+    ) as session:
+        url = "http://localhost/test"
+        with pytest.raises(aiohttp.ClientConnectionError, match="offline capture"):
+            async with session.post(url, json=payload):
+                pytest.fail("the middleware must stop the request before network I/O")
+        client = GroqApiClient(
+            hass, api_key="fake", base_url="http://localhost", session=session
+        )
+        with pytest.raises(GroqApiError, match="Network error"):
+            await client._request_json("POST", "/test", json_payload=payload)
+    assert bodies == [serialize(payload), serialize(payload)]
+    assert (
+        "Network error calling Groq API; the next request will check connectivity again"
+        in caplog.text
+    )
 
 
 class DiscardedValue:

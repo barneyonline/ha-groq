@@ -24,7 +24,11 @@ from custom_components.groq.api import (
     TextGenerationRequest,
 )
 from custom_components.groq.conversation import GroqConversationEntity
-from custom_components.groq.chat import _async_chat_log_messages, _result_tool_calls
+from custom_components.groq.chat import (
+    ChatHistoryCache,
+    _async_chat_log_messages,
+    _result_tool_calls,
+)
 from custom_components.groq.feature_registry import GroqFeature, GroqFeatureRegistry
 from custom_components.groq.model_registry import GroqModelRegistry
 from custom_components.groq.prompt_cache import GroqPromptCache
@@ -403,7 +407,7 @@ async def test_discarded_images_are_not_read_and_current_image_is_reused(
     hass = DummyHass()
     read = AsyncMock(wraps=hass.async_add_executor_job)
     monkeypatch.setattr(hass, "async_add_executor_job", read)
-    cache = {}
+    cache = ChatHistoryCache()
     for _ in range(2):
         messages = await _async_chat_log_messages(
             hass,

@@ -23,6 +23,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .api import GroqApiClient, TextGenerationRequest
 from .chat import (
     MAX_TOOL_ITERATIONS,
+    ChatHistoryCache,
     _assistant_native,
     _async_chat_log_messages,
     _chat_log_tools,
@@ -163,13 +164,13 @@ class GroqConversationEntity(ConversationEntity):
             )
         text = ""
         use_streaming = service_stream(self._config_entry, self._service_data)
-        attachment_cache: dict[tuple[str, str], Any] = {}
+        history_cache = ChatHistoryCache()
         for _iteration in range(MAX_TOOL_ITERATIONS):
             request = await self._async_text_generation_request(
                 user_input,
                 chat_log,
                 tools,
-                attachment_cache,
+                history_cache,
             )
             if error := request_body_options_error_message(
                 self._model_registry,
@@ -183,7 +184,11 @@ class GroqConversationEntity(ConversationEntity):
                 request.compound_builtin_tools,
             ):
                 raise translated_error(error, "invalid_request_options")
-            if error := request_context_window_error(self._model_registry, request):
+            if error := request_context_window_error(
+                self._model_registry,
+                request,
+                string_estimates=history_cache.string_estimates,
+            ):
                 raise translated_error(error, "invalid_request_options")
             if use_streaming:
                 text = await self._async_stream_message(user_input, chat_log, request)
@@ -228,7 +233,7 @@ class GroqConversationEntity(ConversationEntity):
         user_input: ConversationInput,
         chat_log: conversation.ChatLog,
         tools: list[dict[str, Any]] | None,
-        attachment_cache: dict[tuple[str, str], Any] | None = None,
+        history_cache: ChatHistoryCache | None = None,
     ) -> TextGenerationRequest:
         """Build a Groq text generation request for an Assist turn."""
         return TextGenerationRequest(
@@ -241,7 +246,7 @@ class GroqConversationEntity(ConversationEntity):
                 chat_log,
                 user_input.text,
                 getattr(user_input, "attachments", None),
-                attachment_cache,
+                history_cache,
             ),
             system_prompt=None,
             **service_generation_options(

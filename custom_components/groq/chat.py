@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any
 
 import probatio
@@ -19,6 +20,46 @@ from .model_registry import GroqModelRegistry
 
 MAX_HISTORY_MESSAGES = 12
 MAX_TOOL_ITERATIONS = 10
+
+
+@dataclass(slots=True)
+class ChatHistoryCache:
+    """Reuse completed log content while a single tool loop appends messages."""
+
+    attachments: dict[tuple[str, str], Any] = field(default_factory=dict)
+    tool_payloads: dict[tuple[int, bool], tuple[Any, str]] = field(default_factory=dict)
+    string_estimates: dict[int, tuple[str, int]] = field(default_factory=dict)
+    system_messages: list[dict[str, Any]] = field(default_factory=list)
+    scanned_count: int = 0
+
+    def system_instructions(self, content: list[Any]) -> list[dict[str, Any]]:
+        """Read HA's replaceable first item and scan newly appended instructions."""
+        if len(content) < self.scanned_count:
+            self.system_messages.clear()
+            self.scanned_count = 0
+        for index in range(max(1, self.scanned_count), len(content)):
+            item = content[index]
+            if _content_role(item) == "system" and (prompt := _content_text(item)):
+                self.system_messages.append({"role": "system", "content": prompt})
+        self.scanned_count = len(content)
+        messages: list[dict[str, Any]] = []
+        if content and _content_role(content[0]) == "system":
+            if prompt := _content_text(content[0]):
+                messages.append({"role": "system", "content": prompt})
+        messages.extend(message.copy() for message in self.system_messages)
+        return messages
+
+    def serialize_tool(self, value: Any, *, result: bool = False) -> str:
+        """Keep a reference to each value so an object ID cannot be reused."""
+        identity = (id(value), result)
+        if identity not in self.tool_payloads:
+            serialized = (
+                _serialize_tool_result(value)
+                if result
+                else json.dumps(value, separators=(",", ":"))
+            )
+            self.tool_payloads[identity] = (value, serialized)
+        return self.tool_payloads[identity][1]
 
 
 def _content_role(content: Any) -> str | None:
@@ -124,21 +165,25 @@ def _tool_result_message(
         return None
     tool_call_id, tool_name = identity
     result = content["result"] if isinstance(content, dict) else content.result
-    tool_result = (
-        {"data": result["data"], "error": result.get("error", False)}
-        if isinstance(result, dict)
-        else {"data": result.data, "error": result.error}
-    )
     return {
         "role": "tool",
         "tool_call_id": tool_call_id,
         "name": tool_name,
-        "content": (
-            json.dumps(tool_result, separators=(",", ":"), default=str)
-            if serialize
-            else tool_result
-        ),
+        "content": (_serialize_tool_result(result) if serialize else result),
     }
+
+
+def _serialize_tool_result(result: Any) -> str:
+    """Serialize the Home Assistant tool result envelope for Groq."""
+    return json.dumps(
+        (
+            {"data": result["data"], "error": result.get("error", False)}
+            if isinstance(result, dict)
+            else {"data": result.data, "error": result.error}
+        ),
+        separators=(",", ":"),
+        default=str,
+    )
 
 
 def _tool_result_identity(content: Any) -> tuple[str, str] | None:
@@ -178,9 +223,10 @@ def _tool_call_parts(tool_call: Any) -> tuple[str, dict[str, Any]] | None:
 
 def _chat_log_history(
     chat_log: conversation.ChatLog,
+    cache: ChatHistoryCache,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Build descriptors for system instructions and the retained history tail."""
-    system_messages: list[dict[str, Any]] = []
+    system_messages = cache.system_instructions(chat_log.content)
     selected: list[tuple[Any, str]] = []
     newest_user_offset = next(
         (
@@ -195,10 +241,8 @@ def _chat_log_history(
     for offset, item in enumerate(reversed(chat_log.content)):
         role = _content_role(item)
         if role == "system":
-            if text := _content_text(item):
-                system_messages.append({"role": role, "content": text})
             continue
-        if role is None or discarded:
+        if role is None:
             continue
         if role == "tool_result":
             if _tool_result_identity(item) is None:
@@ -216,10 +260,9 @@ def _chat_log_history(
             continue
         if offset > newest_user_offset and len(selected) >= MAX_HISTORY_MESSAGES:
             discarded = True
-            continue
+            break
         selected.append((item, role))
 
-    system_messages.reverse()
     turns: list[dict[str, Any]] = []
     for item, role in reversed(selected):
         if role == "tool_result":
@@ -250,10 +293,11 @@ async def _async_chat_log_messages(
     chat_log: conversation.ChatLog,
     current_text: str,
     current_attachments: Any = None,
-    attachment_cache: dict[tuple[str, str], Any] | None = None,
+    history_cache: ChatHistoryCache | None = None,
 ) -> list[dict[str, Any]]:
     """Return OpenAI-compatible messages, including supported image attachments."""
-    system_messages, turn_messages = _chat_log_history(chat_log)
+    cache = history_cache if history_cache is not None else ChatHistoryCache()
+    system_messages, turn_messages = _chat_log_history(chat_log, cache)
     # HA normally already added the current input. Match the latest user turn,
     # not an identical prompt from an older conversation turn.
     latest_user = next(
@@ -284,27 +328,22 @@ async def _async_chat_log_messages(
         # Only retained history incurs serialization or attachment I/O. These
         # descriptors own their dictionaries, leaving HA's chat log untouched.
         if message["role"] == "tool":
-            message["content"] = json.dumps(
-                message["content"], separators=(",", ":"), default=str
-            )
+            message["content"] = cache.serialize_tool(message["content"], result=True)
         for tool_call in message.get("tool_calls", []):
             function = tool_call["function"]
-            function["arguments"] = json.dumps(
-                function["arguments"], separators=(",", ":")
-            )
+            function["arguments"] = cache.serialize_tool(function["arguments"])
         attachments = message.pop("_attachments", None)
         if not attachments:
             continue
         cache_key = (message["content"], repr(attachments))
-        if attachment_cache is not None and cache_key in attachment_cache:
-            message["content"] = attachment_cache[cache_key]
+        if cache_key in cache.attachments:
+            message["content"] = cache.attachments[cache_key]
             continue
         content = await _message_content(
             hass, model_registry, model, message["content"], attachments
         )
         message["content"] = content
-        if attachment_cache is not None:
-            attachment_cache[cache_key] = content
+        cache.attachments[cache_key] = content
     return messages
 
 
