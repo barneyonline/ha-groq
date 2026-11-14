@@ -206,7 +206,7 @@ request body options.
 - This is a cloud integration and will not work without internet access to Groq.
 - Groq can change model availability, limits, and request option support outside this integration.
 - Some additional options work only on models that support them. The setup flow validates known model capabilities where possible.
-- TTS input is limited by Groq Orpheus model limits. Enable the Long TTS option to split longer announcements and stitch them with `ffmpeg`; this uses more CPU and more Groq request quota. Processed audio output is limited to 64 MiB. Without Long TTS, overly long requests are blocked locally.
+- TTS input is limited by Groq Orpheus model limits. Enable the Long TTS option to split longer announcements and stitch them with `ffmpeg`; this uses more CPU and more Groq request quota. Processed audio output is limited to 64 MiB. Concurrent Long TTS announcements share a 250 MiB temporary file budget per Groq entry. Up to 32 distinct requests can wait for a speech worker. Identical requests share one queue slot. Requests that exceed either limit fail locally. Without Long TTS, overly long requests are blocked locally.
 - Groq speech can generate WAV, MP3, FLAC, OGG, or MULAW audio. The integration sends the selected format directly to Groq for single-part announcements without audio processing. When audio normalization or Long TTS is enabled, the integration asks Groq for WAV chunks and uses `ffmpeg` to normalize, stitch, or convert the final playback output.
 - TTS sample rate and speed are optional. Leave sample rate unset to use Groq's model default or the integration's playback profile; use speed `1.0` for normal playback.
 - Long TTS, audio normalization, and playback conversion need `ffmpeg` and use extra CPU.

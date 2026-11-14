@@ -84,7 +84,7 @@ Full configuration, action examples, limitations and removal: **[Groq user guide
 
 Groq is a cloud service. Models and request options vary by account and can change. Long TTS uses additional CPU and API quota. Local media and audio actions retain administrator and allowed-path restrictions.
 
-TTS free-tier protection conservatively counts each attempted HTTP request, including retries after network failures. Cached speech adds no local usage, and identical requests sharing one synthesis count once per HTTP attempt.
+TTS free-tier protection conservatively counts each attempted HTTP request, including retries after network failures before a response starts. Cached speech adds no local usage, and identical requests sharing one synthesis count once per HTTP attempt.
 
 The user guide covers [supported functionality](docs/user-guide.md#supported-functionality), [configuration and cache budgets](docs/user-guide.md#configuration), [browser search](docs/user-guide.md#streaming-and-browser-search), [sensor scope](docs/user-guide.md#usage-sensors), [known limitations](docs/user-guide.md#known-limitations) and [removal](docs/user-guide.md#removal).
 

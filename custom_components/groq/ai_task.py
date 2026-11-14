@@ -21,6 +21,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .api import GroqApiClient, StructuredGenerationRequest, TextGenerationRequest
 from .chat import (
     MAX_TOOL_ITERATIONS,
+    ChatHistoryCache,
     _assistant_native,
     _async_chat_log_messages,
     _chat_log_tools,
@@ -296,7 +297,11 @@ class GroqAITaskEntity(AITaskEntity):
             )
         return data
 
-    def _raise_request_errors(self, request: TextGenerationRequest) -> None:
+    def _raise_request_errors(
+        self,
+        request: TextGenerationRequest,
+        history_cache: ChatHistoryCache | None = None,
+    ) -> None:
         """Raise Home Assistant errors for invalid Groq request options."""
         if error := compound_builtin_tools_error_message(
             self._model_registry,
@@ -310,7 +315,11 @@ class GroqAITaskEntity(AITaskEntity):
             request.extra_body,
         ):
             raise translated_error(error, "invalid_request_options")
-        if error := request_context_window_error(self._model_registry, request):
+        if error := request_context_window_error(
+            self._model_registry,
+            request,
+            string_estimates=history_cache.string_estimates if history_cache else None,
+        ):
             raise translated_error(error, "invalid_request_options")
 
     async def _async_tool_generation_request(
@@ -320,7 +329,7 @@ class GroqAITaskEntity(AITaskEntity):
         instructions: str,
         tools: list[dict[str, Any]],
         output_instruction: str | None,
-        attachment_cache: dict[tuple[str, str], Any] | None = None,
+        history_cache: ChatHistoryCache | None = None,
     ) -> TextGenerationRequest:
         """Build an AI task request that includes Home Assistant tool state."""
         model = service_model(self._config_entry, self._service_data)
@@ -331,7 +340,7 @@ class GroqAITaskEntity(AITaskEntity):
             chat_log,
             instructions,
             task.attachments,
-            attachment_cache,
+            history_cache,
         )
         if output_instruction:
             messages = [dict(message) for message in messages]
@@ -368,7 +377,7 @@ class GroqAITaskEntity(AITaskEntity):
                 feature="Home Assistant tool calls",
             )
 
-        attachment_cache: dict[tuple[str, str], Any] = {}
+        history_cache = ChatHistoryCache()
         for _iteration in range(MAX_TOOL_ITERATIONS):
             request = await self._async_tool_generation_request(
                 task,
@@ -376,9 +385,9 @@ class GroqAITaskEntity(AITaskEntity):
                 instructions,
                 tools,
                 output_instruction,
-                attachment_cache,
+                history_cache,
             )
-            self._raise_request_errors(request)
+            self._raise_request_errors(request, history_cache)
             result = await self._client.async_generate_text(request)
             tool_calls = _result_tool_calls(result)
             assistant_content = AssistantContent(
