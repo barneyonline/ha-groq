@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v2.2.3 - 2026-11-14
+
+### 🚧 Breaking changes
+
+- None
+
+### ✨ New features
+
+- None
+
+### 🐛 Bug fixes
+
+- Use the current Assist system prompt on each tool-call round. (#85)
+- Keep temporary speech files counted against the storage limit across integration reloads until cleanup succeeds. (#85)
+- Avoid retrying audio requests after a response has started. (#85)
+
+### 🔧 Improvements
+
+- Scan streamed response bytes once for line boundaries, process large JSON bodies off the event loop, and reuse serialized tool results. (#85)
+- Limit concurrent and queued speech requests, share work for identical requests and ffmpeg probes, and reject oversized speech text sooner. (#85)
+
+### 🔄 Other changes
+
+- Bumped the integration manifest version to `2.2.3`.
+
 ## v2.2.2 - 2026-11-13
 
 ### 🚧 Breaking changes
