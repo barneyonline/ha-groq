@@ -16,7 +16,6 @@ from urllib.parse import urlparse
 import probatio
 from homeassistant.auth.permissions.const import POLICY_READ
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -793,12 +792,7 @@ async def _image_from_camera_target(
     """Return a data URL from the targeted camera entity, if one was selected."""
     if camera_entity_id := call.data.get(ATTR_CAMERA_ENTITY_ID):
         entity_ids = cv.ensure_list(camera_entity_id)
-    elif direct_entity_id := call.data.get(ATTR_ENTITY_ID):
-        entity_ids = cv.ensure_list(direct_entity_id)
-    elif any(
-        call.data.get(target_key)
-        for target_key in ("device_id", "area_id", "floor_id", "label_id")
-    ):
+    elif any(call.data.get(target_key) for target_key in cv.TARGET_ID_KEYS):
         entity_ids = list(await service_helper.async_extract_entity_ids(call))
     else:
         return None
