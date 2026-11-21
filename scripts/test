@@ -23,7 +23,7 @@ project_hash=$(printf '%s\n' "$(pwd -P)" | git hash-object --stdin | cut -c1-12)
 if [ "${1:-}" = "--minimum" ]; then
   shift
   project_hash="$project_hash-minimum"
-  export HA_VERSION=${HA_VERSION:-2026.10.0}
+  export HA_VERSION=${HA_VERSION:-2026.11.0}
   export HA_GROQ_REQUIREMENTS_FILE=requirements-min-ha.txt
 fi
 rebuild=false

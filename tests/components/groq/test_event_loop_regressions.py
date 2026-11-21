@@ -198,7 +198,7 @@ async def test_ai_task_offloads_large_fenced_json(hass, monkeypatch, use_tools, 
         instructions="Return text",
         llm_api=fixture_tool_api(hass, "large_json", run_tool) if use_tools else None,
     )
-    with async_get_chat_session(hass) as chat_session:
+    with async_get_chat_session(hass, context=None) as chat_session:
         if valid:
             result = await entity.internal_async_generate_data(chat_session, task)
             assert result.data == "x" * 65536

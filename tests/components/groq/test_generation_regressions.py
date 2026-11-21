@@ -222,8 +222,9 @@ async def test_real_chat_log_executes_and_validates_tools(
     data = {"model": "openai/gpt-oss-20b", "llm_hass_api": [api.id]}
     if platform == "assist":
         data["stream"] = False
+    context = Context()
     try:
-        with async_get_chat_session(hass) as chat_session:
+        with async_get_chat_session(hass, context=context) as chat_session:
             if platform in {"assist", "assist_stream"}:
                 entity = GroqConversationEntity(hass, DummyEntry(), data, client)
                 with conversation.async_get_chat_log(hass, chat_session) as log:
@@ -231,7 +232,7 @@ async def test_real_chat_log_executes_and_validates_tools(
                     result = await entity._async_handle_message(
                         conversation.ConversationInput(
                             text="Read level",
-                            context=Context(),
+                            context=context,
                             conversation_id=chat_session.conversation_id,
                             device_id=None,
                             satellite_id=None,
@@ -620,7 +621,7 @@ async def test_real_ai_task_chat_log_keeps_api_prompt_and_final_content(
         instructions="Summarize",
         llm_api=PromptAPI(hass=hass, id="context_only", name="Context only"),
     )
-    with async_get_chat_session(hass) as session:
+    with async_get_chat_session(hass, context=None) as session:
         result = await entity.internal_async_generate_data(session, task)
         with conversation.async_get_chat_log(hass, session) as chat_log:
             assistants = [item for item in chat_log.content if item.role == "assistant"]

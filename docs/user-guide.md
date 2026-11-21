@@ -63,15 +63,14 @@ Each configured Groq service creates its own Home Assistant device and the relev
 
 ## Installation
 
-### HACS
+### Marketplace
 
-1. Open HACS.
-2. Search for Groq in Integrations.
-3. Download Groq.
-4. Restart Home Assistant.
-5. Go to Settings -> Devices & services -> Add integration -> Groq.
+1. Open **Settings → Marketplace**.
+2. Search for Groq under **Integrations** and install it.
+3. Restart Home Assistant if prompted.
+4. Go to **Settings → Devices & services → Add integration → Groq**.
 
-[![Open your Home Assistant instance and open the Groq repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=barneyonline&repository=ha-groq&category=integration)
+[![Open Groq in the Home Assistant Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=barneyonline&repository=ha-groq&category=integration)
 
 ### Manual
 
@@ -81,8 +80,7 @@ Each configured Groq service creates its own Home Assistant device and the relev
 
 ## Requirements
 
-- Home Assistant `2026.10.0` or newer. Both the primary and minimum-version test environments currently verify `2026.10.0`.
-  Assist and AI tasks preserve Home Assistant tool results and their error flags.
+- Home Assistant `2026.11.0` or newer.
 - A Groq API key from [Groq Console](https://console.groq.com/).
 - Network access from Home Assistant to `https://api.groq.com`.
 - Optional: `ffmpeg` on the Home Assistant host if you enable TTS audio normalization, Long TTS, or processed playback conversion.
@@ -105,7 +103,11 @@ After adding an account, open the Groq integration page and add one or more serv
 
 Additional Text Generation options include max completion tokens, top P, stop sequences, seed, service tier, streaming, reasoning options, local response caching, Compound built-in tool allow-lists, structured output schema, strict schema mode, and additional Groq request body options.
 
-On Home Assistant 2026.11 and newer, Schema Name, Schema and Strict appear only while Structured Outputs is enabled for a compatible model. Home Assistant 2026.10 always shows these fields for compatible models. Disabling Structured Outputs preserves the saved schema, name and strictness for reuse; switching to a model without Structured Outputs support clears those settings.
+Schema Name, Schema and Strict appear while Structured Outputs is enabled for a compatible model. Disabling Structured Outputs preserves the saved schema, name and strictness for reuse. Switching to a model without Structured Outputs support clears those settings.
+
+Include Reasoning appears when Reasoning Format is set to **Model default**. Selecting an explicit format hides the toggle and preserves its saved setting for when you return to **Model default**.
+
+[View the advanced Text Generation form in Home Assistant 2026.11.](images/text-generation-advanced-ha-2026-11.png)
 
 Local response caching is opt-in per configured service. Disabling it for one service remains effective when another service enables caching. Responses expire and share a 16 MiB serialized-content budget per account. Speech audio caches share a separate 64 MiB account budget in addition to their configured item limits. These caches are local to Home Assistant and are distinct from Groq's provider-side prompt caching.
 
@@ -235,7 +237,7 @@ request body options.
 2. Delete any Groq service entries you no longer want.
 3. Delete the Groq account entry.
 4. Restart Home Assistant if you plan to remove the custom integration files.
-5. If installed through HACS, remove Groq from HACS. For a manual install, delete `custom_components/groq`.
+5. If installed through the Marketplace, uninstall Groq there. For a manual install, delete `custom_components/groq`.
 
 Removing the integration stops future Groq API calls from Home Assistant. It does not delete Groq projects, keys, billing data, or logs in Groq Console.
 

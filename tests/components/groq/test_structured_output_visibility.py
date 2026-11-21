@@ -1,8 +1,4 @@
-"""Conditional marker contracts and persistence when hidden fields are omitted.
-
-The visibility marker is a test double, not a newer HA runtime or frontend.
-Real HA flow-manager coverage for the older fallback lives in lifecycle tests.
-"""
+"""Advanced form visibility and persistence when fields are hidden."""
 
 from copy import deepcopy
 from unittest.mock import AsyncMock
@@ -30,29 +26,9 @@ SAVED = {
 }
 
 
-class ConditionalOptional(probatio.Optional):
-    """Capture the documented HA marker arguments without emulating rendering."""
-
-    def __init__(self, *args, visible=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.visible = visible
-
-
-@pytest.fixture(params=[False, True], ids=["older-fallback", "conditional-contract"])
-def conditional_api(monkeypatch, request):
-    """Exercise API presence and absence independently of the installed HA."""
-    if request.param:
-        monkeypatch.setattr(
-            data_entry_flow, "Optional", ConditionalOptional, raising=False
-        )
-    else:
-        monkeypatch.delattr(data_entry_flow, "Optional", raising=False)
-    return request.param
-
-
 @pytest.mark.parametrize("enabled", [False, True])
 @pytest.mark.parametrize("saved", [{}, SAVED])
-def test_only_structured_schema_fields_have_visibility(conditional_api, enabled, saved):
+def test_conditional_advanced_fields_have_visibility(enabled, saved):
     schema = flow_schemas.text_generation_advanced_schema(
         {"model": MODEL, "structured_outputs": enabled, **saved}
     )
@@ -62,25 +38,25 @@ def test_only_structured_schema_fields_have_visibility(conditional_api, enabled,
         for key, marker in markers.items()
         if getattr(marker, "visible", None) is not None
     }
-    assert visible == (
-        {key: {"field": "structured_outputs", "value": True} for key in SCHEMA_FIELDS}
-        if conditional_api
-        else {}
-    )
+    assert visible == {
+        **{
+            key: {"field": "structured_outputs", "value": True} for key in SCHEMA_FIELDS
+        },
+        "include_reasoning": {"field": "reasoning_format", "value": ""},
+    }
     assert markers["structured_outputs"].default() is enabled
     for key, default in {
         "schema_name": "response",
         "schema": {},
         "strict": False,
     }.items():
-        assert isinstance(markers[key], probatio.Optional)
+        assert isinstance(markers[key], data_entry_flow.Optional)
         assert markers[key].default() == saved.get(key, default)
-    # Reasoning controls retain their ordinary markers in both API branches.
-    for key in ("reasoning_effort", "reasoning_format", "include_reasoning"):
+    for key in ("reasoning_effort", "reasoning_format"):
         assert type(markers[key]) is probatio.Optional
 
 
-def test_unsupported_model_has_no_structured_fields(conditional_api):
+def test_unsupported_model_has_no_structured_fields():
     schema = flow_schemas.text_generation_advanced_schema(
         {"model": "llama-3.1-8b-instant", "structured_outputs": True, **SAVED}
     )
@@ -91,9 +67,7 @@ def test_unsupported_model_has_no_structured_fields(conditional_api):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [False, True])
-async def test_omitted_fields_survive_repeated_saves_and_reopening(
-    monkeypatch, conditional_api, strict
-):
+async def test_omitted_fields_survive_repeated_saves_and_reopening(monkeypatch, strict):
     saved = {**deepcopy(SAVED), "strict": strict}
     stored = {
         "name": "Structured text",
@@ -140,7 +114,7 @@ async def test_omitted_fields_survive_repeated_saves_and_reopening(
 
 
 @pytest.mark.asyncio
-async def test_validation_retry_keeps_saved_schema(monkeypatch, conditional_api):
+async def test_validation_retry_keeps_saved_schema(monkeypatch):
     flow = config_flow.GroqServiceSubentryFlow()
     _patch_flow_common(monkeypatch, flow)
     flow._pending_service_data = {"model": MODEL, "structured_outputs": True, **SAVED}
@@ -160,9 +134,7 @@ async def test_validation_retry_keeps_saved_schema(monkeypatch, conditional_api)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("schema", [{"type": "array", "items": {"type": "string"}}, {}])
-async def test_validation_retry_retains_edits_before_hiding_fields(
-    monkeypatch, conditional_api, schema
-):
+async def test_validation_retry_retains_edits_before_hiding_fields(monkeypatch, schema):
     """A retry must not revert visible edits when the next submit omits them."""
     flow = config_flow.GroqServiceSubentryFlow()
     _patch_flow_common(monkeypatch, flow)
@@ -186,8 +158,7 @@ async def test_validation_retry_retains_edits_before_hiding_fields(
     defaults = reopened["data_schema"]({})
     assert {key: defaults[key] for key in SCHEMA_FIELDS} == edited
 
-    # Hidden fields are omitted by HA's conditional API. Submit directly to
-    # avoid the older runtime injecting schema defaults into this payload.
+    # Submit the same payload the handler receives when HA hides these fields.
     result = await flow.async_step_text_generation_advanced(
         {"structured_outputs": False, "request_body_options": {}}
     )
@@ -202,7 +173,7 @@ async def test_validation_retry_retains_edits_before_hiding_fields(
 
 
 @pytest.mark.asyncio
-async def test_model_change_clears_hidden_schema(monkeypatch, conditional_api):
+async def test_model_change_clears_hidden_schema(monkeypatch):
     flow = config_flow.GroqServiceSubentryFlow()
     _patch_flow_common(monkeypatch, flow)
     monkeypatch.setattr(

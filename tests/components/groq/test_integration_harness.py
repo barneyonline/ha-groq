@@ -371,8 +371,8 @@ def test_tts_entity_properties_use_options_over_data():
     assert entity.default_options["response_format"] == "mp3"
     assert entity.default_options["vocal_directions"] == ""
     assert entity.supported_languages == ["ar", "en"]
-    assert entity.device_info["model"] == ORPHEUS_ENGLISH_MODEL
-    assert entity.device_info["name"] == ORPHEUS_ENGLISH_MODEL
+    assert entity.device_info.model == ORPHEUS_ENGLISH_MODEL
+    assert entity.device_info.name == ORPHEUS_ENGLISH_MODEL
     assert entity.has_entity_name is True
     assert entity.translation_key == "text_to_speech"
 
@@ -1667,7 +1667,7 @@ async def test_tts_async_setup_entry_builds_entities_from_subentries():
     assert added[0].unique_id == "subentry-id"
     assert added[0].has_entity_name is True
     assert added[0].translation_key == "text_to_speech"
-    assert added[0].device_info["name"] == "Kitchen TTS"
+    assert added[0].device_info.name == "Kitchen TTS"
     assert added[0]._client.base_url == "https://api.groq.com/openai/v1"
 
 

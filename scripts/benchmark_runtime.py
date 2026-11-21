@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.groq.api import ChatCompletionResult, GroqApiClient
 from custom_components.groq.model_registry import BUILT_IN_MODELS

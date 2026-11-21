@@ -67,7 +67,7 @@ scripts/test python -m pytest tests/components/groq -q
 scripts/test python -m pytest -q
 ```
 
-The primary harness uses Home Assistant 2026.10.0. Verify the advertised minimum
+The primary harness uses Home Assistant 2026.11.0. Verify the advertised minimum
 separately with `scripts/test --minimum python -m pytest tests/components/groq -q`.
 Both environments verify the actual Core/helper versions and run dependency checks
 when built. The test image uses digest-pinned Python 3.14 and installs only Core,
@@ -101,7 +101,7 @@ Use `scripts/cloud-environment reset` only for an explicit reset: it removes thi
 worktree's test container and rebuilds with `--pull --no-cache`. Ordinary startup
 reuses the image and build cache. Keep only the Docker environment; a separate
 native virtualenv and copied HA source are unnecessary. Start the digest-pinned
-HA 2026.10.0 `ha-runtime` service only for manual UI checks.
+HA 2026.11.0 `ha-runtime` service only for manual UI checks.
 
 `scripts/strict-typing` discovers the installed HA source for actual interface checks.
 Run `scripts/test python scripts/check_ha_typing.py` for positive and negative typing
@@ -114,7 +114,7 @@ measures warmed local overhead with mocked provider I/O; it is not live latency.
 Pytest treats Python warnings as errors. The only exception in `pytest.ini` is
 the exact aiohttp `NotAppKeyWarning` payload, including its documentation link,
 from
-`homeassistant.components.http.server`: pinned Home Assistant 2026.10.0 retains
+`homeassistant.components.http.server`: pinned Home Assistant 2026.11.0 retains
 the `app["hass"]` string key for backward compatibility. Review this exception
 when updating Core. The same warning from Groq or any other module still fails
 tests, as do other warning messages and categories. The import-time check also

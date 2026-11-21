@@ -268,9 +268,8 @@ class DummyConfigEntries:
     async def async_forward_entry_setups(self, entry, platforms):
         self.forwarded.append((entry, platforms))
 
-    async def async_unload_platforms(self, entry, platforms):
+    async def async_unload_platforms_or_raise(self, entry, platforms):
         self.unloaded.append((entry, platforms))
-        return True
 
     async def async_reload(self, entry_id):
         self.reloaded.append(entry_id)
@@ -2271,9 +2270,9 @@ async def test_runtime_and_integration_lifecycle_branches(monkeypatch):
     hass = DummyHass([entry], services=services)
     assert await integration.async_setup(hass, {}) is True
     assert services.registered
-    assert await integration.async_setup_entry(hass, entry) is True
+    assert await integration.async_setup_entry(hass, entry) is None
     assert entry.runtime_data is await async_get_runtime(hass, entry)
-    assert await integration.async_unload_entry(hass, entry) is True
+    assert await integration.async_unload_entry(hass, entry) is None
     assert services.removed == []
 
     other = DummyEntry("other")
@@ -2287,13 +2286,13 @@ async def test_runtime_and_integration_lifecycle_branches(monkeypatch):
     legacy = DummyEntry()
     legacy.unique_id = None
     legacy.data = {"unique_id": "old", "url": "u", "model": "m", "voice": "v"}
-    assert await integration.async_migrate_entry(hass, legacy)
+    assert await integration.async_migrate_entry(hass, legacy) is None
     assert hass.config_entries.updated[-1][1]["unique_id"] == "old"
-    assert await integration.async_migrate_entry(hass, entry)
+    assert await integration.async_migrate_entry(hass, entry) is None
     no_legacy = DummyEntry()
     no_legacy.unique_id = None
     no_legacy.data = {}
-    assert await integration.async_migrate_entry(hass, no_legacy)
+    assert await integration.async_migrate_entry(hass, no_legacy) is None
     no_runtime_entry = DummyEntry()
     no_runtime_entry.data = {"url": "u", "model": "m", "voice": "v"}
     runtime = build_runtime(DummyHass(), no_runtime_entry)
@@ -3437,9 +3436,9 @@ async def test_stt_setup_properties_wav_error_and_empty_results(monkeypatch):
     assert stt.AudioBitRates.BITRATE_16 in entity.supported_bit_rates
     assert stt.AudioSampleRates.SAMPLERATE_16000 in entity.supported_sample_rates
     assert stt.AudioChannels.CHANNEL_MONO in entity.supported_channels
-    assert entity.device_info["model"] == "whisper-large-v3"
-    assert entity.device_info["name"] == "Groq Speech-to-Text"
-    assert entity.device_info["entry_type"] is DeviceEntryType.SERVICE
+    assert entity.device_info.model == "whisper-large-v3"
+    assert entity.device_info.name == "Groq Speech-to-Text"
+    assert entity.device_info.entry_type is DeviceEntryType.SERVICE
     assert entity.has_entity_name is True
     assert entity.translation_key == "speech_to_text"
 
@@ -3550,8 +3549,8 @@ async def test_ai_task_helpers_and_fallback_paths():
     }
     client = DummyClient()
     entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
-    assert entity.device_info["name"] == "AI"
-    assert entity.device_info["entry_type"] is DeviceEntryType.SERVICE
+    assert entity.device_info.name == "AI"
+    assert entity.device_info.entry_type is DeviceEntryType.SERVICE
     assert entity.has_entity_name is True
     assert entity.translation_key == "data_generation_tasks"
     task = GenDataTask(
@@ -3802,8 +3801,8 @@ async def test_ai_task_and_conversation_setup_properties():
     assert conversation_subentry_ids == ["text-id"]
     entity = conversation_entities[0]
     assert entity.supported_languages == "*"
-    assert entity.device_info["name"] == "Assistant"
-    assert entity.device_info["entry_type"] is DeviceEntryType.SERVICE
+    assert entity.device_info.name == "Assistant"
+    assert entity.device_info.entry_type is DeviceEntryType.SERVICE
     assert entity.has_entity_name is True
     assert entity.translation_key == "assist"
     tiny_registry = GroqModelRegistry(
@@ -3891,9 +3890,9 @@ async def test_tts_entity_and_api_remaining_paths(monkeypatch):
     )
     assert entity.default_language == "en"
     assert entity.supported_languages == ["ar", "en"]
-    assert entity.device_info["identifiers"] == {("groq", "tts-id")}
-    assert entity.device_info["name"] == "tts"
-    assert entity.device_info["entry_type"] is DeviceEntryType.SERVICE
+    assert entity.device_info.identifiers == {("groq", "tts-id")}
+    assert entity.device_info.name == "tts"
+    assert entity.device_info.entry_type is DeviceEntryType.SERVICE
     assert entity.has_entity_name is True
     assert entity.translation_key == "text_to_speech"
     fmt, audio = await entity.async_get_tts_audio(

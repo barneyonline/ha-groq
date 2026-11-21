@@ -112,10 +112,10 @@ Home Assistant LLM tools use Probatio schemas, so tool descriptions use its
 OpenAPI serializer directly. Config forms, action validation and AI task output
 structures also use Probatio.
 
-Conditional Structured Outputs fields use Home Assistant's visibility markers
-when available. The ordinary Probatio optional markers remain necessary on
-HA 2026.10, which predates the visibility API. Both paths preserve saved schema
-settings when fields are omitted or validation is retried.
+Home Assistant's visibility markers control which Structured Outputs and
+reasoning fields are shown. Home Assistant strips hidden fields before
+validation. The integration merges visible edits into the saved options and
+retains edited conditional values across validation retries.
 
 ## Network failures and repairs
 
@@ -172,8 +172,8 @@ claims about actual device or provider performance.
 
 ## Validation and performance evidence
 
-The primary and minimum Docker harnesses currently run HA 2026.10.0 with pytest
-helper 0.13.371 on a digest-pinned Python 3.14 slim image. Both install an explicit
+The primary and minimum Docker harnesses currently run HA 2026.11.0 with
+`pytest-homeassistant` 2026.11.0 on a digest-pinned Python 3.14 slim image. Both install an explicit
 Core version with its matching helper and verify that version after dependency
 installation, including package consistency. An incompatible `HA_VERSION`
 override fails instead of silently testing a downgraded Core. Component runtime

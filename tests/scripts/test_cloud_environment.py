@@ -54,7 +54,7 @@ elif args[:2] == ['image', 'rm']:
 elif args[0] == 'compose':
     operation = args[3]
     if operation == 'config':
-        print(json.dumps({'ha': os.environ.get('HA_VERSION', '2026.10.0')}))
+        print(json.dumps({'ha': os.environ.get('HA_VERSION', '2026.11.0')}))
     elif operation == 'build':
         fingerprint = os.environ['HA_GROQ_TEST_ENVIRONMENT_HASH']
         state.write_text(json.dumps({'id': fingerprint, 'hash': fingerprint}))
@@ -113,7 +113,7 @@ def test_start_recreates_container_without_rebuilding_image(cloud_docker):
 
 def test_changed_core_build_argument_invalidates_cached_image(cloud_docker):
     cloud_docker("install")
-    calls = cloud_docker("install", HA_VERSION="2026.11.0")
+    calls = cloud_docker("install", HA_VERSION="2026.11.2")
 
     assert any("build" in call for call in calls)
     assert any(call[:2] == ["image", "rm"] for call in calls)
