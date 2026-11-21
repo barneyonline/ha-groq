@@ -11,7 +11,7 @@ import random
 import time
 from asyncio import CancelledError
 from collections import OrderedDict, deque
-from collections.abc import AsyncGenerator, Callable, Iterator, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import aclosing, suppress
 from contextvars import copy_context
 from dataclasses import dataclass, field
@@ -33,6 +33,7 @@ from .compound_tools import (
 )
 from .const import GROQ_FREE_TIER_LIMITS
 from .errors import GroqApiError, GroqResponseError, safe_error_payload
+from .json_utils import JSON_EXECUTOR_THRESHOLD, estimated_json_size_exceeds
 from .model_registry import GroqModel, model_from_api
 from .rate_limit import GroqRateLimiter
 from .repairs import async_create_model_access_issue, async_delete_model_access_issue
@@ -61,7 +62,8 @@ MAX_JSON_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_STREAM_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_AUDIO_RESPONSE_BYTES = 25 * 1024 * 1024
 RESPONSE_READ_CHUNK_BYTES = 64 * 1024
-JSON_EXECUTOR_THRESHOLD = 64 * 1024
+STREAM_CHUNKS_PER_YIELD = 256
+STREAM_LINES_PER_YIELD = 256
 GROQ_MODEL_VERSION_HEADER = "Groq-Model-Version"
 GROQ_LATEST_MODEL_VERSION = "latest"
 RATE_LIMIT_WINDOW_SECONDS = 60
@@ -242,6 +244,17 @@ async def _read_limited_response(
         return buffer.getvalue()
 
 
+async def async_decode_json_body[BodyT: bytes | str, T](
+    hass: HomeAssistant,
+    decode: Callable[[BodyT], T],
+    body: BodyT,
+) -> T:
+    """Keep normal responses inline and offload large JSON parsing."""
+    if len(body) >= JSON_EXECUTOR_THRESHOLD:
+        return await hass.async_add_executor_job(decode, body)
+    return decode(body)
+
+
 async def _iter_limited_response_lines(
     response: aiohttp.ClientResponse,
     limit: int,
@@ -252,6 +265,8 @@ async def _iter_limited_response_lines(
     total_bytes = 0
     pending = bytearray()
     scanned = 0
+    checkpoint_bytes = RESPONSE_READ_CHUNK_BYTES
+    chunks_since_yield = 0
     async for chunk in response.content.iter_chunked(RESPONSE_READ_CHUNK_BYTES):
         total_bytes += len(chunk)
         if total_bytes > limit:
@@ -259,32 +274,24 @@ async def _iter_limited_response_lines(
                 f"Groq {response_type} exceeded the response byte limit"
             )
         pending.extend(chunk)
+        chunks_since_yield += 1
+        extended_size = len(pending)
         while (newline := pending.find(b"\n", scanned)) >= 0:
             yield bytes(pending[: newline + 1])
             del pending[: newline + 1]
             scanned = 0
         scanned = len(pending)
+        if scanned < extended_size:
+            # Complete lines reach the SSE consumer's own checkpoints.
+            checkpoint_bytes = RESPONSE_READ_CHUNK_BYTES
+        # Tiny ready fragments can span many short lines without reaching the
+        # consumer's byte or line checkpoints. Count them across line boundaries.
+        if scanned >= checkpoint_bytes or chunks_since_yield >= STREAM_CHUNKS_PER_YIELD:
+            await asyncio.sleep(0)
+            checkpoint_bytes = scanned + RESPONSE_READ_CHUNK_BYTES
+            chunks_since_yield = 0
     if pending:
         yield bytes(pending)
-
-
-def _large_json_payload(payload: dict[str, Any]) -> bool:
-    """Estimate serialization work without encoding strings or copying containers."""
-    budget = JSON_EXECUTOR_THRESHOLD
-    pending: list[Iterator[Any]] = [iter((payload,))]
-    while pending:
-        for value in pending[-1]:
-            budget -= len(value) + 2 if isinstance(value, str) else 8
-            if budget <= 0:
-                return True
-            if isinstance(value, (dict, list, tuple)):
-                pending.append(
-                    iter(value.items() if isinstance(value, dict) else value)
-                )
-                break
-        else:
-            pending.pop()
-    return False
 
 
 def build_text_generation_payload(request: TextGenerationRequest) -> dict[str, Any]:
@@ -810,7 +817,7 @@ class GroqApiClient:
         )
         result = self._chat_result(payload, request.service_id)
         try:
-            parsed = json.loads(result.text)
+            parsed = await async_decode_json_body(self._hass, json.loads, result.text)
         except json.JSONDecodeError as err:
             raise GroqResponseError(
                 "Groq structured response was not valid JSON"
@@ -1162,7 +1169,9 @@ class GroqApiClient:
                     repair_payload,
                     repair_service_id,
                 )
-                payload = await self._async_decode_body(self._decode_json, body)
+                payload = await async_decode_json_body(
+                    self._hass, self._decode_json, body
+                )
                 if not isinstance(payload, dict):
                     self._mark_unavailable("Groq API returned non-object JSON")
                     raise GroqResponseError("Groq API returned non-object JSON")
@@ -1224,12 +1233,24 @@ class GroqApiClient:
 
                 self._mark_available()
                 completed = False
+                buffered_bytes = 0
+                buffered_lines = 0
                 async with aclosing(
                     _iter_limited_response_lines(
                         response, MAX_STREAM_RESPONSE_BYTES, "stream"
                     )
                 ) as lines:
                     async for raw_line in lines:
+                        buffered_bytes += len(raw_line)
+                        buffered_lines += 1
+                        # Both the HTTP reader and consumer can run synchronously
+                        # while data is buffered. Bound work between checkpoints.
+                        if (
+                            buffered_bytes >= RESPONSE_READ_CHUNK_BYTES
+                            or buffered_lines >= STREAM_LINES_PER_YIELD
+                        ):
+                            await asyncio.sleep(0)
+                            buffered_bytes = buffered_lines = 0
                         try:
                             line = raw_line.decode("utf-8").strip()
                         except UnicodeDecodeError as err:
@@ -1245,7 +1266,9 @@ class GroqApiClient:
                         # Each data line is a standalone JSON event; do not buffer
                         # across lines because SSE framing has already done that.
                         try:
-                            event = await self._async_decode_body(json.loads, data)
+                            event = await async_decode_json_body(
+                                self._hass, json.loads, data
+                            )
                         except json.JSONDecodeError as err:
                             raise GroqResponseError(
                                 "Groq stream returned invalid JSON"
@@ -1317,8 +1340,8 @@ class GroqApiClient:
                     )
 
                     if content_type.startswith("application/json"):
-                        payload = await self._async_decode_body(
-                            self._try_decode_json, body
+                        payload = await async_decode_json_body(
+                            self._hass, self._try_decode_json, body
                         )
                         if isinstance(payload, dict) and "error" in payload:
                             raise self._api_error(response.status, payload)
@@ -1362,9 +1385,9 @@ class GroqApiClient:
         guard_key: str | None,
     ) -> dict[str, Any]:
         """Serialize large request bodies off the loop using the session's encoder."""
-        if not isinstance(session, aiohttp.ClientSession) or not _large_json_payload(
-            payload
-        ):
+        if not isinstance(
+            session, aiohttp.ClientSession
+        ) or not estimated_json_size_exceeds(payload, JSON_EXECUTOR_THRESHOLD):
             return {"json": payload}
 
         # aiohttp gives the byte serializer precedence over the string serializer.
@@ -1381,14 +1404,6 @@ class GroqApiClient:
         self._rate_limiter.raise_if_blocked(guard_key)
         return {"data": body}
 
-    async def _async_decode_body[T](
-        self, decode: Callable[[Any], T], body: bytes | str
-    ) -> T:
-        """Keep normal responses inline and offload large JSON parsing."""
-        if len(body) >= JSON_EXECUTOR_THRESHOLD:
-            return await self._hass.async_add_executor_job(decode, body)
-        return decode(body)
-
     async def _async_raise_http_error(
         self,
         status: int,
@@ -1400,7 +1415,9 @@ class GroqApiClient:
         """Classify bounded error responses consistently across transports."""
         if 200 <= status < 300:
             return
-        payload = await self._async_decode_body(self._try_decode_json, body) or {}
+        payload = (
+            await async_decode_json_body(self._hass, self._try_decode_json, body) or {}
+        )
         if status == 429:
             GroqRateLimiter.raise_for_headers(
                 headers, payload if isinstance(payload, dict) else None

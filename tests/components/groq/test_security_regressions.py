@@ -14,8 +14,9 @@ from homeassistant.exceptions import (
 
 from custom_components.groq.api import GroqApiClient, GroqResponseError
 from custom_components.groq.attachments import (
-    _read_attachment_data_url,
-    async_attachment_content_parts,
+    ImageAttachmentBudget,
+    _read_attachment_group,
+    async_load_image_attachments,
 )
 from custom_components.groq.services import (
     ATTR_AUDIO_PATH,
@@ -153,13 +154,16 @@ async def test_attachment_count_and_total_size_are_bounded(tmp_path) -> None:
         paths.append(SimpleNamespace(mime_type="image/png", path=path))
 
     with pytest.raises(HomeAssistantError, match="at most 4 image attachments"):
-        await async_attachment_content_parts(_Hass(), paths, text="Describe")
+        ImageAttachmentBudget().admit(paths)
 
     with (
         patch("custom_components.groq.attachments.MAX_IMAGE_ATTACHMENT_TOTAL_BYTES", 5),
         pytest.raises(HomeAssistantError, match="combined attachment size"),
     ):
-        await async_attachment_content_parts(_Hass(), paths[:2], text="Describe")
+        budget = ImageAttachmentBudget()
+        await async_load_image_attachments(
+            _Hass(), budget.admit(paths[:2]), budget=budget
+        )
 
 
 @pytest.mark.asyncio
@@ -168,13 +172,12 @@ async def test_attachment_collection_within_limits_remains_available(tmp_path) -
     path = tmp_path / "image.png"
     path.write_bytes(b"abc")
 
-    result = await async_attachment_content_parts(
-        _Hass(),
-        [SimpleNamespace(mime_type="image/png", path=path)],
-        text="Describe",
-    )
+    budget = ImageAttachmentBudget()
+    sources = budget.admit([SimpleNamespace(mime_type="image/png", path=path)])
+    result = await async_load_image_attachments(_Hass(), sources, budget=budget)
 
-    assert result == [
+    assert result.source_bytes == 3
+    assert result.with_text("Describe") == [
         {"type": "text", "text": "Describe"},
         {
             "type": "image_url",
@@ -198,7 +201,7 @@ def test_attachment_read_rechecks_size_after_stat(tmp_path) -> None:
         patch("custom_components.groq.attachments.MAX_IMAGE_ATTACHMENT_BYTES", 5),
         pytest.raises(HomeAssistantError, match="exceeds the 10 MB"),
     ):
-        _read_attachment_data_url(path, "image/png")
+        _read_attachment_group((("image/png", path),), 20)
 
 
 class _ChunkedContent:

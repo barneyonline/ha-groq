@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from typing import Any, Literal
 
 from homeassistant.components import conversation
 from homeassistant.components.conversation import (
-    AssistantContent,
     ConversationEntity,
     ConversationInput,
     ConversationResult,
 )
-from homeassistant.components.conversation.chat_log import AssistantContentDeltaDict
 from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent
@@ -24,14 +21,15 @@ from .api import GroqApiClient, TextGenerationRequest
 from .chat import (
     MAX_TOOL_ITERATIONS,
     ChatHistoryCache,
-    _assistant_native,
     _async_chat_log_messages,
     _chat_log_tools,
-    _result_tool_calls,
+    assistant_content_from_result,
+    prepare_tool_round,
+    tool_calls_for_completion,
 )
 from .const import CONF_SUBENTRY_ID, DOMAIN
 from .entity import service_device_info
-from .errors import translated_error
+from .errors import GroqResponseError, translated_error
 from .model_registry import GroqCapability, GroqModelRegistry
 from .runtime import async_get_runtime
 from .text_generation import (
@@ -47,6 +45,7 @@ from .text_generation import (
     service_unique_id,
     text_generation_service_data,
 )
+from .tool_tasks import async_add_tool_batch, async_record_chat_completion
 from .types import GroqConfigEntry
 
 PARALLEL_UPDATES = 1
@@ -165,13 +164,14 @@ class GroqConversationEntity(ConversationEntity):
         text = ""
         use_streaming = service_stream(self._config_entry, self._service_data)
         history_cache = ChatHistoryCache()
-        for _iteration in range(MAX_TOOL_ITERATIONS):
+        for iteration in range(MAX_TOOL_ITERATIONS):
             request = await self._async_text_generation_request(
                 user_input,
                 chat_log,
                 tools,
                 history_cache,
             )
+            request, final_tool_round = prepare_tool_round(request, iteration)
             if error := request_body_options_error_message(
                 self._model_registry,
                 request.model,
@@ -191,34 +191,24 @@ class GroqConversationEntity(ConversationEntity):
             ):
                 raise translated_error(error, "invalid_request_options")
             if use_streaming:
-                text = await self._async_stream_message(user_input, chat_log, request)
+                text = await self._async_stream_message(
+                    user_input, chat_log, request, final_tool_round=final_tool_round
+                )
                 if not chat_log.unresponded_tool_results:
                     break
                 continue
 
             result = await self._client.async_generate_text(request)
             text = result.text
-            tool_calls = _result_tool_calls(result)
-            assistant_content = AssistantContent(
-                agent_id=user_input.agent_id,
-                content=text or None,
-                thinking_content=result.reasoning,
-                tool_calls=tool_calls or None,
-                native=_assistant_native(result) or None,
+            await async_record_chat_completion(
+                chat_log,
+                request,
+                result,
+                user_input.agent_id,
+                final_tool_round=final_tool_round,
             )
-            if tool_calls:
-                async for _content in chat_log.async_add_assistant_content(
-                    assistant_content
-                ):
-                    pass
-            else:
-                chat_log.async_add_assistant_content_without_tools(assistant_content)
             if not chat_log.unresponded_tool_results:
                 break
-        else:
-            raise translated_error(
-                "Groq Assist exceeded the tool-call limit", "tool_call_limit"
-            )
 
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_speech(text)
@@ -265,41 +255,48 @@ class GroqConversationEntity(ConversationEntity):
         user_input: ConversationInput,
         chat_log: conversation.ChatLog,
         request: TextGenerationRequest,
+        *,
+        final_tool_round: bool = False,
     ) -> str:
         """Stream an Assist response into Home Assistant's chat log."""
-        allowed_tools = {
-            tool["function"]["name"]
-            for tool in request.tools or []
-            if tool.get("type") == "function"
-        }
+        # Forward text as it arrives, then dispatch completed tools through the
+        # ChatLog API that accepts a caller-owned task map.
+        if listener := chat_log.delta_listener:
+            listener(chat_log, {"role": "assistant"})
+        async with aclosing(self._client.async_stream_chat(request)) as chunks:
+            async for chunk in chunks:
+                if isinstance(chunk, str):
+                    if listener := chat_log.delta_listener:
+                        listener(chat_log, {"content": chunk})
+                else:
+                    result = chunk
+                    break
+            else:
+                raise GroqResponseError("Groq stream returned no final result")
 
-        async def content_stream() -> AsyncGenerator[AssistantContentDeltaDict]:
-            yield {"role": "assistant"}
-            async with aclosing(self._client.async_stream_chat(request)) as chunks:
-                async for chunk in chunks:
-                    if isinstance(chunk, str):
-                        yield {"content": chunk}
-                    else:
-                        tool_calls = _result_tool_calls(chunk)
-                        if any(
-                            call.tool_name not in allowed_tools for call in tool_calls
-                        ):
-                            raise translated_error(
-                                "Groq returned an unexposed Home Assistant tool",
-                                "invalid_request_options",
-                            )
-                        yield {
-                            "tool_calls": tool_calls or None,
-                            "thinking_content": chunk.reasoning,
-                            "native": _assistant_native(chunk) or None,
-                        }
-
-        completed: list[str] = []
-        async with aclosing(content_stream()) as deltas:
+        tool_calls = tool_calls_for_completion(
+            request, result, final_tool_round=final_tool_round
+        )
+        assistant_content = assistant_content_from_result(
+            result, user_input.agent_id, tool_calls
+        )
+        if listener := chat_log.delta_listener:
+            listener(
+                chat_log,
+                {
+                    "tool_calls": assistant_content.tool_calls,
+                    "thinking_content": assistant_content.thinking_content,
+                },
+            )
+        if tool_calls:
+            await async_add_tool_batch(chat_log, assistant_content, notify_deltas=True)
+        elif (
+            assistant_content.content
+            or assistant_content.thinking_content
+            or assistant_content.native
+        ):
             async with aclosing(
-                chat_log.async_add_delta_content_stream(user_input.agent_id, deltas)
+                chat_log.async_add_assistant_content(assistant_content)
             ) as contents:
-                async for content in contents:
-                    if isinstance(content, AssistantContent) and content.content:
-                        completed.append(content.content)
-        return "".join(completed)
+                await anext(contents, None)
+        return result.text

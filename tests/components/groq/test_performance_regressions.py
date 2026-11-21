@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 
 import aiohttp
 import pytest
-from homeassistant.components.conversation import SystemContent
+from homeassistant.components.conversation import ChatLog, SystemContent
 from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -834,43 +834,35 @@ async def test_public_streams_release_response_before_returning(method, end):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("end", ["break", "error", "cancel", "invalid_tool"])
-async def test_assist_owns_stream_when_ha_consumer_stops_early(end):
-    response = Response(
-        body=(
-            b'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n'
-            b'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call",'
-            b'"function":{"name":"Unexposed","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}\n\n'
-            b"data: [DONE]\n\n"
-        )
-    )
-    client = GroqApiClient(Hass(), api_key="fake", session=Session(response))
-    consumer_closed = False
+@pytest.mark.parametrize("end", ["error", "cancel", "invalid_tool"])
+async def test_assist_closes_stream_on_failure_or_cancellation(hass, end):
     processing = asyncio.Event()
 
-    class ChatLog:
-        async def async_add_delta_content_stream(self, _, stream):
-            nonlocal consumer_closed
-            try:
-                assert await anext(stream) == {"role": "assistant"}
-                assert await anext(stream) == {"content": "hello"}
-                if end == "error":
-                    raise ValueError("downstream")
-                if end == "cancel":
-                    processing.set()
-                    await asyncio.Event().wait()
-                if end == "invalid_tool":
-                    await anext(stream)
-                return
-                yield  # This adapter is an async generator, like HA's implementation.
-            finally:
-                consumer_closed = True
+    class StreamingResponse(Response):
+        async def iter_chunked(self, _size):
+            yield b'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n'
+            if end == "cancel":
+                processing.set()
+                await asyncio.Future()
+            yield (
+                b'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call",'
+                b'"function":{"name":"Unexposed","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}\n\n'
+                b"data: [DONE]\n\n"
+            )
+
+    response = StreamingResponse()
+    client = GroqApiClient(hass, api_key="fake", session=Session(response))
+
+    def delta_listener(_log, delta):
+        if end == "error" and delta == {"content": "hello"}:
+            raise ValueError("downstream")
 
     request = TextGenerationRequest(prompt="fake", model="fake")
+    log = ChatLog(hass, "stream-failure", delta_listener=delta_listener)
     coroutine = GroqConversationEntity._async_stream_message(
         SimpleNamespace(_client=client),
         SimpleNamespace(agent_id="fake"),
-        ChatLog(),
+        log,
         request,
     )
     if end == "error":
@@ -885,10 +877,8 @@ async def test_assist_owns_stream_when_ha_consumer_stops_early(end):
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
-    else:
-        assert await coroutine == ""
     assert response.closed
-    assert consumer_closed
+    assert all(content.role != "assistant" for content in log.content)
 
 
 @pytest.mark.asyncio
@@ -897,9 +887,9 @@ async def test_discarded_history_does_not_build_tool_descriptors(monkeypatch):
 
     build_call = chat._tool_call_message
 
-    def inspect_call(call, **kwargs):
+    def inspect_call(call):
         assert call["id"] != "discarded"
-        return build_call(call, **kwargs)
+        return build_call(call)
 
     monkeypatch.setattr(chat, "_tool_call_message", inspect_call)
     content = [

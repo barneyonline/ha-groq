@@ -547,6 +547,21 @@ def request_body_options_error_message(
     return None
 
 
+def _approximate_tokens(encoded_bytes: int) -> int:
+    """Convert the encoded size to the same rough token budget at every call site."""
+    return max(
+        1, (encoded_bytes + _APPROX_CHARS_PER_TOKEN - 1) // _APPROX_CHARS_PER_TOKEN
+    )
+
+
+def _serialized_json_string_token_estimate(serialized: str) -> int:
+    """Estimate a compact, ASCII-escaped JSON value embedded as a string."""
+    # The existing JSON has no raw control characters. The outer string encoder
+    # adds its delimiters and escapes each quote and backslash once.
+    encoded_bytes = len(serialized) + 2 + serialized.count('"') + serialized.count("\\")
+    return _approximate_tokens(encoded_bytes)
+
+
 def _payload_token_estimate(
     value: Any, string_estimates: dict[int, tuple[str, int]] | None = None
 ) -> int:
@@ -574,11 +589,7 @@ def _payload_token_estimate(
         encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
     except TypeError:
         return 0
-    tokens = max(
-        1,
-        (len(encoded.encode("utf-8")) + _APPROX_CHARS_PER_TOKEN - 1)
-        // _APPROX_CHARS_PER_TOKEN,
-    )
+    tokens = _approximate_tokens(len(encoded.encode("utf-8")))
     if string_estimates is not None:
         string_estimates[id(value)] = (value, tokens)
     return tokens

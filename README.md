@@ -23,7 +23,7 @@
 
 ## Key features
 
-- **Assist conversations:** Streaming replies, Home Assistant tools and optional browser search with citations.
+- **Assist conversations:** Streaming replies, Home Assistant tools and optional browser search with citations. Each Assist or AI Task request shares a four-image, 20 MiB attachment limit across the current input and retained history.
 - **AI Tasks and automations:** Generate text and validated structured output.
 - **Speech recognition:** Voice pipelines, recorded-audio transcription and translation into English.
 - **Text-to-speech:** Orpheus voices, playback options and optional Long TTS.

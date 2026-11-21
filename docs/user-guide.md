@@ -50,8 +50,12 @@ Provided response actions:
 
 Camera inputs honor the invoking Home Assistant user's entity read permissions.
 Media-source and direct local-path inputs are restricted to administrators because
-they are resolved with Home Assistant process privileges. Assist and AI Task image
-inputs accept at most four attachments with a combined 20 MB limit.
+they are resolved with Home Assistant process privileges. Assist and AI Task
+requests accept up to four image attachments with a combined 20 MiB limit across
+the current input and retained history. Current images take priority, followed
+by the most recent history. A historical message keeps its text when its images
+would exceed the remaining budget. The integration checks the attachment count
+first and validates file metadata before reading image data.
 
 The integration does not provide custom automation triggers or conditions. Use standard Home Assistant entity, event, template, and other built-in automation triggers and conditions with Groq entities and actions.
 
@@ -185,7 +189,8 @@ Streaming Assist now works with Home Assistant tools enabled. Text arrives while
 Groq generates it; local tool calls execute only after the full response has
 arrived and the complete arguments and exposed tool names have been validated.
 Cancelled, malformed, and incomplete tool streams do not execute pending calls.
-The existing maximum number of tool rounds still applies.
+The last round is reserved for an answer. Provider-side browser search remains
+available on that round when enabled.
 
 For GPT-OSS 20B, 120B, and Safeguard 20B, enable **Browser search** in a Text
 Generation service's additional options. It is off by default. `groq.generate_text`

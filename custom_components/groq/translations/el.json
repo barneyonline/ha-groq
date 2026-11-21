@@ -431,6 +431,9 @@
         "attachment_file_missing": {
             "message": "The selected image attachment no longer exists"
         },
+        "attachment_file_unreadable": {
+            "message": "Το Home Assistant δεν μπόρεσε να διαβάσει τη συνημμένη εικόνα που επιλέχθηκε"
+        },
         "attachment_not_file": {
             "message": "The selected image attachment is not a file"
         },

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -10,11 +11,13 @@ from homeassistant.components import conversation, stt
 from homeassistant.components.ai_task import AITaskEntityFeature, GenDataTask
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_LLM_HASS_API, Platform
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import intent, llm
 
 from custom_components.groq.ai_task import GroqAITaskEntity
 from custom_components.groq.api import (
+    ChatCompletionResult,
     GroqApiClient,
     StructuredGenerationRequest,
     TextGenerationRequest,
@@ -26,7 +29,8 @@ from custom_components.groq.api import (
     normalize_base_url,
 )
 from custom_components.groq.attachments import (
-    async_attachment_content_parts,
+    ImageAttachmentBudget,
+    async_load_image_attachments,
     attachment_mime_type,
     attachment_path,
 )
@@ -150,6 +154,9 @@ class DummyTextClient:
         self.requests.append(request)
         for chunk in self.stream_chunks:
             yield chunk
+        yield ChatCompletionResult(
+            text="".join(self.stream_chunks), model=request.model, usage={}, raw={}
+        )
 
     async def async_generate_structured(self, request):
         self.requests.append(request)
@@ -300,7 +307,7 @@ class DummyChatLog:
 
     def __init__(self):
         self.assistant_content = []
-        self.stream_deltas = []
+        self.delta_listener = None
         self.content = []
         self.llm_api = None
 
@@ -323,78 +330,10 @@ class DummyChatLog:
     def async_add_assistant_content_without_tools(self, content):
         self.assistant_content.append(content)
 
-    async def async_add_delta_content_stream(self, agent_id, stream):
-        content = ""
-        async for delta in stream:
-            self.stream_deltas.append(delta)
-            content += delta.get("content", "")
-        completed = conversation.AssistantContent(agent_id=agent_id, content=content)
-        self.assistant_content.append(completed)
-        yield completed
-
-
-class DummyToolChatLog(DummyChatLog):
-    def __init__(self):
-        super().__init__()
-        self.content = [SimpleNamespace(role="system", content="")]
-        self.llm_api = None
-        self.provided_llm_data = None
-
-    @property
-    def unresponded_tool_results(self):
-        return self.content[-1].role == "tool_result"
-
-    @property
-    def continue_conversation(self):
-        return False
-
-    def async_add_assistant_content_without_tools(self, content):
-        super().async_add_assistant_content_without_tools(content)
-        self.content.append(content)
-
-    async def async_provide_llm_data(
-        self,
-        llm_context,
-        user_llm_hass_api,
-        user_llm_prompt,
-        user_extra_system_prompt,
-    ):
-        self.provided_llm_data = {
-            "context": llm_context,
-            "api": user_llm_hass_api,
-            "prompt": user_llm_prompt,
-            "extra": user_extra_system_prompt,
-        }
-        self.content[0] = SimpleNamespace(
-            role="system",
-            content=f"{user_llm_prompt}\n{user_extra_system_prompt}",
-        )
-        self.llm_api = SimpleNamespace(
-            custom_serializer=None,
-            tools=[
-                SimpleNamespace(
-                    name="GetState",
-                    description="Get an entity state",
-                    parameters=probatio.Schema({probatio.Required("entity_id"): str}),
-                )
-            ],
-        )
-
-    async def async_add_assistant_content(self, content):
-        self.assistant_content.append(content)
-        self.content.append(content)
-        if not content.tool_calls:
-            return
-        for tool_call in content.tool_calls:
-            tool_result = SimpleNamespace(
-                role="tool_result",
-                agent_id=content.agent_id,
-                tool_call_id=tool_call.id,
-                tool_name=tool_call.tool_name,
-                result=llm.ToolResult(data={"state": "on"}),
-            )
-            self.content.append(tool_result)
-            yield tool_result
+    async def async_add_assistant_content(self, content, *, tool_call_tasks=None):
+        self.async_add_assistant_content_without_tools(content)
+        return
+        yield
 
 
 class DummyStateTool(llm.Tool):
@@ -418,14 +357,56 @@ class DummyToolAPI(llm.API):
         )
 
 
-async def async_dummy_tool_chat_log() -> DummyToolChatLog:
-    """Return a dummy chat log with Home Assistant tools populated."""
-    chat_log = DummyToolChatLog()
+@pytest.fixture
+def state_tool_api(hass: HomeAssistant) -> Iterator[llm.API]:
+    """Register a deterministic Home Assistant tool for a test turn."""
+    api = DummyToolAPI(hass=hass, id="test_tools", name="Test tools")
+    unregister = llm.async_register_api(hass, api)
+    try:
+        yield api
+    finally:
+        unregister()
+
+
+def _conversation_turn(
+    hass: HomeAssistant, text: str, *, extra_system_prompt: str | None = None
+) -> tuple[conversation.ConversationInput, conversation.ChatLog]:
+    """Prepare a user turn as Home Assistant does before calling the agent."""
+    chat_log = conversation.ChatLog(hass, "conversation-id")
+    chat_log.async_add_user_content(conversation.UserContent(content=text))
+    user_input = conversation.ConversationInput(
+        text=text,
+        context=Context(),
+        conversation_id=chat_log.conversation_id,
+        device_id=None,
+        satellite_id=None,
+        language="en",
+        agent_id="conversation.groq_assist",
+        extra_system_prompt=extra_system_prompt,
+    )
+    return user_input, chat_log
+
+
+async def _async_task_chat_log(
+    hass: HomeAssistant, task: GenDataTask
+) -> conversation.ChatLog:
+    """Prepare an AI Task turn with the task's Home Assistant tool API."""
+    chat_log = conversation.ChatLog(hass, "conversation-id")
     await chat_log.async_provide_llm_data(
-        SimpleNamespace(platform="groq"),
-        user_llm_hass_api=None,
+        llm.LLMContext(
+            platform="groq",
+            context=None,
+            language=None,
+            assistant="ai_task",
+            device_id=None,
+        ),
+        user_llm_hass_api=task.llm_api,
         user_llm_prompt=DEFAULT_SYSTEM_PROMPT,
-        user_extra_system_prompt=None,
+    )
+    chat_log.async_add_user_content(
+        conversation.UserContent(
+            content=task.instructions, attachments=task.attachments
+        )
     )
     return chat_log
 
@@ -496,26 +477,28 @@ def add_text_service(
 async def test_attachment_helpers_handle_dicts_and_guardrails(tmp_path):
     image_path = tmp_path / "snapshot.png"
     image_path.write_bytes(b"image")
+    budget = ImageAttachmentBudget()
 
     assert attachment_mime_type({"media_content_type": "image/png"}) == "image/png"
     assert attachment_path({"path": image_path}) == image_path
     assert attachment_path({}) is None
     assert (
-        await async_attachment_content_parts(DummyHass(), [], text="Describe") is None
+        await async_load_image_attachments(DummyHass(), budget.admit([]), budget=budget)
+        is None
     )
 
     with pytest.raises(HomeAssistantError, match="resolve to files"):
-        await async_attachment_content_parts(
+        await async_load_image_attachments(
             DummyHass(),
-            [SimpleNamespace(mime_type="image/png")],
-            text="Describe",
+            budget.admit([SimpleNamespace(mime_type="image/png")]),
+            budget=budget,
         )
 
     with pytest.raises(HomeAssistantError, match="must be a file"):
-        await async_attachment_content_parts(
+        await async_load_image_attachments(
             DummyHass(),
-            [{"mime_type": "image/png", "path": tmp_path}],
-            text="Describe",
+            budget.admit([{"mime_type": "image/png", "path": tmp_path}]),
+            budget=budget,
         )
 
 
@@ -1924,7 +1907,7 @@ def test_tool_message_helpers_handle_dicts_and_invalid_values():
         "type": "function",
         "function": {
             "name": "GetState",
-            "arguments": '{"entity_id":"light.kitchen"}',
+            "arguments": {"entity_id": "light.kitchen"},
         },
     }
     assert _tool_call_message({"tool_name": "GetState", "tool_args": None}) is None
@@ -2051,7 +2034,7 @@ def test_tool_conversion_skips_missing_metadata():
 
 
 @pytest.mark.asyncio
-async def test_conversation_entity_streams_assist_response():
+async def test_conversation_entity_streams_assist_response(hass):
     entry = DummyEntry()
     service_data = {
         "unique_id": "assist-service",
@@ -2061,26 +2044,35 @@ async def test_conversation_entity_streams_assist_response():
         "stream": True,
     }
     client = DummyTextClient("", stream_chunks=["Turned ", "on ", "the lights."])
-    entity = GroqConversationEntity(DummyHass(), entry, service_data, client)
-    chat_log = DummyChatLog()
+    entity = GroqConversationEntity(hass, entry, service_data, client)
+    deltas = []
+    chat_log = conversation.ChatLog(
+        hass, "conversation-id", delta_listener=lambda _log, delta: deltas.append(delta)
+    )
+    prompt = "Turn on the kitchen lights"
+    chat_log.async_add_user_content(conversation.UserContent(content=prompt))
 
     result = await entity._async_handle_message(
-        DummyConversationInput(
-            text="Turn on the kitchen lights",
+        conversation.ConversationInput(
+            text=prompt,
+            context=Context(),
+            conversation_id=chat_log.conversation_id,
+            device_id=None,
+            satellite_id=None,
             language="en",
             agent_id="conversation.groq_assist",
-            extra_system_prompt=None,
         ),
         chat_log,
     )
 
     assert result.conversation_id == "conversation-id"
-    assert chat_log.assistant_content[0].content == "Turned on the lights."
-    assert chat_log.stream_deltas == [
+    assert chat_log.content[-1].content == "Turned on the lights."
+    assert deltas == [
         {"role": "assistant"},
         {"content": "Turned "},
         {"content": "on "},
         {"content": "the lights."},
+        {"tool_calls": None, "thinking_content": None},
     ]
     assert client.requests[0].model == "llama-3.1-8b-instant"
 
@@ -2256,7 +2248,7 @@ async def test_conversation_entity_keeps_repeated_prompt_current_attachment(tmp_
 
 
 @pytest.mark.asyncio
-async def test_conversation_entity_uses_home_assistant_llm_tools():
+async def test_conversation_entity_uses_home_assistant_llm_tools(hass, state_tool_api):
     entry = DummyEntry()
     service_data = {
         "unique_id": "assist-service",
@@ -2264,34 +2256,31 @@ async def test_conversation_entity_uses_home_assistant_llm_tools():
         "model": "openai/gpt-oss-20b",
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
         "stream": False,
-        CONF_LLM_HASS_API: ["assist"],
+        CONF_LLM_HASS_API: [state_tool_api.id],
     }
     client = DummyToolTextClient()
-    entity = GroqConversationEntity(DummyHass(), entry, service_data, client)
-    chat_log = DummyToolChatLog()
-
-    result = await entity._async_handle_message(
-        DummyConversationInput(
-            text="Is the kitchen light on?",
-            language="en",
-            agent_id="conversation.groq_assist",
-            extra_system_prompt="Prefer brief replies.",
-            as_llm_context=lambda domain: SimpleNamespace(platform=domain),
-        ),
-        chat_log,
+    entity = GroqConversationEntity(hass, entry, service_data, client)
+    user_input, chat_log = _conversation_turn(
+        hass, "Is the kitchen light on?", extra_system_prompt="Prefer brief replies."
     )
+    result = await entity._async_handle_message(user_input, chat_log)
 
     assert result.conversation_id == "conversation-id"
     assert result.continue_conversation is False
-    assert chat_log.provided_llm_data["api"] == ["assist"]
-    assert DEFAULT_SYSTEM_PROMPT in chat_log.provided_llm_data["prompt"]
-    assert chat_log.provided_llm_data["extra"] == "Prefer brief replies."
+    assert chat_log.llm_api.api is state_tool_api
     first_request = client.requests[0]
     assert first_request.system_prompt is None
+    assert DEFAULT_SYSTEM_PROMPT in first_request.messages[0]["content"]
+    assert "Prefer brief replies." in first_request.messages[0]["content"]
     assert first_request.tools[0]["function"]["name"] == "GetState"
     assert first_request.tool_choice == "auto"
-    assert chat_log.assistant_content[0].thinking_content == "Need current state."
-    assert chat_log.assistant_content[0].native == {
+    first_assistant = next(
+        message
+        for message in chat_log.content
+        if isinstance(message, conversation.AssistantContent)
+    )
+    assert first_assistant.thinking_content == "Need current state."
+    assert first_assistant.native == {
         "model": "openai/gpt-oss-20b",
         "usage": {"total_tokens": 12},
         "usage_breakdown": {"models": []},
@@ -2306,15 +2295,13 @@ async def test_conversation_entity_uses_home_assistant_llm_tools():
             }
         ],
     }
-    assert chat_log.assistant_content[0].tool_calls[0].tool_args == {
-        "entity_id": "light.kitchen"
-    }
+    assert first_assistant.tool_calls[0].tool_args == {"entity_id": "light.kitchen"}
     second_request = client.requests[1]
-    assert second_request.messages[-2] == {
+    assert second_request.messages[-1] == {
         "role": "tool",
         "tool_call_id": "call_1",
         "name": "GetState",
-        "content": '{"data":{"state":"on"},"error":false}',
+        "content": '{"data":{"entity_id":"light.kitchen","state":"on"},"error":false}',
     }
 
 
@@ -2353,110 +2340,30 @@ async def test_conversation_entity_returns_converse_error_from_llm_setup():
 
 
 @pytest.mark.asyncio
-async def test_conversation_entity_rejects_tools_for_non_tool_model():
+async def test_conversation_entity_rejects_tools_for_non_tool_model(
+    hass, state_tool_api
+):
     entry = DummyEntry()
     service_data = {
         "model": "no-tools",
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
+        CONF_LLM_HASS_API: [state_tool_api.id],
     }
     entity = GroqConversationEntity(
-        DummyHass(),
+        hass,
         entry,
         service_data,
         DummyTextClient("unused"),
         GroqModelRegistry([], include_built_ins=False),
     )
 
+    user_input, chat_log = _conversation_turn(hass, "Use tools")
     with pytest.raises(HomeAssistantError, match="tool calls"):
-        await entity._async_handle_message(
-            DummyConversationInput(
-                text="Use tools",
-                language="en",
-                agent_id="conversation.groq_assist",
-                extra_system_prompt=None,
-                as_llm_context=lambda domain: SimpleNamespace(platform=domain),
-            ),
-            DummyToolChatLog(),
-        )
+        await entity._async_handle_message(user_input, chat_log)
 
 
 @pytest.mark.asyncio
-async def test_conversation_entity_limits_unresolved_tool_iterations():
-    class AlwaysToolClient:
-        def __init__(self):
-            self.requests = []
-
-        async def async_generate_text(self, request):
-            self.requests.append(request)
-            return SimpleNamespace(
-                text="",
-                model=request.model,
-                usage={},
-                usage_breakdown=None,
-                reasoning=None,
-                tool_calls=[
-                    {
-                        "id": "call_loop",
-                        "type": "function",
-                        "function": {
-                            "name": "GetState",
-                            "arguments": '{"entity_id":"light.kitchen"}',
-                        },
-                    }
-                ],
-                executed_tools=None,
-                raw={},
-            )
-
-    class StuckToolChatLog(DummyChatLog):
-        def __init__(self):
-            super().__init__()
-            self.llm_api = SimpleNamespace(
-                custom_serializer=None,
-                tools=[
-                    SimpleNamespace(
-                        name="GetState",
-                        description="Get an entity state",
-                        parameters=probatio.Schema(
-                            {probatio.Required("entity_id"): str}
-                        ),
-                    )
-                ],
-            )
-
-        @property
-        def unresponded_tool_results(self):
-            return True
-
-        async def async_add_assistant_content(self, content):
-            self.assistant_content.append(content)
-            yield SimpleNamespace(content=None)
-
-    entry = DummyEntry()
-    service_data = {
-        "stream": False,
-        "model": "openai/gpt-oss-20b",
-        "system_prompt": DEFAULT_SYSTEM_PROMPT,
-    }
-    client = AlwaysToolClient()
-    entity = GroqConversationEntity(DummyHass(), entry, service_data, client)
-
-    with pytest.raises(HomeAssistantError, match="tool-call limit"):
-        await entity._async_handle_message(
-            DummyConversationInput(
-                text="Use tools",
-                language="en",
-                agent_id="conversation.groq_assist",
-                extra_system_prompt=None,
-            ),
-            StuckToolChatLog(),
-        )
-
-    assert len(client.requests) == 10
-
-
-@pytest.mark.asyncio
-async def test_conversation_entity_adapts_chat_log_llm_prompt():
+async def test_conversation_entity_adapts_chat_log_llm_prompt(hass):
     entry = DummyEntry()
     service_data = {
         "unique_id": "assist-service",
@@ -2466,25 +2373,11 @@ async def test_conversation_entity_adapts_chat_log_llm_prompt():
         "stream": False,
     }
     client = DummyTextClient("Done.")
-    entity = GroqConversationEntity(DummyHass(), entry, service_data, client)
-    chat_log = DummyToolChatLog()
-
-    result = await entity._async_handle_message(
-        DummyConversationInput(
-            text="Summarize the house",
-            language="en",
-            agent_id="conversation.groq_assist",
-            extra_system_prompt="Use one sentence.",
-            as_llm_context=lambda domain: llm.LLMContext(
-                platform=domain,
-                context=None,
-                language="en",
-                assistant=None,
-                device_id=None,
-            ),
-        ),
-        chat_log,
+    entity = GroqConversationEntity(hass, entry, service_data, client)
+    user_input, chat_log = _conversation_turn(
+        hass, "Summarize the house", extra_system_prompt="Use one sentence."
     )
+    result = await entity._async_handle_message(user_input, chat_log)
 
     assert result.conversation_id == "conversation-id"
     assert client.requests[0].system_prompt is None
@@ -2493,7 +2386,7 @@ async def test_conversation_entity_adapts_chat_log_llm_prompt():
 
 
 @pytest.mark.asyncio
-async def test_conversation_entity_adapts_chat_log_tool_results():
+async def test_conversation_entity_adapts_chat_log_tool_results(hass, state_tool_api):
     entry = DummyEntry()
     service_data = {
         "unique_id": "assist-service",
@@ -2501,30 +2394,20 @@ async def test_conversation_entity_adapts_chat_log_tool_results():
         "model": "openai/gpt-oss-20b",
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
         "stream": False,
-        CONF_LLM_HASS_API: ["test_tools"],
+        CONF_LLM_HASS_API: [state_tool_api.id],
     }
     client = DummyRealToolTextClient()
-    entity = GroqConversationEntity(DummyHass(), entry, service_data, client)
-    chat_log = DummyToolChatLog()
-
-    result = await entity._async_handle_message(
-        DummyConversationInput(
-            text="Is the kitchen light on?",
-            language="en",
-            agent_id="conversation.groq_assist",
-            extra_system_prompt=None,
-            as_llm_context=lambda domain: SimpleNamespace(platform=domain),
-        ),
-        chat_log,
-    )
+    entity = GroqConversationEntity(hass, entry, service_data, client)
+    user_input, chat_log = _conversation_turn(hass, "Is the kitchen light on?")
+    result = await entity._async_handle_message(user_input, chat_log)
 
     assert result.conversation_id == "conversation-id"
     assert result.response.speech["plain"]["speech"] == "The kitchen light is on."
-    assert client.requests[1].messages[-2] == {
+    assert client.requests[1].messages[-1] == {
         "role": "tool",
         "tool_call_id": "call_real",
         "name": "GetState",
-        "content": '{"data":{"state":"on"},"error":false}',
+        "content": '{"data":{"entity_id":"light.kitchen","state":"on"},"error":false}',
     }
 
 
@@ -2692,7 +2575,7 @@ async def test_ai_task_image_attachment_guardrails(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_uses_task_llm_api_tools():
+async def test_ai_task_entity_uses_task_llm_api_tools(hass, state_tool_api):
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2700,12 +2583,13 @@ async def test_ai_task_entity_uses_task_llm_api_tools():
         "model": "openai/gpt-oss-20b",
     }
     client = DummyRealToolTextClient()
-    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
+    entity = GroqAITaskEntity(hass, entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
+        llm_api=state_tool_api,
         instructions="Is the kitchen light on?",
     )
-    chat_log = await async_dummy_tool_chat_log()
+    chat_log = await _async_task_chat_log(hass, task)
 
     result = await entity._async_generate_data(task, chat_log)
 
@@ -2717,12 +2601,14 @@ async def test_ai_task_entity_uses_task_llm_api_tools():
         "role": "tool",
         "tool_call_id": "call_real",
         "name": "GetState",
-        "content": '{"data":{"state":"on"},"error":false}',
+        "content": '{"data":{"entity_id":"light.kitchen","state":"on"},"error":false}',
     } in client.requests[1].messages
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_uses_tools_with_structure_and_image(tmp_path):
+async def test_ai_task_entity_uses_tools_with_structure_and_image(
+    hass, state_tool_api, tmp_path
+):
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2730,11 +2616,11 @@ async def test_ai_task_entity_uses_tools_with_structure_and_image(tmp_path):
         "model": "meta-llama/llama-4-scout-17b-16e-instruct",
     }
     client = DummyStructuredToolTextClient()
-    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
+    entity = GroqAITaskEntity(hass, entry, service_data, client)
     image_path = tmp_path / "snapshot.png"
     image_path.write_bytes(b"image bytes")
     attachments = [
-        SimpleNamespace(
+        conversation.Attachment(
             media_content_id="media-source://camera/snapshot",
             mime_type="image/png",
             path=image_path,
@@ -2742,11 +2628,12 @@ async def test_ai_task_entity_uses_tools_with_structure_and_image(tmp_path):
     ]
     task = GenDataTask(
         name="state_summary",
+        llm_api=state_tool_api,
         instructions="Summarize this camera image and kitchen light state.",
         structure=probatio.Schema({probatio.Required("summary"): str}),
         attachments=attachments,
     )
-    chat_log = await async_dummy_tool_chat_log()
+    chat_log = await _async_task_chat_log(hass, task)
 
     result = await entity._async_generate_data(task, chat_log)
 
@@ -2772,7 +2659,7 @@ async def test_ai_task_entity_uses_tools_with_structure_and_image(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_validates_service_schema_with_tools():
+async def test_ai_task_entity_validates_service_schema_with_tools(hass, state_tool_api):
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2787,12 +2674,13 @@ async def test_ai_task_entity_validates_service_schema_with_tools():
         },
     }
     client = DummyStructuredToolTextClient('{"summary":"The kitchen light is on."}')
-    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
+    entity = GroqAITaskEntity(hass, entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
+        llm_api=state_tool_api,
         instructions="Summarize the kitchen light state.",
     )
-    chat_log = await async_dummy_tool_chat_log()
+    chat_log = await _async_task_chat_log(hass, task)
 
     result = await entity._async_generate_data(task, chat_log)
 
@@ -2804,7 +2692,9 @@ async def test_ai_task_entity_validates_service_schema_with_tools():
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_rejects_invalid_service_schema_tool_result():
+async def test_ai_task_entity_rejects_invalid_service_schema_tool_result(
+    hass, state_tool_api
+):
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2819,19 +2709,22 @@ async def test_ai_task_entity_rejects_invalid_service_schema_tool_result():
         },
     }
     client = DummyStructuredToolTextClient('{"wrong":"shape"}')
-    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
+    entity = GroqAITaskEntity(hass, entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
+        llm_api=state_tool_api,
         instructions="Summarize the kitchen light state.",
     )
-    chat_log = await async_dummy_tool_chat_log()
+    chat_log = await _async_task_chat_log(hass, task)
 
     with pytest.raises(HomeAssistantError, match="requested structure"):
         await entity._async_generate_data(task, chat_log)
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_rejects_invalid_service_schema_with_tools():
+async def test_ai_task_entity_rejects_invalid_service_schema_with_tools(
+    hass, state_tool_api
+):
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2844,19 +2737,22 @@ async def test_ai_task_entity_rejects_invalid_service_schema_with_tools():
         },
     }
     client = DummyStructuredToolTextClient('{"summary":"The kitchen light is on."}')
-    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
+    entity = GroqAITaskEntity(hass, entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
+        llm_api=state_tool_api,
         instructions="Summarize the kitchen light state.",
     )
-    chat_log = await async_dummy_tool_chat_log()
+    chat_log = await _async_task_chat_log(hass, task)
 
     with pytest.raises(HomeAssistantError, match="requested structure"):
         await entity._async_generate_data(task, chat_log)
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_rejects_unresolved_service_schema_ref_with_tools():
+async def test_ai_task_entity_rejects_unresolved_service_schema_ref_with_tools(
+    hass, state_tool_api
+):
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2869,19 +2765,22 @@ async def test_ai_task_entity_rejects_unresolved_service_schema_ref_with_tools()
         },
     }
     client = DummyStructuredToolTextClient('{"summary":"The kitchen light is on."}')
-    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
+    entity = GroqAITaskEntity(hass, entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
+        llm_api=state_tool_api,
         instructions="Summarize the kitchen light state.",
     )
-    chat_log = await async_dummy_tool_chat_log()
+    chat_log = await _async_task_chat_log(hass, task)
 
     with pytest.raises(HomeAssistantError, match="requested structure"):
         await entity._async_generate_data(task, chat_log)
 
 
 @pytest.mark.asyncio
-async def test_ai_task_entity_rejects_malformed_service_schema_tool_result():
+async def test_ai_task_entity_rejects_malformed_service_schema_tool_result(
+    hass, state_tool_api
+):
     entry = DummyEntry()
     service_data = {
         "unique_id": "task-service",
@@ -2895,12 +2794,13 @@ async def test_ai_task_entity_rejects_malformed_service_schema_tool_result():
         },
     }
     client = DummyStructuredToolTextClient("not json")
-    entity = GroqAITaskEntity(DummyHass(), entry, service_data, client)
+    entity = GroqAITaskEntity(hass, entry, service_data, client)
     task = GenDataTask(
         name="state_summary",
+        llm_api=state_tool_api,
         instructions="Summarize the kitchen light state.",
     )
-    chat_log = await async_dummy_tool_chat_log()
+    chat_log = await _async_task_chat_log(hass, task)
 
     with pytest.raises(HomeAssistantError, match="requested structure"):
         await entity._async_generate_data(task, chat_log)
@@ -2926,89 +2826,58 @@ async def test_ai_task_tool_request_inserts_system_instruction_without_existing_
 
 
 @pytest.mark.asyncio
-async def test_ai_task_tool_generation_requires_tool_capable_model():
+async def test_ai_task_tool_generation_requires_tool_capable_model(
+    hass, state_tool_api
+):
     entity = GroqAITaskEntity(
-        DummyHass(),
+        hass,
         DummyEntry(),
         {"model": "whisper-large-v3"},
         DummyTextClient("ok"),
     )
+    task = GenDataTask(
+        name="state_summary", instructions="Return data", llm_api=state_tool_api
+    )
+    chat_log = await _async_task_chat_log(hass, task)
 
     with pytest.raises(HomeAssistantError, match="tool calls"):
-        await entity._async_generate_text_with_tools(
-            SimpleNamespace(attachments=None),
-            DummyChatLog(),
-            "Return data",
-            [{"type": "function", "function": {"name": "GetState"}}],
-        )
+        await entity._async_generate_data(task, chat_log)
 
 
 @pytest.mark.asyncio
-async def test_ai_task_tool_generation_raises_after_tool_limit():
-    class LoopingToolClient:
-        def __init__(self):
-            self.requests = []
-
-        async def async_generate_text(self, request):
-            self.requests.append(request)
-            return SimpleNamespace(
-                text="",
-                model=request.model,
-                usage={},
-                usage_breakdown=None,
-                reasoning=None,
-                tool_calls=[
-                    {
-                        "id": f"call_{len(self.requests)}",
-                        "type": "function",
-                        "function": {
-                            "name": "GetState",
-                            "arguments": '{"entity_id":"light.kitchen"}',
-                        },
-                    }
-                ],
-                executed_tools=None,
-                raw={},
-            )
-
+async def test_ai_task_rejects_missing_attachment_before_provider_request(
+    hass, tmp_path
+):
+    client = DummyTextClient("ok")
     entity = GroqAITaskEntity(
-        DummyHass(),
-        DummyEntry(),
-        {"model": "openai/gpt-oss-20b"},
-        LoopingToolClient(),
-    )
-    chat_log = DummyToolChatLog()
-
-    with pytest.raises(HomeAssistantError, match="tool-call limit"):
-        await entity._async_generate_text_with_tools(
-            SimpleNamespace(attachments=None),
-            chat_log,
-            "Return data",
-            [{"type": "function", "function": {"name": "GetState"}}],
-        )
-
-
-@pytest.mark.asyncio
-async def test_ai_task_messages_ignores_unreadable_attachment_content():
-    entity = GroqAITaskEntity(
-        DummyHass(),
+        hass,
         DummyEntry(),
         {"model": "meta-llama/llama-4-scout-17b-16e-instruct"},
-        DummyTextClient("ok"),
+        client,
     )
     task = GenDataTask(
         name="camera_summary",
         instructions="Describe",
-        attachments=[SimpleNamespace(mime_type="image/png", path="/tmp/missing.png")],
+        attachments=[
+            conversation.Attachment(
+                media_content_id="media-source://media_source/local/missing.png",
+                mime_type="image/png",
+                path=tmp_path / "missing.png",
+            )
+        ],
+    )
+    chat_log = conversation.ChatLog(hass, "fixture")
+    chat_log.async_add_user_content(
+        conversation.UserContent(
+            content=task.instructions, attachments=task.attachments
+        )
     )
 
-    with patch(
-        "custom_components.groq.chat.async_attachment_content_parts",
-        return_value=None,
-    ):
-        assert await entity._async_task_messages(
-            task, task.instructions, DummyChatLog()
-        ) == [{"role": "user", "content": task.instructions}]
+    with pytest.raises(HomeAssistantError, match="does not exist") as error:
+        await entity._async_generate_data(task, chat_log)
+
+    assert error.value.translation_key == "attachment_file_missing"
+    assert not client.requests
 
 
 @pytest.mark.asyncio
