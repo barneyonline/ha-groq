@@ -62,6 +62,8 @@ Configure an Assist agent and a voice for your announcements.
 
 Requires **Home Assistant 2026.11.0+**, a Groq API key and internet access. Some audio processing options require `ffmpeg`.
 
+Repair notices follow their Groq account, and usage sensors keep their measurements and update subscriptions when renamed. See the [user guide](docs/user-guide.md#troubleshooting) for repair recovery.
+
 ## Documentation
 
 [Open the wiki](https://github.com/barneyonline/ha-groq/wiki) for setup, usage and troubleshooting.

@@ -10,7 +10,7 @@ from homeassistant.exceptions import ConfigEntryError
 
 from .api import async_preload_clientsession_helper
 from .const import DOMAIN, UNIQUE_ID
-from .repairs import async_reconcile_entry_issues
+from .repairs import async_reconcile_entry_issues, async_reconcile_startup_issues
 from .runtime import (
     async_hydrate_runtime_model_registry,
     build_runtime,
@@ -24,6 +24,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up Groq integration-level actions."""
     from .services import async_register_services
 
+    async_reconcile_startup_issues(hass)
     await async_register_services(hass)
     return True
 

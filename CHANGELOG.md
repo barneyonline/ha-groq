@@ -13,6 +13,8 @@ All notable changes to this project will be documented in this file.
 - Use native conditional form fields. Show Include Reasoning when Reasoning Format is set to Model default and preserve the saved toggle when an explicit format is selected.
 - Use Home Assistant's translated error when a Groq platform fails to unload.
 - Use Home Assistant Marketplace links in the installation guide.
+- Link repair notices to their Groq accounts and preserve the ignored status of existing notices. Remove stale notices when repairs are refreshed.
+- Preserve usage sensor measurements and update subscriptions during entity ID renames.
 
 ## v2.2.3 - 2026-11-14
 

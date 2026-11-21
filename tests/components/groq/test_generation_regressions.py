@@ -15,6 +15,7 @@ from homeassistant.core import Context, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import llm
 from homeassistant.helpers.chat_session import async_get_chat_session
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.groq import services
 from custom_components.groq.ai_task import GroqAITaskEntity
@@ -523,7 +524,8 @@ async def test_registered_service_preserves_defaults_and_cache_opt_out(
 
 @pytest.mark.asyncio
 async def test_reasoning_false_override_uses_effective_options(hass, monkeypatch):
-    entry = DummyEntry()
+    entry = MockConfigEntry(domain="groq")
+    entry.add_to_hass(hass)
     client = SimpleNamespace(
         async_generate_text=AsyncMock(
             return_value=SimpleNamespace(

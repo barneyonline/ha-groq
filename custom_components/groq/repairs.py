@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from contextlib import nullcontext
 from hashlib import sha1
 from typing import Any
 
@@ -82,11 +83,17 @@ def _create_issue(
     reason: str | None = None,
 ) -> None:
     """Create an issue with nonsecret ownership metadata for later reconciliation."""
+    # Native ownership and refresh landed together in Core 2026.11. Keep the
+    # advertised 2026.10 minimum working until the owner raises it.
+    ownership: dict[str, Any] = (
+        {"config_entry_id": entry_id} if hasattr(ir, "async_refresh_issues") else {}
+    )
     _update_issue(
         lambda: ir.async_create_issue(
             hass,
             DOMAIN,
             issue_id,
+            **ownership,
             is_fixable=False,
             is_persistent=True,
             issue_domain=DOMAIN,
@@ -228,6 +235,60 @@ def async_delete_model_configuration_issue(
     )
 
 
+def _adopt_legacy_issue(
+    hass: HomeAssistant, issue_id: str, issue: ir.IssueEntry, entry_id: str
+) -> bool:
+    """Link an active legacy repair in place, preserving its dismissal."""
+    if (
+        getattr(issue, "config_entry_id", None) is not None
+        or not issue.active
+        or issue.is_fixable is None
+        or issue.severity is None
+        or issue.translation_key is None
+    ):
+        return False
+    ownership: dict[str, Any] = {"config_entry_id": entry_id}
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        **ownership,
+        breaks_in_ha_version=issue.breaks_in_ha_version,
+        data=issue.data,
+        is_fixable=issue.is_fixable,
+        is_persistent=issue.is_persistent,
+        issue_domain=issue.issue_domain,
+        learn_more_url=issue.learn_more_url,
+        severity=issue.severity,
+        translation_key=issue.translation_key,
+        translation_placeholders=issue.translation_placeholders,
+    )
+    return True
+
+
+def async_reconcile_startup_issues(hass: HomeAssistant) -> None:
+    """Link stored repairs before account setup without rechecking their status."""
+    if not hasattr(ir, "async_refresh_issues"):
+        return
+
+    def adopt() -> None:
+        entry_ids = {
+            entry.entry_id for entry in hass.config_entries.async_entries(DOMAIN)
+        }
+        registry = ir.async_get(hass)
+        for (domain, issue_id), issue in list(registry.issues.items()):
+            entry_id = (issue.data or {}).get("entry_id")
+            if (
+                domain == DOMAIN
+                and issue_id.startswith(tuple(f"{kind}_" for kind in _ISSUE_TYPES))
+                and isinstance(entry_id, str)
+                and entry_id in entry_ids
+            ):
+                _adopt_legacy_issue(hass, issue_id, issue, entry_id)
+
+    _update_issue(adopt)
+
+
 def async_reconcile_entry_issues(
     hass: HomeAssistant,
     entry: GroqConfigEntry,
@@ -246,40 +307,69 @@ def async_reconcile_entry_issues(
         }
         configured_models = {data.get(CONF_MODEL) for data in services.values()}
         configured_models.add(entry_value(entry, CONF_MODEL))
-        for (domain, issue_id), issue in list(registry.issues.items()):
-            if domain != DOMAIN or not issue_id.startswith(
-                tuple(f"{kind}_" for kind in _ISSUE_TYPES)
-            ):
-                continue
-            data = issue.data or {}
-            # Old persistent issues had no ownership metadata and could never be
-            # resolved safely. Retire them once; active failures recreate scoped issues.
-            if "entry_id" not in data:
-                ir.async_delete_issue(hass, DOMAIN, issue_id)
-                continue
-            if data["entry_id"] != entry.entry_id:
-                continue
-            service_id = data.get("service_id")
-            obsolete = remove_entry or (
-                service_id is not None and service_id not in services
+        issues = {
+            issue_id: issue
+            for (domain, issue_id), issue in list(registry.issues.items())
+            if domain == DOMAIN
+            and issue_id.startswith(tuple(f"{kind}_" for kind in _ISSUE_TYPES))
+            and (
+                getattr(issue, "config_entry_id", None)
+                or (issue.data or {}).get("entry_id", entry.entry_id)
             )
-            model = data.get("model")
-            if model is not None:
-                if service_id is not None and service_id in services:
-                    obsolete |= services[service_id].get(CONF_MODEL) != model
-                else:
-                    obsolete |= model not in configured_models
-            feature = data.get("feature")
-            if (
-                model_registry is not None
-                and isinstance(model, str)
-                and isinstance(feature, str)
-            ):
-                try:
-                    obsolete |= model_registry.supports(model, GroqFeature(feature))
-                except ValueError:
-                    obsolete = True
-            if obsolete:
-                ir.async_delete_issue(hass, DOMAIN, issue_id)
+            == entry.entry_id
+        }
+        refresh_issues = getattr(ir, "async_refresh_issues", None)
+        # Include legacy issues by exact ID: filtering by native ownership would
+        # exclude them before adoption. Never refresh around platform forwarding;
+        # setup does not recheck request-time access/ffmpeg failures.
+        with (
+            refresh_issues(hass, DOMAIN, issue_ids=issues)
+            if refresh_issues is not None
+            else nullcontext()
+        ) as refresh:
+            for issue_id, issue in issues.items():
+                data = issue.data or {}
+                # Core can retain an ignored, inactive issue without its former
+                # metadata. Keep that dismissal until a real check recreates it;
+                # it has no visible notice or safely identifiable owner to clean.
+                if (
+                    not issue.active
+                    and issue.dismissed_version is not None
+                    and "entry_id" not in data
+                    and getattr(issue, "config_entry_id", None) is None
+                ):
+                    if refresh is not None:
+                        refresh.async_keep([issue_id])
+                    continue
+                obsolete = remove_entry or (
+                    "entry_id" not in data
+                    and getattr(issue, "config_entry_id", None) is None
+                )
+                service_id = data.get("service_id")
+                obsolete |= service_id is not None and service_id not in services
+                model = data.get("model")
+                if model is not None:
+                    if service_id is not None and service_id in services:
+                        obsolete |= services[service_id].get(CONF_MODEL) != model
+                    else:
+                        obsolete |= model not in configured_models
+                feature = data.get("feature")
+                if (
+                    model_registry is not None
+                    and isinstance(model, str)
+                    and isinstance(feature, str)
+                ):
+                    try:
+                        obsolete |= model_registry.supports(model, GroqFeature(feature))
+                    except ValueError:
+                        obsolete = True
+                if obsolete:
+                    if refresh is None:
+                        ir.async_delete_issue(hass, DOMAIN, issue_id)
+                    continue
+                if refresh is not None and not _adopt_legacy_issue(
+                    hass, issue_id, issue, entry.entry_id
+                ):
+                    refresh.async_keep([issue_id])
 
     _update_issue(reconcile)

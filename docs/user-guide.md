@@ -185,6 +185,10 @@ count as requests. Counters reset on integration reload or Home Assistant restar
 missing provider measurements remain unknown. Updates are pushed without polling
 or extra API calls, and sensors retain no prompts, responses, or source URLs.
 
+Renaming a usage sensor updates its entity ID in place and preserves its
+measurements and update subscription. Updates stop when Home Assistant unloads
+the sensor or its account.
+
 ## Streaming and browser search
 
 Streaming Assist now works with Home Assistant tools enabled. Text arrives while
@@ -230,6 +234,14 @@ request body options.
 - TTS audio processing fails: install `ffmpeg` on the Home Assistant host, choose direct single-part playback without audio normalization, or disable Long TTS.
 - Local image or audio file fails: direct paths and media-source inputs require an administrator, and direct paths must also be allowed by Home Assistant `allowlist_external_dirs`.
 - Diagnostics: download diagnostics from the integration page. API keys, endpoint URLs, and prompt fields are redacted.
+
+Repair notices retain their ignored status across account reloads. Request-time
+failures remain until a matching request succeeds or the affected service/model
+configuration is removed. Disabling an account hides its notices, and removing
+the account deletes them. Existing notices gain account ownership when Groq
+loads, even if their account is disabled or Groq cannot reach the provider.
+When every account is already disabled at startup, Home Assistant skips loading
+Groq. Legacy notices then gain ownership the next time Groq loads.
 
 ## Removal
 
