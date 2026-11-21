@@ -431,6 +431,9 @@
         "attachment_file_missing": {
             "message": "The selected image attachment no longer exists"
         },
+        "attachment_file_unreadable": {
+            "message": "Home Assistant ei saanud valitud pildimanust lugeda"
+        },
         "attachment_not_file": {
             "message": "The selected image attachment is not a file"
         },

@@ -13,7 +13,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
@@ -195,7 +195,10 @@ async def test_failed_platform_unload_preserves_runtime_and_descriptions(hass):
                 runtime.client, "async_shutdown", wraps=runtime.client.async_shutdown
             ) as shutdown,
         ):
-            assert not await async_unload_entry(hass, entry)
+            with pytest.raises(ConfigEntryError) as raised:
+                await async_unload_entry(hass, entry)
+            assert raised.value.translation_domain == "homeassistant"
+            assert raised.value.translation_key == "unload_platforms_failed"
             shutdown.assert_not_awaited()
         assert entry.runtime_data is runtime
         assert hass.data[SERVICE_DESCRIPTION_CACHE] == descriptions
@@ -304,11 +307,11 @@ async def test_legacy_mapping_migration_is_idempotent(hass):
         data={"unique_id": "stable-id", "api_key": "test-key"},
     )
     entry.add_to_hass(hass)
-    assert await async_migrate_entry(hass, entry)
+    assert await async_migrate_entry(hass, entry) is None
     assert entry.unique_id == "stable-id"
     assert entry.minor_version == 2
     assert dict(entry.data) == {"api_key": "test-key"}
-    assert await async_migrate_entry(hass, entry)
+    assert await async_migrate_entry(hass, entry) is None
 
 
 @pytest.mark.parametrize("version", [2, 99])
@@ -349,7 +352,7 @@ async def test_newer_minor_migration_is_accepted_without_changes(hass):
     entry.add_to_hass(hass)
     before = deepcopy(entry.as_dict())
     with patch.object(hass.config_entries, "async_update_entry") as update:
-        assert await async_migrate_entry(hass, entry)
+        assert await async_migrate_entry(hass, entry) is None
     update.assert_not_called()
     assert entry.as_dict() == before
 
@@ -453,13 +456,8 @@ async def test_real_subentry_flow_clears_assist_control(hass, advanced):
     assert stored["max_tokens"] == 321
 
 
-async def test_real_structured_output_fallback_repeated_saves(hass):
-    """Validate defaults and persistence through the older HA flow manager."""
-    from homeassistant import data_entry_flow
-
-    if hasattr(data_entry_flow, "Optional"):
-        pytest.skip("This regression exercises HA without conditional field support")
-
+async def test_real_structured_output_visibility_repeated_saves(hass):
+    """Validate visible fields and persistence through the HA flow manager."""
     service = text_service(model="openai/gpt-oss-20b")
     service["data"].pop("llm_hass_api")
     entry = account(hass, services=[service])
@@ -476,7 +474,7 @@ async def test_real_structured_output_fallback_repeated_saves(hass):
     ):
         for submitted in (
             {"structured_outputs": True, **saved},
-            {"structured_outputs": False},
+            {"structured_outputs": False, "schema_name": "ignored_hidden_value"},
             {},
             {"structured_outputs": True},
             {"strict": False},
@@ -496,9 +494,11 @@ async def test_real_structured_output_fallback_repeated_saves(hass):
             )
             assert result["step_id"] == "text_generation_advanced"
             markers = {key.schema: key for key in result["data_schema"].schema}
-            assert all(
-                getattr(key, "visible", None) is None for key in markers.values()
-            )
+            for key in schema_fields:
+                assert markers[key].visible == {
+                    "field": "structured_outputs",
+                    "value": True,
+                }
             assert markers["structured_outputs"].default() is enabled
             defaults = result["data_schema"]({})
             previous = entry.subentries["text-service"].data
@@ -515,11 +515,63 @@ async def test_real_structured_output_fallback_repeated_saves(hass):
             assert result["reason"] == "reconfigure_successful"
             enabled = submitted.get("structured_outputs", enabled)
             saved.update(
-                {key: value for key, value in submitted.items() if key in schema_fields}
+                {
+                    key: value
+                    for key, value in submitted.items()
+                    if enabled and key in schema_fields
+                }
             )
             stored = entry.subentries["text-service"].data
             assert stored["structured_outputs"] is enabled
             assert {key: stored[key] for key in schema_fields} == saved
+
+
+async def test_real_reasoning_visibility_preserves_edits_after_retry(hass):
+    """Keep the toggle when a retry hides it after a visible edit."""
+    service = text_service(model="openai/gpt-oss-20b")
+    entry = account(hass, services=[service])
+    with patch(
+        "custom_components.groq.config_flow.async_get_model_registry",
+        return_value=GroqModelRegistry(),
+    ):
+        form = await hass.config_entries.subentries.async_init(
+            (entry.entry_id, "text_generation"),
+            context={"source": "reconfigure", "subentry_id": "text-service"},
+        )
+        flow_id = form["flow_id"]
+        form = await hass.config_entries.subentries.async_configure(
+            flow_id,
+            {
+                "name": "Text service",
+                "model": "openai/gpt-oss-20b",
+                "advanced_options": True,
+            },
+        )
+        assert form["step_id"] == "text_generation_advanced"
+        form = await hass.config_entries.subentries.async_configure(
+            flow_id,
+            {
+                "reasoning_format": "",
+                "include_reasoning": True,
+                "request_body_options": {"model": "invalid"},
+            },
+        )
+        assert form["errors"] == {
+            "request_body_options": "reserved_request_body_option"
+        }
+        result = await hass.config_entries.subentries.async_configure(
+            flow_id,
+            {
+                "reasoning_format": "parsed",
+                "include_reasoning": False,
+                "request_body_options": {},
+            },
+        )
+    assert result["type"] == "abort"
+    assert result["reason"] == "reconfigure_successful"
+    saved = entry.subentries["text-service"].data
+    assert saved["reasoning_format"] == "parsed"
+    assert saved["include_reasoning"] is True
 
 
 @pytest.mark.parametrize("advanced", [False, True])
@@ -740,7 +792,12 @@ async def test_real_account_setup_unload_reload_and_removal(hass):
         assert not own_issues(hass)
 
 
-async def test_reconcile_legacy_and_invalid_persistent_issue_metadata(hass):
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_reconcile_legacy_and_invalid_persistent_issue_metadata(
+    hass, monkeypatch, legacy
+):
+    if legacy:
+        monkeypatch.delattr(ir, "async_refresh_issues")
     entry = account(hass, services=[text_service()])
     registry = ir.async_get(hass)
     for issue_id, metadata in (

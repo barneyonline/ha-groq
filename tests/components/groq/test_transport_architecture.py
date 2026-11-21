@@ -421,7 +421,10 @@ def test_attachment_read_is_bounded(tmp_path):
         patch.object(attachments, "read_bounded_file", side_effect=PermissionError),
         pytest.raises(HomeAssistantError),
     ):
-        attachments._read_attachment_data_url(path, "image/png")
+        attachments._read_attachment_group(
+            (("image/png", path),),
+            attachments.MAX_IMAGE_ATTACHMENT_TOTAL_BYTES,
+        )
 
 
 @pytest.mark.asyncio

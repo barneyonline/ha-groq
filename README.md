@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/barneyonline/ha-groq/releases"><img src="https://img.shields.io/github/v/release/barneyonline/ha-groq?display_name=tag&amp;sort=semver" alt="Latest release"></a>
-  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=barneyonline&amp;repository=ha-groq&amp;category=integration"><img src="https://img.shields.io/badge/HACS-Default-41BDF5.svg" alt="Open Groq in HACS"></a>
+  <a href="https://my.home-assistant.io/redirect/marketplace_repository/?owner=barneyonline&amp;repository=ha-groq&amp;category=integration"><img src="https://my.home-assistant.io/badges/marketplace_repository.svg" alt="Open Groq in the Home Assistant Marketplace"></a>
 </p>
 
 <p align="center">Bring Groq to Assist, voice pipelines and automations in Home Assistant.</p>
@@ -23,7 +23,7 @@
 
 ## Key features
 
-- **Assist conversations:** Streaming replies, Home Assistant tools and optional browser search with citations.
+- **Assist conversations:** Streaming replies, Home Assistant tools and optional browser search with citations. Each Assist or AI Task request shares a four-image, 20 MiB attachment limit across the current input and retained history.
 - **AI Tasks and automations:** Generate text and validated structured output.
 - **Speech recognition:** Voice pipelines, recorded-audio transcription and translation into English.
 - **Text-to-speech:** Orpheus voices, playback options and optional Long TTS.
@@ -56,13 +56,13 @@ Configure an Assist agent and a voice for your announcements.
 
 ## Get started
 
-1. [Open Groq in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=barneyonline&repository=ha-groq&category=integration), download it and restart Home Assistant.
+1. [Open Groq in the Home Assistant Marketplace](https://my.home-assistant.io/redirect/marketplace_repository/?owner=barneyonline&repository=ha-groq&category=integration) and install it. Restart Home Assistant if prompted.
 2. Go to **Settings → Devices & services → Add integration → Groq**.
 3. Add your [Groq API key](https://console.groq.com/), then add Text Generation, Speech-to-Text, Text-to-Speech or Image Recognition services.
 
-Requires **Home Assistant 2026.10.0+**, a Groq API key and internet access. Some audio processing options require `ffmpeg`.
+Requires **Home Assistant 2026.11.0+**, a Groq API key and internet access. Some audio processing options require `ffmpeg`.
 
-On Home Assistant 2026.11+, repair notices follow their account entry and usage sensors keep their update subscription when renamed. Home Assistant 2026.10 retains compatible repair cleanup and entity rename behavior. See the [user guide](docs/user-guide.md#troubleshooting) for repair recovery.
+Repair notices follow their Groq account, and usage sensors keep their measurements and update subscriptions when renamed. See the [user guide](docs/user-guide.md#troubleshooting) for repair recovery.
 
 ## Documentation
 
@@ -86,7 +86,7 @@ Full configuration, action examples, limitations and removal: **[Groq user guide
 
 Groq is a cloud service. Models and request options vary by account and can change. Long TTS uses additional CPU and API quota. Local media and audio actions retain administrator and allowed-path restrictions.
 
-TTS free-tier protection conservatively counts each attempted HTTP request, including retries after network failures. Cached speech adds no local usage, and identical requests sharing one synthesis count once per HTTP attempt.
+TTS free-tier protection conservatively counts each attempted HTTP request, including retries after network failures before a response starts. Cached speech adds no local usage, and identical requests sharing one synthesis count once per HTTP attempt.
 
 The user guide covers [supported functionality](docs/user-guide.md#supported-functionality), [configuration and cache budgets](docs/user-guide.md#configuration), [browser search](docs/user-guide.md#streaming-and-browser-search), [sensor scope](docs/user-guide.md#usage-sensors), [known limitations](docs/user-guide.md#known-limitations) and [removal](docs/user-guide.md#removal).
 

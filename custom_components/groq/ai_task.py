@@ -18,13 +18,18 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import GroqApiClient, StructuredGenerationRequest, TextGenerationRequest
+from .api import (
+    GroqApiClient,
+    StructuredGenerationRequest,
+    TextGenerationRequest,
+    async_decode_json_body,
+)
 from .chat import (
     MAX_TOOL_ITERATIONS,
-    _assistant_native,
+    ChatHistoryCache,
     _async_chat_log_messages,
     _chat_log_tools,
-    _result_tool_calls,
+    prepare_tool_round,
 )
 from .const import CONF_SUBENTRY_ID
 from .entity import service_device_info
@@ -51,6 +56,7 @@ from .text_generation import (
     text_generation_service_data,
     schema_to_json_schema,
 )
+from .tool_tasks import async_record_chat_completion
 from .types import GroqConfigEntry
 
 PARALLEL_UPDATES = 1
@@ -94,6 +100,11 @@ def _strip_json_fence(text: str) -> str:
     if lines and lines[-1].strip() == "```":
         lines = lines[:-1]
     return "\n".join(lines).strip()
+
+
+def _decode_json_text(text: str) -> Any:
+    """Decode the JSON text an AI task may receive within a Markdown fence."""
+    return json.loads(_strip_json_fence(text))
 
 
 def _structure_description(schema: probatio.Schema) -> str:
@@ -249,6 +260,7 @@ class GroqAITaskEntity(AITaskEntity):
         task: GenDataTask,
         instructions: str,
         chat_log: conversation.ChatLog,
+        history_cache: ChatHistoryCache,
     ) -> list[dict[str, Any]]:
         """Use HA's prepared prompt and history for every AI task request."""
         messages = await _async_chat_log_messages(
@@ -258,6 +270,7 @@ class GroqAITaskEntity(AITaskEntity):
             chat_log,
             task.instructions,
             task.attachments,
+            history_cache,
         )
         message = next(
             message for message in reversed(messages) if message["role"] == "user"
@@ -296,7 +309,11 @@ class GroqAITaskEntity(AITaskEntity):
             )
         return data
 
-    def _raise_request_errors(self, request: TextGenerationRequest) -> None:
+    def _raise_request_errors(
+        self,
+        request: TextGenerationRequest,
+        history_cache: ChatHistoryCache,
+    ) -> None:
         """Raise Home Assistant errors for invalid Groq request options."""
         if error := compound_builtin_tools_error_message(
             self._model_registry,
@@ -310,7 +327,11 @@ class GroqAITaskEntity(AITaskEntity):
             request.extra_body,
         ):
             raise translated_error(error, "invalid_request_options")
-        if error := request_context_window_error(self._model_registry, request):
+        if error := request_context_window_error(
+            self._model_registry,
+            request,
+            string_estimates=history_cache.string_estimates,
+        ):
             raise translated_error(error, "invalid_request_options")
 
     async def _async_tool_generation_request(
@@ -320,7 +341,7 @@ class GroqAITaskEntity(AITaskEntity):
         instructions: str,
         tools: list[dict[str, Any]],
         output_instruction: str | None,
-        attachment_cache: dict[tuple[str, str], Any] | None = None,
+        history_cache: ChatHistoryCache | None = None,
     ) -> TextGenerationRequest:
         """Build an AI task request that includes Home Assistant tool state."""
         model = service_model(self._config_entry, self._service_data)
@@ -331,7 +352,7 @@ class GroqAITaskEntity(AITaskEntity):
             chat_log,
             instructions,
             task.attachments,
-            attachment_cache,
+            history_cache,
         )
         if output_instruction:
             messages = [dict(message) for message in messages]
@@ -368,58 +389,54 @@ class GroqAITaskEntity(AITaskEntity):
                 feature="Home Assistant tool calls",
             )
 
-        attachment_cache: dict[tuple[str, str], Any] = {}
-        for _iteration in range(MAX_TOOL_ITERATIONS):
+        history_cache = ChatHistoryCache()
+        for iteration in range(MAX_TOOL_ITERATIONS):
             request = await self._async_tool_generation_request(
                 task,
                 chat_log,
                 instructions,
                 tools,
                 output_instruction,
-                attachment_cache,
+                history_cache,
             )
-            self._raise_request_errors(request)
+            request, final_tool_round = prepare_tool_round(request, iteration)
+            self._raise_request_errors(request, history_cache)
             result = await self._client.async_generate_text(request)
-            tool_calls = _result_tool_calls(result)
-            assistant_content = AssistantContent(
-                agent_id=service_unique_id(self._config_entry, self._service_data),
-                content=result.text or None,
-                thinking_content=result.reasoning,
-                tool_calls=tool_calls or None,
-                native=_assistant_native(result) or None,
+            await async_record_chat_completion(
+                chat_log,
+                request,
+                result,
+                service_unique_id(self._config_entry, self._service_data),
+                final_tool_round=final_tool_round,
             )
-            if tool_calls:
-                async for _content in chat_log.async_add_assistant_content(
-                    assistant_content
-                ):
-                    pass
-            else:
-                chat_log.async_add_assistant_content_without_tools(assistant_content)
             if not chat_log.unresponded_tool_results:
-                return result
-        raise translated_error(
-            "Groq AI task exceeded the tool-call limit", "tool_call_limit"
-        )
+                break
+        return result
 
     async def _async_generate_json_fallback(
         self,
         task: GenDataTask,
         chat_log: conversation.ChatLog,
         instructions: str,
-        schema: dict[str, Any] | None = None,
+        schema: dict[str, Any] | None,
+        history_cache: ChatHistoryCache,
     ) -> GenDataTaskResult:
         """Generate and validate JSON without Groq json_schema mode."""
         instructions = _json_fallback_instructions(instructions, task, schema)
         request = self._text_generation_request(
             instructions,
-            await self._async_task_messages(task, instructions, chat_log),
+            await self._async_task_messages(
+                task, instructions, chat_log, history_cache
+            ),
         )
-        self._raise_request_errors(request)
+        self._raise_request_errors(request, history_cache)
         result = await self._client.async_generate_text(request)
         data: Any = result.text
         if task.structure is not None or schema is not None:
             try:
-                data = json.loads(_strip_json_fence(result.text))
+                data = await async_decode_json_body(
+                    self.hass, _decode_json_text, result.text
+                )
             except json.JSONDecodeError as err:
                 raise translated_error(
                     "Groq returned data that did not match the requested structure",
@@ -472,7 +489,9 @@ class GroqAITaskEntity(AITaskEntity):
             data: Any = result.text
             if schema is not None:
                 try:
-                    data = json.loads(_strip_json_fence(result.text))
+                    data = await async_decode_json_body(
+                        self.hass, _decode_json_text, result.text
+                    )
                     data = await self._validate_result(data, task, schema)
                 except (json.JSONDecodeError, probatio.Invalid) as err:
                     raise translated_error(
@@ -484,6 +503,7 @@ class GroqAITaskEntity(AITaskEntity):
                 data=data,
             )
 
+        history_cache = ChatHistoryCache()
         model = service_model(self._config_entry, self._service_data)
         supports_structured_outputs = self._model_registry.supports(
             model, GroqFeature.STRUCTURED_OUTPUTS
@@ -495,21 +515,23 @@ class GroqAITaskEntity(AITaskEntity):
                 instructions,
                 schema,
                 schema_name,
-                messages=await self._async_task_messages(task, instructions, chat_log),
+                messages=await self._async_task_messages(
+                    task, instructions, chat_log, history_cache
+                ),
                 strict=(
                     True
                     if task.structure is not None
                     else service_strict(self._config_entry, self._service_data)
                 ),
             )
-            self._raise_request_errors(request)
+            self._raise_request_errors(request, history_cache)
             try:
                 response = await self._client.async_generate_structured(request)
             except GroqApiError as err:
                 if task.structure is None or not _can_retry_structured_error(err):
                     raise
                 return await self._async_generate_json_fallback(
-                    task, chat_log, instructions, schema
+                    task, chat_log, instructions, schema, history_cache
                 )
             structured_data: Any = response["data"]
             # The API already validated its JSON Schema; only HA's richer
@@ -518,7 +540,7 @@ class GroqAITaskEntity(AITaskEntity):
             self._record_result(chat_log, response["text"])
         else:
             return await self._async_generate_json_fallback(
-                task, chat_log, instructions, schema
+                task, chat_log, instructions, schema, history_cache
             )
 
         return GenDataTaskResult(

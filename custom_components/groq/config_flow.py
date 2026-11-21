@@ -31,6 +31,7 @@ from .const import (
     CONF_API_KEY,
     CONF_ENABLE_LONG_TTS,
     CONF_ENABLED_FEATURES,
+    CONF_INCLUDE_REASONING,
     CONF_MODEL,
     CONF_NAME,
     CONF_NORMALIZE_AUDIO,
@@ -708,9 +709,8 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
     ) -> SubentryFlowResult:
         """Configure advanced text generation request options."""
         if user_input is not None:
-            # HA omits fields hidden by the Structured Outputs toggle. Merge
-            # those fields from the capability-sanitized data so disabling the
-            # toggle keeps the schema, name, and strictness for later reuse.
+            # Start with the capability-sanitized data so fields hidden by HA
+            # retain their saved values.
             service_data = {
                 **self._pending_service_data,
                 **user_input,
@@ -721,7 +721,12 @@ class GroqServiceSubentryFlow(ConfigSubentryFlow):
             if errors:
                 # A retry can hide these fields. Retain edits, including an
                 # explicitly cleared schema, before HA omits them next time.
-                for key in (CONF_SCHEMA_NAME, CONF_SCHEMA, CONF_STRICT):
+                for key in (
+                    CONF_SCHEMA_NAME,
+                    CONF_SCHEMA,
+                    CONF_STRICT,
+                    CONF_INCLUDE_REASONING,
+                ):
                     if key in user_input:
                         self._pending_service_data[key] = user_input[key]
                 advanced_errors = {

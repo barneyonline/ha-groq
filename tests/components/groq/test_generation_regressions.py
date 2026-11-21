@@ -15,6 +15,7 @@ from homeassistant.core import Context, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import llm
 from homeassistant.helpers.chat_session import async_get_chat_session
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.groq import services
 from custom_components.groq.ai_task import GroqAITaskEntity
@@ -24,7 +25,11 @@ from custom_components.groq.api import (
     TextGenerationRequest,
 )
 from custom_components.groq.conversation import GroqConversationEntity
-from custom_components.groq.chat import _async_chat_log_messages, _result_tool_calls
+from custom_components.groq.chat import (
+    ChatHistoryCache,
+    _async_chat_log_messages,
+    _result_tool_calls,
+)
 from custom_components.groq.feature_registry import GroqFeature, GroqFeatureRegistry
 from custom_components.groq.model_registry import GroqModelRegistry
 from custom_components.groq.prompt_cache import GroqPromptCache
@@ -218,8 +223,9 @@ async def test_real_chat_log_executes_and_validates_tools(
     data = {"model": "openai/gpt-oss-20b", "llm_hass_api": [api.id]}
     if platform == "assist":
         data["stream"] = False
+    context = Context()
     try:
-        with async_get_chat_session(hass) as chat_session:
+        with async_get_chat_session(hass, context=context) as chat_session:
             if platform in {"assist", "assist_stream"}:
                 entity = GroqConversationEntity(hass, DummyEntry(), data, client)
                 with conversation.async_get_chat_log(hass, chat_session) as log:
@@ -227,7 +233,7 @@ async def test_real_chat_log_executes_and_validates_tools(
                     result = await entity._async_handle_message(
                         conversation.ConversationInput(
                             text="Read level",
-                            context=Context(),
+                            context=context,
                             conversation_id=chat_session.conversation_id,
                             device_id=None,
                             satellite_id=None,
@@ -403,7 +409,7 @@ async def test_discarded_images_are_not_read_and_current_image_is_reused(
     hass = DummyHass()
     read = AsyncMock(wraps=hass.async_add_executor_job)
     monkeypatch.setattr(hass, "async_add_executor_job", read)
-    cache = {}
+    cache = ChatHistoryCache()
     for _ in range(2):
         messages = await _async_chat_log_messages(
             hass,
@@ -518,7 +524,8 @@ async def test_registered_service_preserves_defaults_and_cache_opt_out(
 
 @pytest.mark.asyncio
 async def test_reasoning_false_override_uses_effective_options(hass, monkeypatch):
-    entry = DummyEntry()
+    entry = MockConfigEntry(domain="groq")
+    entry.add_to_hass(hass)
     client = SimpleNamespace(
         async_generate_text=AsyncMock(
             return_value=SimpleNamespace(
@@ -616,7 +623,7 @@ async def test_real_ai_task_chat_log_keeps_api_prompt_and_final_content(
         instructions="Summarize",
         llm_api=PromptAPI(hass=hass, id="context_only", name="Context only"),
     )
-    with async_get_chat_session(hass) as session:
+    with async_get_chat_session(hass, context=None) as session:
         result = await entity.internal_async_generate_data(session, task)
         with conversation.async_get_chat_log(hass, session) as chat_log:
             assistants = [item for item in chat_log.content if item.role == "assistant"]

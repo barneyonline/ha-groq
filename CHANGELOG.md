@@ -4,10 +4,42 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### 🚧 Breaking changes
+
+- Raise the minimum supported Home Assistant version to `2026.11.0`.
+
 ### 🔧 Improvements
 
-- On Home Assistant 2026.11+, attach repair issues to their account entries and refresh only obsolete notices while preserving ignored repairs. Keep compatible cleanup on 2026.10 and adopt existing persistent issues without resetting their ignored status.
-- Keep usage sensor subscriptions and measurements through in-place entity ID renames on Home Assistant 2026.11+, with removal and unload cleanup covered on both supported lifecycle paths.
+- Use native conditional form fields. Show Include Reasoning when Reasoning Format is set to Model default and preserve the saved toggle when an explicit format is selected.
+- Use Home Assistant's translated error when a Groq platform fails to unload.
+- Use Home Assistant Marketplace links in the installation guide.
+- Link repair notices to their Groq accounts and preserve the ignored status of existing notices. Remove stale notices when repairs are refreshed.
+- Preserve usage sensor measurements and update subscriptions during entity ID renames.
+
+## v2.2.3 - 2026-11-14
+
+### 🚧 Breaking changes
+
+- None
+
+### ✨ New features
+
+- None
+
+### 🐛 Bug fixes
+
+- Use the current Assist system prompt on each tool-call round. (#85)
+- Keep temporary speech files counted against the storage limit across integration reloads until cleanup succeeds. (#85)
+- Avoid retrying audio requests after a response has started. (#85)
+
+### 🔧 Improvements
+
+- Scan streamed response bytes once for line boundaries, process large JSON bodies off the event loop, and reuse serialized tool results. (#85)
+- Limit concurrent and queued speech requests, share work for identical requests and ffmpeg probes, and reject oversized speech text sooner. (#85)
+
+### 🔄 Other changes
+
+- Bumped the integration manifest version to `2.2.3`.
 
 ## v2.2.2 - 2026-11-13
 

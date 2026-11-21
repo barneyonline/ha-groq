@@ -57,6 +57,8 @@ flowchart TD
 | `rate_limit.py`, `prompt_cache.py` | Provider cooldowns and bounded local response storage |
 | `conversation.py`, `ai_task.py` | HA platform entrypoints and platform-specific result handling |
 | `chat.py` | Shared ChatLog, attachment/history and tool-call adaptation |
+| `json_utils.py` | Shared size estimates for selecting inline or executor JSON encoding |
+| `tool_tasks.py` | Ownership and cancellation of Home Assistant tool batches |
 | `text_generation.py`, `structured.py` | Effective generation options, request checks and local schema validation |
 | `services.py` | Authorized action target resolution, response actions and dynamic descriptions |
 | `attachments.py` | Authorized bounded media reads and attachment conversion |
@@ -86,15 +88,20 @@ requests.
 
 Assist and AI Task consume HA ChatLog through the shared adapter. History is
 trimmed before loading attachments, keeping complete tool exchanges, and converted
-attachments are reused within one turn. Tool argument JSON must be an object and
-call IDs must be valid before dispatch through HA's LLM API. Invalid arguments are
-not silently turned into a default operation. Tool iterations remain capped.
+attachments are reused within one turn. The current input has first claim on the
+request's attachment budget. Before dispatch through HA's LLM API, the integration
+checks that tool arguments are JSON objects, call IDs are valid and function names
+are exposed in the request. The integration cancels and drains its tool tasks when
+a turn is interrupted. The final completion in the tool loop is reserved for an
+answer.
 
 No-tool AI Task calls also use the prepared HA context and record final assistant
 content. Task-provided structure takes precedence over a configured service schema.
 Native structured output, tool-assisted generation and JSON fallback share local
 schema validation before a result is returned or cached. The validator does not
-fetch remote schema references.
+fetch remote schema references. Large JSON decoding uses the HA executor so other
+callbacks can run while the job is pending. The standard decoder can still hold
+Python's GIL during parsing.
 
 Request options and capability checks use the same resolved precedence. Context
 estimation considers text, tools and schemas without treating base64 image bytes
@@ -105,10 +112,10 @@ Home Assistant LLM tools use Probatio schemas, so tool descriptions use its
 OpenAPI serializer directly. Config forms, action validation and AI task output
 structures also use Probatio.
 
-Conditional Structured Outputs fields use Home Assistant's visibility markers
-when available. The ordinary Probatio optional markers remain necessary on
-HA 2026.10, which predates the visibility API. Both paths preserve saved schema
-settings when fields are omitted or validation is retried.
+Home Assistant's visibility markers control which Structured Outputs and
+reasoning fields are shown. Home Assistant strips hidden fields before
+validation. The integration merges visible edits into the saved options and
+retains edited conditional values across validation retries.
 
 ## Network failures and repairs
 
@@ -165,8 +172,8 @@ claims about actual device or provider performance.
 
 ## Validation and performance evidence
 
-The primary and minimum Docker harnesses currently run HA 2026.10.0 with pytest
-helper 0.13.371 on a digest-pinned Python 3.14 slim image. Both install an explicit
+The primary and minimum Docker harnesses currently run HA 2026.11.0 with
+`pytest-homeassistant` 2026.11.0 on a digest-pinned Python 3.14 slim image. Both install an explicit
 Core version with its matching helper and verify that version after dependency
 installation, including package consistency. An incompatible `HA_VERSION`
 override fails instead of silently testing a downgraded Core. Component runtime
@@ -180,8 +187,8 @@ the container each session to refresh proxy settings. Session CA trust is suppli
 through a build secret and runtime mount. Only explicit resets bypass caching.
 
 Assist uses HA's prepared ChatLog prompt, current tool results and Probatio tool
-schemas directly. Streaming returns the completed assistant content supplied by HA
-without keeping another copy of each text delta. Action description YAML is parsed
+schemas directly. Streaming forwards live text deltas to HA and records the final
+assembled response in ChatLog. Action description YAML is parsed
 once per HA instance; each refresh rebuilds the current service options once per
 service type and copies the cached descriptions before adding those options.
 

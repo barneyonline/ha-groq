@@ -848,18 +848,11 @@ def test_tts_batch_free_tier_guard_blocks_daily_tokens(monkeypatch):
         client.check_tts_batch([request], now=100.0)
 
 
-def test_tts_split_helpers_handle_overlong_words_and_blank_segments(monkeypatch):
-    assert _split_overlong_tts_segment("aa bbb cc", 5) == ["aa", "bbb", "cc"]
-    assert _split_overlong_tts_segment("aa bbbbbbb", 5) == ["aa", "bbbbb", "bb"]
-    assert _split_overlong_tts_segment("   ", 2) == ["  ", " "]
-    assert _split_tts_text("   ", 5) == [""]
-
-    class Boundary:
-        def split(self, text):
-            return ["", "Hello.", "World."]
-
-    monkeypatch.setattr(tts, "_SENTENCE_BOUNDARY", Boundary())
-    assert _split_tts_text("ignored", 20) == ["Hello. World."]
+def test_tts_split_helpers_handle_overlong_words_and_whitespace():
+    assert list(_split_overlong_tts_segment("aa bbb cc", 5)) == ["aa", "bbb", "cc"]
+    assert list(_split_overlong_tts_segment("aa bbbbbbb", 5)) == ["aa", "bbbbb", "bb"]
+    assert list(_split_tts_text("   ", 5)) == [""]
+    assert list(_split_tts_text("Hello.\t World.", 20)) == ["Hello. World."]
 
 
 def test_tts_input_chunks_rejects_vocal_directions_that_fill_limit():

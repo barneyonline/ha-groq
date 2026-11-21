@@ -547,7 +547,24 @@ def request_body_options_error_message(
     return None
 
 
-def _payload_token_estimate(value: Any) -> int:
+def _approximate_tokens(encoded_bytes: int) -> int:
+    """Convert the encoded size to the same rough token budget at every call site."""
+    return max(
+        1, (encoded_bytes + _APPROX_CHARS_PER_TOKEN - 1) // _APPROX_CHARS_PER_TOKEN
+    )
+
+
+def _serialized_json_string_token_estimate(serialized: str) -> int:
+    """Estimate a compact, ASCII-escaped JSON value embedded as a string."""
+    # The existing JSON has no raw control characters. The outer string encoder
+    # adds its delimiters and escapes each quote and backslash once.
+    encoded_bytes = len(serialized) + 2 + serialized.count('"') + serialized.count("\\")
+    return _approximate_tokens(encoded_bytes)
+
+
+def _payload_token_estimate(
+    value: Any, string_estimates: dict[int, tuple[str, int]] | None = None
+) -> int:
     """Return a rough token estimate for request payload values."""
     if value is None:
         return 0
@@ -556,23 +573,33 @@ def _payload_token_estimate(value: Any) -> int:
         # text tokens. The provider enforces its model-specific image budget.
         if value.get("type") == "image_url":
             return 0
-        return sum(_payload_token_estimate(item) for item in value.values())
+        return sum(
+            _payload_token_estimate(item, string_estimates) for item in value.values()
+        )
     if isinstance(value, list):
-        return sum(_payload_token_estimate(item) for item in value)
+        return sum(_payload_token_estimate(item, string_estimates) for item in value)
+    if not isinstance(value, str) or len(value) < 1024:
+        string_estimates = None
+    if (
+        string_estimates is not None
+        and (estimate := string_estimates.get(id(value))) is not None
+    ):
+        return estimate[1]
     try:
         encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
     except TypeError:
         return 0
-    return max(
-        1,
-        (len(encoded.encode("utf-8")) + _APPROX_CHARS_PER_TOKEN - 1)
-        // _APPROX_CHARS_PER_TOKEN,
-    )
+    tokens = _approximate_tokens(len(encoded.encode("utf-8")))
+    if string_estimates is not None:
+        string_estimates[id(value)] = (value, tokens)
+    return tokens
 
 
 def request_context_window_error(
     model_registry: GroqModelRegistry,
     request: TextGenerationRequest,
+    *,
+    string_estimates: dict[int, tuple[str, int]] | None = None,
 ) -> str | None:
     """Return an error when a request is too large for the model context window."""
     context_window = model_registry.context_window(request.model)
@@ -583,7 +610,7 @@ def request_context_window_error(
         if isinstance(request, StructuredGenerationRequest)
         else build_text_generation_payload(request)
     )
-    prompt_estimate = _payload_token_estimate(payload)
+    prompt_estimate = _payload_token_estimate(payload, string_estimates)
     requested_completion = max(_completion_token_requests(request), default=0)
     estimated_total = prompt_estimate + requested_completion
     if estimated_total <= context_window:

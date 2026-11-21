@@ -273,7 +273,7 @@ async def test_sensors_subentry_setup_and_push_lifecycle(hass, monkeypatch):
         entity.hass = hass
         assert entity.native_value is None
         assert not entity.entity_registry_enabled_default
-        assert entity.device_info["identifiers"] == {("groq", "text")}
+        assert entity.device_info.identifiers == {("groq", "text")}
         monkeypatch.setattr(entity, "async_on_remove", callbacks.append)
         monkeypatch.setattr(entity, "async_write_ha_state", Mock())
         await entity.async_added_to_hass()

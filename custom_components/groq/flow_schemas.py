@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 import probatio
 from homeassistant import data_entry_flow
@@ -636,19 +636,12 @@ def _optional_value(values: dict[str, Any], key: str) -> probatio.Optional:
     )
 
 
-def _structured_output_option(key: str, default: Any) -> probatio.Optional:
-    """Condition schema fields on their toggle when HA supports visibility."""
-    # HA 2026.11 adds this marker; HA 2026.10 still needs ordinary Probatio fields.
-    optional = getattr(data_entry_flow, "Optional", None)
-    if optional is None:
-        return probatio.Optional(key, default=default)
-    return cast(
-        probatio.Optional,
-        optional(
-            key,
-            default=default,
-            visible={"field": CONF_STRUCTURED_OUTPUTS, "value": True},
-        ),
+def _structured_output_option(key: str, default: Any) -> data_entry_flow.Optional:
+    """Show a schema field while Structured Outputs is enabled."""
+    return data_entry_flow.Optional(
+        key,
+        default=default,
+        visible={"field": CONF_STRUCTURED_OUTPUTS, "value": True},
     )
 
 
@@ -695,9 +688,10 @@ def text_generation_advanced_schema(
                     CONF_REASONING_FORMAT,
                     default=values.get(CONF_REASONING_FORMAT, ""),
                 ): selector({"select": {"options": REASONING_FORMAT_OPTIONS}}),
-                probatio.Optional(
+                data_entry_flow.Optional(
                     CONF_INCLUDE_REASONING,
                     default=values.get(CONF_INCLUDE_REASONING, False),
+                    visible={"field": CONF_REASONING_FORMAT, "value": ""},
                 ): selector({"boolean": {}}),
             }
         )
