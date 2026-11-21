@@ -431,6 +431,9 @@
         "attachment_file_missing": {
             "message": "The selected image attachment no longer exists"
         },
+        "attachment_file_unreadable": {
+            "message": "Home Assistant konnte den ausgewählten Bildanhang nicht lesen"
+        },
         "attachment_not_file": {
             "message": "The selected image attachment is not a file"
         },

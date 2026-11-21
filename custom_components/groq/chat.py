@@ -3,30 +3,77 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sized
+from contextvars import copy_context
 from copy import deepcopy
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass, field, replace
+from typing import Any, cast
 
 import probatio
 from homeassistant.components import conversation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import llm
 
-from .api import ChatCompletionResult
-from .attachments import async_attachment_content_parts
-from .errors import translated_error
+from .api import ChatCompletionResult, TextGenerationRequest
+from .attachments import (
+    ImageAttachmentBudget,
+    ImageAttachmentBudgetExceeded,
+    ImageAttachmentGroup,
+    ImageAttachmentSources,
+    async_load_image_attachments,
+)
+from .errors import GroqResponseError, translated_error
 from .feature_registry import GroqFeature
+from .json_utils import JSON_EXECUTOR_THRESHOLD, estimated_json_size_exceeds
 from .model_registry import GroqModelRegistry
+from .text_generation import _serialized_json_string_token_estimate
 
 MAX_HISTORY_MESSAGES = 12
 MAX_TOOL_ITERATIONS = 10
+
+
+def prepare_tool_round(
+    request: TextGenerationRequest, iteration: int
+) -> tuple[TextGenerationRequest, bool]:
+    """Return the request and whether it must conclude the local tool loop."""
+    final_tool_round = iteration == MAX_TOOL_ITERATIONS - 1
+    if not final_tool_round or not request.tools:
+        return request, final_tool_round
+    if request.browser_search:
+        # Provider-side search completes within this response. Keep it
+        # available while removing the Home Assistant function definitions.
+        return replace(request, tools=None), True
+    return replace(request, tool_choice="none"), True
+
+
+def tool_calls_for_completion(
+    request: TextGenerationRequest,
+    result: ChatCompletionResult,
+    *,
+    final_tool_round: bool,
+) -> list[llm.ToolInput]:
+    """Validate the tool round and allow only functions exposed in the request."""
+    if final_tool_round and (result.tool_calls or not result.text.strip()):
+        raise translated_error("Groq exceeded the tool-call limit", "tool_call_limit")
+    tool_calls = _result_tool_calls(result)
+    if tool_calls:
+        allowed_tools = {
+            tool["function"]["name"]
+            for tool in request.tools or []
+            if tool.get("type") == "function"
+        }
+        if any(call.tool_name not in allowed_tools for call in tool_calls):
+            raise GroqResponseError("Groq returned an unexposed Home Assistant tool")
+    return tool_calls
 
 
 @dataclass(slots=True)
 class ChatHistoryCache:
     """Reuse completed log content while a single tool loop appends messages."""
 
-    attachments: dict[tuple[str, str], Any] = field(default_factory=dict)
+    attachments: dict[ImageAttachmentSources, ImageAttachmentGroup] = field(
+        default_factory=dict
+    )
     tool_payloads: dict[tuple[int, bool], tuple[Any, str]] = field(default_factory=dict)
     string_estimates: dict[int, tuple[str, int]] = field(default_factory=dict)
     system_messages: list[dict[str, Any]] = field(default_factory=list)
@@ -49,15 +96,31 @@ class ChatHistoryCache:
         messages.extend(message.copy() for message in self.system_messages)
         return messages
 
-    def serialize_tool(self, value: Any, *, result: bool = False) -> str:
+    async def async_serialize_tool(
+        self,
+        hass: HomeAssistant,
+        value: dict[str, Any] | llm.ToolResult,
+        *,
+        result: bool,
+    ) -> str:
         """Keep a reference to each value so an object ID cannot be reused."""
         identity = (id(value), result)
         if identity not in self.tool_payloads:
-            serialized = (
-                _serialize_tool_result(value)
-                if result
-                else json.dumps(value, separators=(",", ":"))
+            payload = (
+                _tool_result_payload(value) if result else cast(dict[str, Any], value)
             )
+            if estimated_json_size_exceeds(
+                payload, JSON_EXECUTOR_THRESHOLD, use_encoded_upper_bound=True
+            ):
+                serialized, estimate = await hass.async_add_executor_job(
+                    copy_context().run,
+                    _encode_and_estimate_tool_payload,
+                    payload,
+                    result,
+                )
+                self.string_estimates[id(serialized)] = (serialized, estimate)
+            else:
+                serialized = _encode_tool_payload(payload, result)
             self.tool_payloads[identity] = (value, serialized)
         return self.tool_payloads[identity][1]
 
@@ -90,6 +153,16 @@ def _content_attachments(content: Any) -> Any:
     return getattr(content, "attachments", None)
 
 
+def _same_attachments(previous: Any, current: Any, max_count: int) -> bool:
+    """Compare attachment groups whose counts can fit the request."""
+    return previous is current or (
+        isinstance(previous, Sized)
+        and isinstance(current, Sized)
+        and len(previous) == len(current) <= max_count
+        and previous == current
+    )
+
+
 def _drop_orphan_tool_results(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Remove tool results whose originating calls fell outside the retained history."""
     valid_tool_call_ids = {
@@ -106,25 +179,44 @@ def _drop_orphan_tool_results(messages: list[dict[str, Any]]) -> list[dict[str, 
     ]
 
 
-async def _message_content(
+async def _async_add_history_attachments(
     hass: HomeAssistant,
     model_registry: GroqModelRegistry,
     model: str,
-    text: str,
-    attachments: Any,
-) -> str | list[dict[str, Any]]:
-    """Return text or multimodal content for an Assist chat message."""
-    if not model_registry.supports(model, GroqFeature.VISION):
-        raise translated_error(
-            "Groq Assist attachments require a vision-capable model",
-            "vision_model_required",
-        )
-    parts = await async_attachment_content_parts(
-        hass,
-        attachments,
-        text=text,
-    )
-    return parts or text
+    messages: list[dict[str, Any]],
+    current: dict[str, Any],
+    cache: ChatHistoryCache,
+    *,
+    budget: ImageAttachmentBudget,
+) -> None:
+    """Give current and recent images priority while leaving messages in order."""
+    retained: dict[ImageAttachmentSources, ImageAttachmentGroup] = {}
+    for message in reversed(messages):
+        attachments = message.pop("_attachments", None)
+        if not attachments:
+            continue
+        try:
+            if not model_registry.supports(model, GroqFeature.VISION):
+                raise translated_error(
+                    "Groq Assist attachments require a vision-capable model",
+                    "vision_model_required",
+                )
+            sources = budget.admit(attachments)
+            group = retained.get(sources) or cache.attachments.get(sources)
+            if group is None:
+                group = await async_load_image_attachments(
+                    hass, sources, budget=budget, historical=message is not current
+                )
+                if group is None:
+                    continue
+            budget.charge(group)
+        except ImageAttachmentBudgetExceeded:
+            if message is current:
+                raise
+            continue
+        message["content"] = group.with_text(message["content"])
+        retained[sources] = group
+    cache.attachments = retained
 
 
 def _tool_call_id(tool_call: Any) -> str:
@@ -136,10 +228,8 @@ def _tool_call_id(tool_call: Any) -> str:
     return str(tool_id) if tool_id else "tool_call"
 
 
-def _tool_call_message(
-    tool_call: Any, *, serialize: bool = True
-) -> dict[str, Any] | None:
-    """Return an OpenAI-compatible tool call from a Home Assistant ToolInput."""
+def _tool_call_message(tool_call: Any) -> dict[str, Any] | None:
+    """Build a tool call descriptor before serializing retained arguments."""
     parts = _tool_call_parts(tool_call)
     if parts is None:
         return None
@@ -149,17 +239,13 @@ def _tool_call_message(
         "type": "function",
         "function": {
             "name": tool_name,
-            "arguments": (
-                json.dumps(tool_args, separators=(",", ":")) if serialize else tool_args
-            ),
+            "arguments": tool_args,
         },
     }
 
 
-def _tool_result_message(
-    content: Any, *, serialize: bool = True
-) -> dict[str, Any] | None:
-    """Return an OpenAI-compatible tool result message from chat-log content."""
+def _tool_result_message(content: Any) -> dict[str, Any] | None:
+    """Build a tool result descriptor before serializing retained content."""
     identity = _tool_result_identity(content)
     if identity is None:
         return None
@@ -169,21 +255,30 @@ def _tool_result_message(
         "role": "tool",
         "tool_call_id": tool_call_id,
         "name": tool_name,
-        "content": (_serialize_tool_result(result) if serialize else result),
+        "content": result,
     }
 
 
-def _serialize_tool_result(result: Any) -> str:
-    """Serialize the Home Assistant tool result envelope for Groq."""
-    return json.dumps(
-        (
-            {"data": result["data"], "error": result.get("error", False)}
-            if isinstance(result, dict)
-            else {"data": result.data, "error": result.error}
-        ),
-        separators=(",", ":"),
-        default=str,
+def _tool_result_payload(result: Any) -> dict[str, Any]:
+    """Build the Home Assistant tool result envelope for Groq."""
+    return (
+        {"data": result["data"], "error": result.get("error", False)}
+        if isinstance(result, dict)
+        else {"data": result.data, "error": result.error}
     )
+
+
+def _encode_tool_payload(payload: dict[str, Any], result: bool) -> str:
+    """Serialize an OpenAI tool argument object or a tool result envelope."""
+    return json.dumps(payload, separators=(",", ":"), default=str if result else None)
+
+
+def _encode_and_estimate_tool_payload(
+    payload: dict[str, Any], result: bool
+) -> tuple[str, int]:
+    """Return the wire string and its token estimate from one executor job."""
+    serialized = _encode_tool_payload(payload, result)
+    return serialized, _serialized_json_string_token_estimate(serialized)
 
 
 def _tool_result_identity(content: Any) -> tuple[str, str] | None:
@@ -266,7 +361,7 @@ def _chat_log_history(
     turns: list[dict[str, Any]] = []
     for item, role in reversed(selected):
         if role == "tool_result":
-            if result := _tool_result_message(item, serialize=False):
+            if result := _tool_result_message(item):
                 turns.append(result)
             continue
         message: dict[str, Any] = {"role": role, "content": _content_text(item) or ""}
@@ -276,7 +371,7 @@ def _chat_log_history(
             calls = [
                 call
                 for tool in _assistant_tool_calls(item) or ()
-                if (call := _tool_call_message(tool, serialize=False))
+                if (call := _tool_call_message(tool))
             ]
             if calls:
                 message["tool_calls"] = calls
@@ -297,6 +392,7 @@ async def _async_chat_log_messages(
 ) -> list[dict[str, Any]]:
     """Return OpenAI-compatible messages, including supported image attachments."""
     cache = history_cache if history_cache is not None else ChatHistoryCache()
+    budget = ImageAttachmentBudget()
     system_messages, turn_messages = _chat_log_history(chat_log, cache)
     # HA normally already added the current input. Match the latest user turn,
     # not an identical prompt from an older conversation turn.
@@ -310,40 +406,36 @@ async def _async_chat_log_messages(
         and (
             not current_attachments
             or not latest_user.get("_attachments")
-            or repr(latest_user["_attachments"]) == repr(current_attachments)
+            or _same_attachments(
+                latest_user["_attachments"], current_attachments, budget.remaining_count
+            )
         )
     ):
         if current_attachments:
             latest_user["_attachments"] = current_attachments
     else:
-        turn_messages.append(
-            {
-                "role": "user",
-                "content": current_text,
-                "_attachments": current_attachments,
-            }
-        )
+        latest_user = {
+            "role": "user",
+            "content": current_text,
+            "_attachments": current_attachments,
+        }
+        turn_messages.append(latest_user)
     messages = [*system_messages, *turn_messages]
     for message in messages:
         # Only retained history incurs serialization or attachment I/O. These
         # descriptors own their dictionaries, leaving HA's chat log untouched.
         if message["role"] == "tool":
-            message["content"] = cache.serialize_tool(message["content"], result=True)
+            message["content"] = await cache.async_serialize_tool(
+                hass, message["content"], result=True
+            )
         for tool_call in message.get("tool_calls", []):
             function = tool_call["function"]
-            function["arguments"] = cache.serialize_tool(function["arguments"])
-        attachments = message.pop("_attachments", None)
-        if not attachments:
-            continue
-        cache_key = (message["content"], repr(attachments))
-        if cache_key in cache.attachments:
-            message["content"] = cache.attachments[cache_key]
-            continue
-        content = await _message_content(
-            hass, model_registry, model, message["content"], attachments
-        )
-        message["content"] = content
-        cache.attachments[cache_key] = content
+            function["arguments"] = await cache.async_serialize_tool(
+                hass, function["arguments"], result=False
+            )
+    await _async_add_history_attachments(
+        hass, model_registry, model, turn_messages, latest_user, cache, budget=budget
+    )
     return messages
 
 
@@ -443,3 +535,16 @@ def _assistant_native(result: Any) -> dict[str, Any]:
         if value:
             native[attr] = value
     return native
+
+
+def assistant_content_from_result(
+    result: ChatCompletionResult, agent_id: str, tool_calls: list[llm.ToolInput]
+) -> conversation.AssistantContent:
+    """Record the completion and its trace metadata in Home Assistant format."""
+    return conversation.AssistantContent(
+        agent_id=agent_id,
+        content=result.text or None,
+        thinking_content=result.reasoning,
+        tool_calls=tool_calls or None,
+        native=_assistant_native(result) or None,
+    )

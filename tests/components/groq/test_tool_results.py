@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from homeassistant.helpers import llm
 
-from custom_components.groq.chat import _async_chat_log_messages, _tool_result_message
+from custom_components.groq.chat import _async_chat_log_messages
 from custom_components.groq.model_registry import GroqModelRegistry
 
 
@@ -65,14 +65,31 @@ async def test_modern_tool_results_preserve_data_and_failure_status(
     assert json.loads(tool_message["content"]) == {"data": data, "error": error}
 
 
-def test_serialized_result_defaults_to_success():
+@pytest.mark.asyncio
+async def test_serialized_result_defaults_to_success():
     """Accept the default ToolResult error flag when omitted from a mapping."""
     content = {
+        "role": "tool_result",
         "tool_call_id": "call_1",
         "tool_name": "GetState",
         "result": {"data": {}},
     }
-    assert json.loads(_tool_result_message(content)["content"]) == {
+    log = SimpleNamespace(
+        content=[
+            {"role": "user", "content": "Read the state"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"id": "call_1", "tool_name": "GetState", "tool_args": {}}
+                ],
+            },
+            content,
+        ]
+    )
+    messages = await _async_chat_log_messages(
+        None, GroqModelRegistry(), "openai/gpt-oss-20b", log, "Read the state"
+    )
+    assert json.loads(messages[-1]["content"]) == {
         "data": {},
         "error": False,
     }
