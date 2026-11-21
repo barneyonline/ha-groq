@@ -28,7 +28,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> None:
     """Set up entities."""
     await async_preload_clientsession_helper(hass)
     runtime = build_runtime(hass, entry)
@@ -45,7 +45,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool
         entry, runtime.feature_registry.enabled_platforms()
     )
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
-    return True
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: GroqConfigEntry) -> None:
@@ -54,24 +53,22 @@ async def _async_update_listener(hass: HomeAssistant, entry: GroqConfigEntry) ->
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> None:
     """Unload a config entry."""
     runtime = getattr(entry, "runtime_data", None)
     platforms = runtime.feature_registry.enabled_platforms() if runtime else []
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
-    if unload_ok:
-        if runtime is not None:
-            await runtime.client.async_shutdown()
-        from .services import async_update_service_descriptions
+    await hass.config_entries.async_unload_platforms_or_raise(entry, platforms)
+    if runtime is not None:
+        await runtime.client.async_shutdown()
+    from .services import async_update_service_descriptions
 
-        await async_update_service_descriptions(
-            hass,
-            exclude_entry_id=entry.entry_id,
-        )
-    return bool(unload_ok)
+    await async_update_service_descriptions(
+        hass,
+        exclude_entry_id=entry.entry_id,
+    )
 
 
-async def async_migrate_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bool:
+async def async_migrate_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> None:
     """Migrate legacy stable IDs using Home Assistant's immutable data mappings."""
     if (version := getattr(entry, "version", 1)) > 1:
         raise ConfigEntryError(
@@ -86,14 +83,13 @@ async def async_migrate_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> bo
             },
         )
     if getattr(entry, "minor_version", 1) >= 2:
-        return True
+        return
     updates: dict[str, Any] = {"minor_version": 2}
     if not entry.unique_id and UNIQUE_ID in entry.data:
         data = dict(entry.data)
         updates["unique_id"] = data.pop(UNIQUE_ID)
         updates["data"] = data
     hass.config_entries.async_update_entry(entry, **updates)
-    return True
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> None:

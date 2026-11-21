@@ -14,7 +14,7 @@ import aiohttp
 import pytest
 from homeassistant.components.conversation import ChatLog, SystemContent
 from homeassistant.exceptions import HomeAssistantError
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.groq import api, audio_files, chat, runtime, tts
 from custom_components.groq.api import (

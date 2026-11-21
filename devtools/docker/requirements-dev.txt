@@ -1,6 +1,7 @@
 # Keep this plugin aligned with HA_VERSION in the Docker build.
-# It supplies pytest, asyncio/coverage plugins, and freezegun; Core supplies PyYAML.
-pytest-homeassistant-custom-component==0.13.371
+# It supplies pytest, the asyncio plugin and freezegun; Core supplies PyYAML.
+pytest-homeassistant==2026.11.0
+pytest-cov==7.1.0
 mypy==2.3.1
 ruff==0.6.9
 black==26.10.1

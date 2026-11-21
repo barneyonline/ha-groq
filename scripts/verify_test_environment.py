@@ -58,7 +58,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.expected_core_file
         else args.expected_core
     )
-    helper = "pytest-homeassistant-custom-component"
+    helper = "pytest-homeassistant"
     try:
         core = metadata.version("homeassistant")
         helper_version = metadata.version(helper)

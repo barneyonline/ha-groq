@@ -6,7 +6,7 @@ services:
       dockerfile: devtools/docker/Dockerfile
       args:
         PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56}
-        HA_VERSION: ${HA_VERSION:-2026.10.0}
+        HA_VERSION: ${HA_VERSION:-2026.11.0}
         REQUIREMENTS_FILE: ${HA_GROQ_REQUIREMENTS_FILE:-requirements-dev.txt}
         PYTHON_VERSION: ${PYTHON_VERSION:-3.14}
         TEST_ENVIRONMENT_HASH: ${HA_GROQ_TEST_ENVIRONMENT_HASH:-manual}
@@ -28,7 +28,7 @@ services:
       - GIT_SSL_CAINFO=${HA_GROQ_CONTAINER_CA:-/etc/ssl/certs/ca-certificates.crt}
 
   ha-runtime:
-    image: ghcr.io/home-assistant/home-assistant:2026.10.0@sha256:1b64d38f38d922bf9d59336451fd6453e1d614f934456af4ee3d2a51061be3a4
+    image: ghcr.io/home-assistant/home-assistant:2026.11.0@sha256:c6c1ca9931036bf3a2c4cc088d8db25dfea3b33935a5ecc83c40349462e2f69e
     restart: unless-stopped
     ports:
       - "8123:8123"

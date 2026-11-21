@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### 🚧 Breaking changes
+
+- Raise the minimum supported Home Assistant version to `2026.11.0`.
+
+### 🔧 Improvements
+
+- Use native conditional form fields. Show Include Reasoning when Reasoning Format is set to Model default and preserve the saved toggle when an explicit format is selected.
+- Use Home Assistant's translated error when a Groq platform fails to unload.
+- Use Home Assistant Marketplace links in the installation guide.
+
 ## v2.2.3 - 2026-11-14
 
 ### 🚧 Breaking changes

@@ -2,7 +2,7 @@
 ARG PYTHON_IMAGE=python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56
 FROM ${PYTHON_IMAGE}
 ARG PYTHON_VERSION=3.14
-ARG HA_VERSION=2026.10.0
+ARG HA_VERSION=2026.11.0
 ARG REQUIREMENTS_FILE=requirements-dev.txt
 ENV PYTHON_VERSION=${PYTHON_VERSION}
 
@@ -14,7 +14,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
-    PYTEST_PLUGINS=pytest_asyncio.plugin,pytest_homeassistant_custom_component.plugins,pytest_cov.plugin \
+    PYTEST_PLUGINS=pytest_asyncio.plugin,pytest_homeassistant.plugins,pytest_cov.plugin \
     PYTEST_ASYNCIO_MODE=strict \
     PYTEST_ASYNCIO_DEFAULT_FIXTURE_LOOP_SCOPE=function
 

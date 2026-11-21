@@ -11,7 +11,7 @@ import pytest
 from homeassistant.components import stt
 from homeassistant.core import SupportsResponse
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.groq import services
 from custom_components.groq.const import MAX_STT_PROMPT_LENGTH
