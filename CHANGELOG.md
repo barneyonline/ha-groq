@@ -4,21 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v2.3.0 - 2026-11-22
+
 ### 🚧 Breaking changes
 
-- Raise the minimum supported Home Assistant version to `2026.11.0`.
+- Raise the minimum supported Home Assistant version to `2026.11.0`. (#88)
+- Limit each Assist and AI Task request to four images and 20 MiB of attachments across current input and retained conversation history. Current attachments take priority over history. (#87)
 
 ### 🐛 Bug fixes
 
-- Honor Home Assistant target exclusions for Groq image actions, including directly listed cameras.
+- Honor Home Assistant target exclusions for Groq image actions, including directly listed cameras. (#89)
+- Cancel outstanding tools when an Assist turn is cancelled, prevent queued tools from starting after cancellation, and reserve the last round for an answer. (#87)
 
 ### 🔧 Improvements
 
-- Use native conditional form fields. Show Include Reasoning when Reasoning Format is set to Model default and preserve the saved toggle when an explicit format is selected.
-- Use Home Assistant's translated error when a Groq platform fails to unload.
-- Use Home Assistant Marketplace links in the installation guide.
-- Link repair notices to their Groq accounts and preserve the ignored status of existing notices. Remove stale notices when repairs are refreshed.
-- Preserve usage sensor measurements and update subscriptions during entity ID renames.
+- Reuse prepared images and reduce event-loop work during large JSON operations and buffered streaming. (#87)
+- Use native conditional form fields for structured output and reasoning options. Preserve saved values when fields are hidden. (#88)
+- Use Home Assistant's translated error when a Groq platform fails to unload. (#88)
+- Install Groq from the Home Assistant Marketplace using the button in the README's setup steps. (#88)
+- Link repair notices to their Groq accounts and preserve the ignored status of existing notices. Remove stale notices when repairs are refreshed. (#74)
+- Preserve usage sensor measurements and update subscriptions during entity ID renames. (#74)
+
+### 🔄 Other changes
+
+- Bumped the integration manifest version to `2.3.0`.
 
 ## v2.2.3 - 2026-11-14
 
