@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - Raise the minimum supported Home Assistant version to `2026.11.0`.
 
+### 🐛 Bug fixes
+
+- Honor Home Assistant target exclusions for Groq image actions, including directly listed cameras.
+
 ### 🔧 Improvements
 
 - Use native conditional form fields. Show Include Reasoning when Reasoning Format is set to Model default and preserve the saved toggle when an explicit format is selected.

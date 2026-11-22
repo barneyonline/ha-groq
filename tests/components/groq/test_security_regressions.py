@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.core import Context, HomeAssistant, ServiceCall
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     HomeAssistantError,
     Unauthorized,
 )
+from homeassistant.helpers import area_registry as ar, entity_registry as er
 
 from custom_components.groq.api import GroqApiClient, GroqResponseError
 from custom_components.groq.attachments import (
@@ -18,10 +20,13 @@ from custom_components.groq.attachments import (
     _read_attachment_group,
     async_load_image_attachments,
 )
+from custom_components.groq.const import DOMAIN
 from custom_components.groq.services import (
     ATTR_AUDIO_PATH,
     ATTR_CAMERA_ENTITY_ID,
     ATTR_IMAGE_PATH,
+    SERVICE_ANALYZE_IMAGE,
+    VISION_SCHEMA,
     _audio_from_call,
     _image_from_camera_target,
     _image_url_from_call,
@@ -65,50 +70,131 @@ def _service_call(data, *, user_id: str | None = "user-id"):
     )
 
 
+def _camera_call(
+    hass: HomeAssistant, target: dict, *, user_id: str | None = None
+) -> ServiceCall:
+    return ServiceCall(
+        hass,
+        DOMAIN,
+        SERVICE_ANALYZE_IMAGE,
+        VISION_SCHEMA(
+            {"service_id": "vision", "prompt": "Describe the image", **target}
+        ),
+        context=Context(user_id=user_id),
+    )
+
+
 @pytest.mark.asyncio
-async def test_camera_media_requires_entity_read_permission(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("target", "expected_camera"),
+    [
+        pytest.param(
+            {
+                "entity_id": ["camera.driveway", "camera.garage"],
+                "exclude": {"entity_id": "camera.garage"},
+            },
+            "camera.driveway",
+            id="direct-list",
+        ),
+        pytest.param(
+            {
+                "entity_id": "camera.garage",
+                "exclude": {"entity_id": "camera.garage"},
+            },
+            None,
+            id="all-excluded",
+        ),
+        pytest.param(
+            {
+                "entity_id": "camera.garage",
+                "area_id": "driveway",
+                "exclude": {"entity_id": "camera.garage"},
+            },
+            "camera.driveway",
+            id="direct-and-area",
+        ),
+    ],
+)
+async def test_camera_targets_apply_exclusions(
+    hass, target, expected_camera, monkeypatch
+) -> None:
+    """Resolve Home Assistant targets before capturing a single camera image."""
+    area = ar.async_get(hass).async_create("Driveway")
+    registry = er.async_get(hass)
+    driveway = registry.async_get_or_create(
+        "camera", "test", "driveway", suggested_object_id="driveway"
+    )
+    registry.async_update_entity(driveway.entity_id, area_id=area.id)
+    registry.async_get_or_create(
+        "camera", "test", "garage", suggested_object_id="garage"
+    )
+    read = AsyncMock(
+        return_value=SimpleNamespace(content=b"image", content_type="image/png")
+    )
+    monkeypatch.setattr("custom_components.groq.services.camera.async_get_image", read)
+
+    result = await _image_from_camera_target(hass, _camera_call(hass, target))
+
+    if expected_camera is None:
+        assert result is None
+        read.assert_not_awaited()
+    else:
+        assert result == "data:image/png;base64,aW1hZ2U="
+        read.assert_awaited_once_with(hass, expected_camera)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("camera_field", [ATTR_CAMERA_ENTITY_ID, "entity_id"])
+async def test_camera_media_requires_entity_read_permission(
+    hass, camera_field, monkeypatch
+) -> None:
     """A caller must be able to read the selected camera."""
     permissions = _Permissions(False)
     user = SimpleNamespace(is_admin=False, permissions=permissions)
 
-    async def unexpected_camera_read(*_args):
-        raise AssertionError("camera must not be read before authorization")
-
-    monkeypatch.setattr(
-        "custom_components.groq.services.camera.async_get_image",
-        unexpected_camera_read,
-    )
+    read = AsyncMock()
+    monkeypatch.setattr(hass.auth, "async_get_user", _Auth(user).async_get_user)
+    monkeypatch.setattr("custom_components.groq.services.camera.async_get_image", read)
 
     with pytest.raises(Unauthorized):
         await _image_from_camera_target(
-            _Hass(user),
-            _service_call({ATTR_CAMERA_ENTITY_ID: "camera.private"}),
+            hass,
+            _camera_call(hass, {camera_field: "camera.private"}, user_id="user-id"),
         )
 
     assert permissions.checked == [("camera.private", "read")]
+    read.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_authorized_camera_media_remains_available(monkeypatch) -> None:
-    """A caller with entity read permission can still use a camera."""
+    """Explicit camera selection takes precedence over the standard target."""
     permissions = _Permissions(True)
     user = SimpleNamespace(is_admin=False, permissions=permissions)
 
-    async def camera_read(*_args):
-        return SimpleNamespace(content=b"image", content_type="image/png")
-
+    hass = _Hass(user)
+    camera_read = AsyncMock(
+        return_value=SimpleNamespace(content=b"image", content_type="image/png")
+    )
     monkeypatch.setattr(
         "custom_components.groq.services.camera.async_get_image",
         camera_read,
     )
 
     result = await _image_from_camera_target(
-        _Hass(user),
-        _service_call({ATTR_CAMERA_ENTITY_ID: "camera.allowed"}),
+        hass,
+        _service_call(
+            {
+                ATTR_CAMERA_ENTITY_ID: "camera.allowed",
+                "entity_id": "camera.other",
+                "exclude": {"entity_id": "camera.allowed"},
+            }
+        ),
     )
 
     assert result == "data:image/png;base64,aW1hZ2U="
     assert permissions.checked == [("camera.allowed", "read")]
+    camera_read.assert_awaited_once_with(hass, "camera.allowed")
 
 
 @pytest.mark.asyncio

@@ -3116,6 +3116,17 @@ async def test_image_source_resolution_paths(tmp_path, monkeypatch):
             return func(*args)
 
     hass = ImageHass()
+
+    async def fake_target_entities(call):
+        if call.data.get("area_id"):
+            return {"camera.area"}
+        return set(services_module.cv.ensure_list(call.data["entity_id"]))
+
+    monkeypatch.setattr(
+        "custom_components.groq.services.service_helper.async_extract_entity_ids",
+        fake_target_entities,
+    )
+
     image_path = tmp_path / "snapshot.jpg"
     image_path.write_bytes(b"image")
     text_path = tmp_path / "not-image.txt"
@@ -3155,13 +3166,6 @@ async def test_image_source_resolution_paths(tmp_path, monkeypatch):
         == "data:image/png;base64,Y2FtZXJh"
     )
 
-    async def fake_target_entities(_call):
-        return {"camera.area"}
-
-    monkeypatch.setattr(
-        "custom_components.groq.services.service_helper.async_extract_entity_ids",
-        fake_target_entities,
-    )
     assert (
         await _image_from_camera_target(hass, service_call({"area_id": "front_yard"}))
         == "data:image/png;base64,Y2FtZXJh"
