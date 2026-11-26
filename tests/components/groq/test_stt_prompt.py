@@ -1,4 +1,4 @@
-"""Speech-to-Text vocabulary and context prompt contracts."""
+"""Speech-to-Text setup and vocabulary prompt contracts."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from homeassistant.components import stt
-from homeassistant.core import SupportsResponse
+from homeassistant.core import HomeAssistant, SupportsResponse
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant.common import MockConfigEntry
 
@@ -176,6 +176,37 @@ async def test_new_service_starts_without_a_prompt(hass):
     }
     assert result["type"] == "create_entry"
     assert "prompt" not in result["data"]
+
+
+@pytest.mark.asyncio
+async def test_new_service_saves_hungarian_language_default(
+    hass: HomeAssistant,
+) -> None:
+    hass.config.language = "hu"
+    entry = account(hass)
+
+    form, result = await submit(hass, entry, {}, source="user")
+
+    assert form["data_schema"]({})["language"] == "hu-HU"
+    assert result["type"] == "create_entry"
+    assert [
+        service.data["language"]
+        for subentry_id, service in entry.subentries.items()
+        if subentry_id != "speech"
+    ] == ["hu-HU"]
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_service_saves_hungarian_language(
+    hass: HomeAssistant,
+) -> None:
+    entry = account(hass)
+
+    form, result = await submit(hass, entry, {"language": "hu-HU"})
+
+    assert form["data_schema"]({})["language"] == "en-US"
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.subentries["speech"].data["language"] == "hu-HU"
 
 
 @pytest.mark.parametrize(
