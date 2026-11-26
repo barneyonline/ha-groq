@@ -119,9 +119,9 @@ You can add more than one Groq account. The integration prevents adding the same
 
 ## Speech transcription and translation
 
-For Romanian Assist pipelines, select **Romanian** (`ro-RO`) in the Groq
-Speech-to-Text service. Romanian is also available in `groq.transcribe_audio`;
-the integration sends the ISO language hint `ro` to Groq.
+For Hungarian or Romanian Assist pipelines, select **Hungarian** (`hu-HU`) or
+**Romanian** (`ro-RO`) in the Groq Speech-to-Text service. Both languages are also
+available in `groq.transcribe_audio`. The integration sends `hu` or `ro` to Groq.
 
 Use **Vocabulary and context** in the Speech-to-Text service for names and terms
 Whisper should spell correctly, for example

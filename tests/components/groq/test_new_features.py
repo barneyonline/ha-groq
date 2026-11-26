@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock
 import probatio
 import pytest
 from homeassistant.components import conversation
-from homeassistant.core import Context, SupportsResponse
+from homeassistant.core import Context, HomeAssistant, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import llm
 
@@ -117,17 +117,26 @@ async def test_invalid_audio_options_fail_before_network(kwargs):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "translate, extra",
+    "translate, extra, expected_hint",
     [
-        (True, {}),
+        (True, {}, None),
         (
             False,
             {"response_format": "verbose_json", "timestamp_granularities": ["segment"]},
+            "fr",
         ),
-        (False, {}),
+        (False, {}, "fr"),
+        (False, {"language": "hu-HU"}, "hu"),
+        (False, {"language": "hu"}, "hu"),
     ],
 )
-async def test_registered_audio_actions(hass, monkeypatch, translate, extra):
+async def test_registered_audio_actions(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    translate: bool,
+    extra: dict[str, str | list[str]],
+    expected_hint: str | None,
+) -> None:
     client = GroqApiClient(
         hass,
         api_key="fake",
@@ -173,13 +182,17 @@ async def test_registered_audio_actions(hass, monkeypatch, translate, extra):
     assert result["model"] == (
         "whisper-large-v3" if translate else "whisper-large-v3-turbo"
     )
-    assert result["language"] == ("en" if translate else "fr")
+    assert result["language"] == ("en" if translate else extra.get("language", "fr"))
     args, kwargs = client._session.calls[0]
     assert args[1].endswith(
         "/audio/translations" if translate else "/audio/transcriptions"
     )
-    names = [header["name"] for header, _, _ in kwargs["data"]._fields]
-    assert ("language" in names) is not translate
+    hints = [
+        value
+        for header, _, value in kwargs["data"]._fields
+        if header["name"] == "language"
+    ]
+    assert hints == ([] if expected_hint is None else [expected_hint])
     source.assert_awaited_once()
     if translate:
         with pytest.raises(HomeAssistantError):

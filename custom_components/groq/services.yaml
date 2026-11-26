@@ -491,6 +491,8 @@ transcribe_audio:
               value: pt-PT
             - label: Romanian
               value: ro-RO
+            - label: Hungarian
+              value: hu-HU
             - label: Dutch
               value: nl-NL
             - label: Indonesian

@@ -71,7 +71,7 @@ Requires **Home Assistant 2026.11.0+**, a Groq API key and internet access. Some
 | --- | --- |
 | [Account and service setup](https://github.com/barneyonline/ha-groq/wiki/Account-and-Service-Setup) | API keys and named services |
 | [Text Generation](https://github.com/barneyonline/ha-groq/wiki/Text-Generation) | Assist, AI Tasks and text actions |
-| [Speech-to-Text](https://github.com/barneyonline/ha-groq/wiki/Speech-to-Text) | Transcription and translation |
+| [Speech-to-Text](https://github.com/barneyonline/ha-groq/wiki/Speech-to-Text) | Transcription, language hints (including Hungarian) and translation |
 | [Text-to-Speech](https://github.com/barneyonline/ha-groq/wiki/Text-to-Speech) | Voices and playback options |
 | [Image Recognition](https://github.com/barneyonline/ha-groq/wiki/Image-Recognition) | Image analysis and text extraction |
 | [Usage and diagnostics](https://github.com/barneyonline/ha-groq/wiki/Usage-and-Diagnostics) | Sensors, usage scope and diagnostics |

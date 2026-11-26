@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### ✨ New features
+
+- Add Hungarian (`hu-HU`) to Speech-to-Text setup, Assist and `groq.transcribe_audio`. Send `hu` as the language hint to Groq. (#91)
+
 ## v2.3.0 - 2026-11-22
 
 ### 🚧 Breaking changes
