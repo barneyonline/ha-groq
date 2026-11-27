@@ -833,6 +833,102 @@ async def test_model_access_repairs_are_owned_and_clear_after_matching_success(h
     assert not own_issues(hass)
 
 
+async def test_inflight_text_success_preserves_dismissal_during_disable(hass):
+    """Core hides the dismissed repair while the account unloads."""
+    response_started, release_response = asyncio.Event(), asyncio.Event()
+    unload_started, release_unload = asyncio.Event(), asyncio.Event()
+
+    class PendingResponse(DummyResponse):
+        async def __aenter__(self):
+            response_started.set()
+            await release_response.wait()
+            return self
+
+    config_entries = hass.config_entries
+    unload_platforms = config_entries.async_unload_platforms
+
+    async def pause_platform_unload(entry, platforms):
+        unload_started.set()
+        await release_unload.wait()
+        return await unload_platforms(entry, platforms)
+
+    service = text_service()
+    subentry_id = service["subentry_id"]
+    entry = account(hass, services=[service])
+    session = LifecycleSession()
+    with patch(
+        "custom_components.groq.api.async_get_clientsession", return_value=session
+    ):
+        assert await config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        client = entry.runtime_data.client
+        async_create_model_access_issue(
+            hass, TEXT_MODEL, entry_id=entry.entry_id, subentry_id=subentry_id
+        )
+        (issue_key,) = own_issues(hass)
+        ir.async_ignore_issue(hass, *issue_key, True)
+        dismissed_issues = own_issues(hass)
+        issue = dismissed_issues[issue_key]
+        assert issue.dismissed_version is not None
+
+        response = PendingResponse(
+            200, {}, {"choices": [{"message": {"content": "Available"}}]}
+        )
+        with (
+            patch.object(session, "request", return_value=response),
+            patch.object(
+                config_entries,
+                "async_unload_platforms",
+                side_effect=pause_platform_unload,
+            ),
+        ):
+            request_task = asyncio.create_task(
+                client.async_generate_text(
+                    TextGenerationRequest(
+                        prompt="Hello",
+                        model=TEXT_MODEL,
+                        service_id=subentry_id,
+                        config_subentry_id=subentry_id,
+                    )
+                )
+            )
+            disable_task = None
+            try:
+                await asyncio.wait_for(response_started.wait(), timeout=5)
+                disable_task = asyncio.create_task(
+                    config_entries.async_set_disabled_by(
+                        entry.entry_id, ConfigEntryDisabler.USER
+                    )
+                )
+                await asyncio.wait_for(unload_started.wait(), timeout=5)
+                assert entry.disabled_by is ConfigEntryDisabler.USER
+                assert not disable_task.done()
+                release_response.set()
+                result = await asyncio.wait_for(request_task, timeout=5)
+                assert result.text == "Available"
+                assert own_issues(hass) == dismissed_issues
+                assert ir.async_get(hass).async_is_hidden(issue)
+            finally:
+                release_response.set()
+                release_unload.set()
+                await asyncio.gather(
+                    *(
+                        task
+                        for task in (request_task, disable_task)
+                        if task is not None
+                    ),
+                    return_exceptions=True,
+                )
+
+        assert await disable_task
+        assert entry.state is ConfigEntryState.NOT_LOADED
+        assert await config_entries.async_set_disabled_by(entry.entry_id, None)
+        assert entry.state is ConfigEntryState.LOADED
+        assert own_issues(hass) == dismissed_issues
+        assert not ir.async_get(hass).async_is_hidden(own_issues(hass)[issue_key])
+        assert await config_entries.async_unload(entry.entry_id)
+
+
 @pytest.mark.parametrize("status", [200, 403])
 @pytest.mark.parametrize("changed", ["shutdown", "account", "options", "service"])
 async def test_old_client_cannot_change_repairs_after_configuration_changes(
