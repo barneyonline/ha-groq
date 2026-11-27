@@ -1,0 +1,5 @@
+# Exact Core and pytest helper pair for the next Home Assistant release.
+homeassistant==2026.12.0b2
+pytest-homeassistant==2026.12.0b2
+pytest-cov==7.1.0
+jsonschema==4.26.0

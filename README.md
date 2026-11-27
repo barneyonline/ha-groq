@@ -55,11 +55,16 @@ Configure an Assist agent and a voice for your announcements.
 
 ## Get started
 
-1. [![Open Groq in the Home Assistant Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=barneyonline&repository=ha-groq&category=integration)
+<!-- ha-marketplace:exclude-start -->
 
-   Install Groq and restart Home Assistant if prompted.
-2. Go to **Settings → Devices & services → Add integration → Groq**.
-3. Add your [Groq API key](https://console.groq.com/), then add Text Generation, Speech-to-Text, Text-to-Speech or Image Recognition services.
+[![Open Groq in the Home Assistant Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=barneyonline&repository=ha-groq&category=integration)
+
+Install Groq from the Marketplace and restart Home Assistant if prompted.
+
+<!-- ha-marketplace:exclude-end -->
+
+1. Go to **Settings → Devices & services → Add integration → Groq**.
+2. Add your [Groq API key](https://console.groq.com/), then add Text Generation, Speech-to-Text, Text-to-Speech or Image Recognition services.
 
 Requires **Home Assistant 2026.11.0+**, a Groq API key and internet access. Some audio processing options require `ffmpeg`.
 

@@ -112,7 +112,7 @@
                         "name": "Popisný název pro tuto službu generování textu. Home Assistant to používá pro entity úloh Assist a AI.",
                         "model": "Chatovací model Groq používaný pro textové odpovědi, konverzace Assist a úlohy generování dat.",
                         "system_prompt": "Pokyny, které vedou model. Výchozí nastavení odpovídá příkazovému řádku AI Home Assistant.",
-                        "llm_hass_api": "Home Assistant LLM API, která tento agent Assist může používat pro volání nástrojů. Ponechte prázdné, chcete-li přístup k nástrojům Home Assistant zakázat.",
+                        "llm_hass_api": "Pro sdílené hlasové konfigurace Assist použijte Device control. Home Assistant (admin only) použijte u samostatného agenta pro správce. Pokud vyberete obě sady nástrojů, celý agent bude dostupný pouze správcům. Pro vypnutí přístupu k nástrojům Home Assistant ponechte pole prázdné.",
                         "temperature": "Řídí variace odezvy. Nižší hodnoty jsou předvídatelnější; vyšší hodnoty jsou kreativnější.",
                         "advanced_options": "Otevírá další ovládací prvky pro méně obvyklé možnosti žádosti o chat Groq.",
                         "protect_free_tier": "Když Groq ohlásí, že tato služba dosáhla limitu požadavku nebo tokenu, Home Assistant pozastaví pouze tuto službu do doby resetování Groq před odesláním dalších požadavků."

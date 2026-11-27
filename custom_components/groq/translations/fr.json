@@ -115,7 +115,7 @@
                         "temperature": "Contrôle la variation de réponse. Les valeurs inférieures sont plus prévisibles ; des valeurs plus élevées sont plus créatives.",
                         "advanced_options": "Ouvre des commandes supplémentaires pour les options de demande de chat Groq moins courantes.",
                         "protect_free_tier": "Lorsque Groq signale que ce service a atteint une limite de requêtes ou de jetons, Home Assistant met uniquement ce service en pause jusqu'à l'heure de réinitialisation de Groq avant d'envoyer d'autres requêtes.",
-                        "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
+                        "llm_hass_api": "Utilisez Device control pour les configurations vocales Assist partagées. Utilisez Home Assistant (admin only) dans un agent distinct réservé aux administrateurs. Si vous sélectionnez les deux ensembles d’outils, seuls les administrateurs pourront utiliser cet agent. Laissez le champ vide pour désactiver l’accès aux outils de Home Assistant."
                     }
                 },
                 "text_generation_advanced": {

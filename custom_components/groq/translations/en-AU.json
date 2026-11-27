@@ -115,7 +115,7 @@
                         "temperature": "Controls response variation. Lower values are more predictable; higher values are more creative.",
                         "advanced_options": "Opens additional controls for less common Groq chat request options.",
                         "protect_free_tier": "When Groq reports that this service has reached a request or token limit, Home Assistant pauses only this service until Groq's reset time before sending more requests.",
-                        "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
+                        "llm_hass_api": "Use Device control for shared Assist pipelines. Use Home Assistant (admin only) on a separate agent for administrators. Selecting it with Device control makes the entire agent admin-only. Leave empty to disable Home Assistant tool access."
                     }
                 },
                 "text_generation_advanced": {

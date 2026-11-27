@@ -15,6 +15,7 @@ def test_environment_fingerprint_covers_docker_build_inputs() -> None:
         "devtools/docker/docker-compose.yml",
         "devtools/docker/requirements-dev.txt",
         "devtools/docker/requirements-min-ha.txt",
+        "devtools/docker/requirements-compatibility.txt",
         "scripts/verify_test_environment.py",
     ):
         assert build_input in runner

@@ -69,12 +69,15 @@ scripts/test python -m pytest -q
 
 The primary harness uses Home Assistant 2026.11.0. Verify the advertised minimum
 separately with `scripts/test --minimum python -m pytest tests/components/groq -q`.
-Both environments verify the actual Core/helper versions and run dependency checks
+Run the Home Assistant 2026.12 compatibility job locally with
+`scripts/test --compatibility python -m pytest tests/components/groq -q`.
+Each environment verifies the actual Core and helper versions and runs dependency checks
 when built. The test image uses digest-pinned Python 3.14 and installs only Core,
 the matching helper, and the component dependencies needed by Groq. `HA_VERSION`
 overrides must match the helper dependency; incompatible versions fail before
-tests. `PYTHON_IMAGE` overrides the interpreter image. Stop the minimum container
-with `scripts/test --minimum --stop`. The old `HA_IMAGE` override is rejected;
+tests. `PYTHON_IMAGE` overrides the interpreter image. Stop the minimum or
+compatibility container with `scripts/test --minimum --stop` or
+`scripts/test --compatibility --stop`. The old `HA_IMAGE` override is rejected;
 use `HA_VERSION` for Core and `PYTHON_IMAGE` for the interpreter image instead.
 
 ### Managed cloud environment
@@ -111,18 +114,18 @@ measures warmed local overhead with mocked provider I/O; it is not live latency.
 
 ## Warnings And CI Logs
 
-Pytest treats Python warnings as errors. The only exception in `pytest.ini` is
-the exact aiohttp `NotAppKeyWarning` payload, including its documentation link,
-from
-`homeassistant.components.http.server`: pinned Home Assistant 2026.11.0 retains
-the `app["hass"]` string key for backward compatibility. Review this exception
-when updating Core. The same warning from Groq or any other module still fails
-tests, as do other warning messages and categories. The import-time check also
-rejects integration deprecations. Avoid `-W always` on normal verification runs;
-it overrides this policy and is useful only when auditing filtered warnings.
+Pytest treats Python warnings as errors. The filters in `pytest.ini` match
+specific upstream messages and modules. Home Assistant 2026.11.0 still uses
+the `app["hass"]` string key, which triggers an aiohttp `NotAppKeyWarning`.
+The 2026.12 beta test helper imports Home Assistant's HTTP server and
+`backoff`, which emit deprecations during pytest startup. Recheck these filters
+when updating the corresponding Core pin. Warnings from Groq still fail tests,
+and the import-time check also rejects integration deprecations. Use
+`-W always` only to audit filtered warnings because it overrides this policy.
 
 Python warnings and logging records are separate. CI retains WARNING-level
-runtime logs for both Home Assistant profiles, including failed test runs.
+runtime logs for the primary, minimum-version and compatibility profiles,
+including failed test runs.
 Keep production error logs visible. Tests that exercise API failures, oversized
 audio, or missing ffmpeg should assert the expected records with `caplog`.
 Unit tests that isolate API or audio behavior must explicitly model the repair
@@ -148,7 +151,7 @@ than optional host-side coverage collectors. Workflow runner versions are pinned
 to the verified Ubuntu 26.04 baseline; update them deliberately alongside the
 verification environment.
 
-Both PR test profiles check out the PR head SHA so their reports and reporting
+All PR test profiles check out the PR head SHA so their reports and reporting
 attribution refer to the same source. Coverage.py stores relative file paths.
 The isolated default-branch reporter fetches Git metadata and loads the verified
 commit into Git's index with `git read-tree`, without checking out candidate

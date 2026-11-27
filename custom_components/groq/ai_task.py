@@ -235,6 +235,7 @@ class GroqAITaskEntity(AITaskEntity):
                 self._config_entry, self._service_data, self._model_registry
             ),
             service_id=service_unique_id(self._config_entry, self._service_data),
+            config_subentry_id=self._service_data.get(CONF_SUBENTRY_ID),
             protect_free_tier=service_protect_free_tier(
                 self._config_entry, self._service_data
             ),

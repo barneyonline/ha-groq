@@ -115,7 +115,7 @@
                         "temperature": "Valdo atsako pokyčius. Mažesnės vertės yra labiau nuspėjamos; didesnės vertybės yra kūrybiškesnės.",
                         "advanced_options": "Atidaro papildomus valdiklius, skirtus retesnėms Groq pokalbių užklausų parinktims.",
                         "protect_free_tier": "Kai Groq praneša, kad ši paslauga pasiekė užklausų arba prieigos raktų limitą, Home Assistant pristabdo tik šią paslaugą iki Groq nustatymo iš naujo laiko, prieš išsiųsdama daugiau užklausų.",
-                        "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
+                        "llm_hass_api": "Bendrai naudojamoms „Assist“ balso konfigūracijoms pasirinkite Device control. Home Assistant (admin only) naudokite atskirame administratoriams skirtame agente. Pasirinkus abu įrankių rinkinius, visu agentu galės naudotis tik administratoriai. Norėdami išjungti prieigą prie „Home Assistant“ įrankių, palikite lauką tuščią."
                     }
                 },
                 "text_generation_advanced": {

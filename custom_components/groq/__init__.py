@@ -6,7 +6,11 @@ from typing import Any
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryError
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
 
 from .api import async_preload_clientsession_helper
 from .const import DOMAIN, UNIQUE_ID
@@ -33,7 +37,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> None
     """Set up entities."""
     await async_preload_clientsession_helper(hass)
     runtime = build_runtime(hass, entry)
-    await async_hydrate_runtime_model_registry(entry, runtime, raise_not_ready=True)
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    try:
+        await async_hydrate_runtime_model_registry(entry, runtime, raise_not_ready=True)
+    except ConfigEntryAuthFailed as err:
+        if runtime.client.can_update_repairs:
+            raise
+        raise ConfigEntryNotReady("Groq configuration changed during setup") from err
+    if not runtime.client.can_update_repairs:
+        raise ConfigEntryNotReady("Groq configuration changed during setup")
     entry.runtime_data = runtime
     async_reconcile_entry_issues(hass, entry, model_registry=runtime.model_registry)
 
@@ -45,7 +57,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> None
     await hass.config_entries.async_forward_entry_setups(
         entry, runtime.feature_registry.enabled_platforms()
     )
-    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: GroqConfigEntry) -> None:

@@ -99,3 +99,17 @@ def test_image_and_hacs_minimum_pins_match_test_environments():
     assert (
         f"HA_VERSION=${{HA_VERSION:-{minimum}}}" in (root / "scripts/test").read_text()
     )
+
+
+def test_compatibility_runner_uses_paired_core_and_helper_pins():
+    """Catch Core and pytest helper pin drift in the compatibility job."""
+    import re
+
+    root = Path(__file__).parents[2]
+    runner = (root / "scripts/test").read_text()
+    mode = re.search(r"--compatibility\)(.*?)\n\s*;;", runner, re.DOTALL)[1]
+    version = re.search(r"HA_VERSION=\$\{HA_VERSION:-([^}]+)\}", mode)[1]
+    filename = re.search(r"HA_GROQ_REQUIREMENTS_FILE=(\S+)", mode)[1]
+    requirements = (root / "devtools/docker" / filename).read_text().splitlines()
+    assert f"homeassistant=={version}" in requirements
+    assert f"pytest-homeassistant=={version}" in requirements

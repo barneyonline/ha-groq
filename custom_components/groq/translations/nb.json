@@ -115,7 +115,7 @@
                         "temperature": "Styrer responsvariasjon. Lavere verdier er mer forutsigbare; høyere verdier er mer kreative.",
                         "advanced_options": "Åpner flere kontroller for mindre vanlige alternativer for Groq chat-forespørsel.",
                         "protect_free_tier": "Når Groq rapporterer at denne tjenesten har nådd en forespørsel eller token-grense, pauser Home Assistant kun denne tjenesten til Groqs tilbakestillingstid før den sender flere forespørsler.",
-                        "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
+                        "llm_hass_api": "Bruk Device control for delte Assist-taleoppsett. Bruk Home Assistant (admin only) i en egen agent for administratorer. Hvis du velger begge verktøysettene, kan hele agenten bare brukes av administratorer. La feltet stå tomt for å deaktivere tilgang til Home Assistant-verktøyene."
                     }
                 },
                 "text_generation_advanced": {

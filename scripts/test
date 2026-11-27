@@ -20,12 +20,20 @@ fi
 
 compose_file=devtools/docker/docker-compose.yml
 project_hash=$(printf '%s\n' "$(pwd -P)" | git hash-object --stdin | cut -c1-12)
-if [ "${1:-}" = "--minimum" ]; then
-  shift
-  project_hash="$project_hash-minimum"
-  export HA_VERSION=${HA_VERSION:-2026.11.0}
-  export HA_GROQ_REQUIREMENTS_FILE=requirements-min-ha.txt
-fi
+case "${1:-}" in
+  --minimum)
+    shift
+    project_hash="$project_hash-minimum"
+    export HA_VERSION=${HA_VERSION:-2026.11.0}
+    export HA_GROQ_REQUIREMENTS_FILE=requirements-min-ha.txt
+    ;;
+  --compatibility)
+    shift
+    project_hash="$project_hash-compatibility"
+    export HA_VERSION=${HA_VERSION:-2026.12.0b2}
+    export HA_GROQ_REQUIREMENTS_FILE=requirements-compatibility.txt
+    ;;
+esac
 rebuild=false
 recreate=false
 if [ "${1:-}" = "--rebuild" ]; then
@@ -61,6 +69,7 @@ environment_hash=$(
       devtools/docker/docker-compose.yml \
       devtools/docker/requirements-dev.txt \
       devtools/docker/requirements-min-ha.txt \
+      devtools/docker/requirements-compatibility.txt \
       scripts/verify_test_environment.py
     printf '%s\n' "$resolved_compose_config"
   } | git hash-object --stdin

@@ -111,7 +111,7 @@ def test_git_inventory_never_materializes_candidate_files(tmp_path):
     tests = yaml.load(
         (ROOT / ".github/workflows/tests.yml").read_text(), Loader=yaml.BaseLoader
     )
-    for name in ("checks", "minimum-homeassistant"):
+    for name in ("checks", "minimum-homeassistant", "homeassistant-compatibility"):
         checkout = next(
             item
             for item in tests["jobs"][name]["steps"]

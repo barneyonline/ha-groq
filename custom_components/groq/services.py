@@ -54,6 +54,7 @@ from .const import (
     FEATURE_SPEECH_TO_TEXT,
     FEATURE_TEXT_GENERATION,
     UNIQUE_ID,
+    CONF_SUBENTRY_ID,
 )
 from .errors import translated_service_error
 from .feature_registry import GroqFeature
@@ -472,6 +473,7 @@ def _ensure_model(
             and entry is not None
             and service_data is not None
             and service_data.get(ATTR_MODEL) == model
+            and runtime.client.can_update_repairs
         ):
             async_create_model_configuration_issue(
                 hass,
@@ -492,6 +494,7 @@ def _ensure_model(
         and entry is not None
         and service_data is not None
         and service_data.get(ATTR_MODEL) == model
+        and runtime.client.can_update_repairs
     ):
         async_delete_model_configuration_issue(
             hass, entry, service_data, model, feature.value
@@ -1060,6 +1063,7 @@ def _handle_generate_text(
                     runtime.model_registry,
                 ),
                 service_id=service_data.get(UNIQUE_ID),
+                config_subentry_id=service_data.get(CONF_SUBENTRY_ID),
                 protect_free_tier=_service_protect_free_tier(service_data),
                 schema=schema,
                 schema_name=_service_value(
@@ -1086,6 +1090,7 @@ def _handle_generate_text(
                     runtime.model_registry,
                 ),
                 service_id=service_data.get(UNIQUE_ID),
+                config_subentry_id=service_data.get(CONF_SUBENTRY_ID),
                 protect_free_tier=_service_protect_free_tier(service_data),
             )
         _ensure_completion_token_limit(runtime, request)
@@ -1165,6 +1170,7 @@ def _handle_vision(
             system_prompt=_service_value(call, service_data, ATTR_SYSTEM_PROMPT),
             image_url=await _image_url_from_call(hass, call),
             service_id=service_data.get(UNIQUE_ID),
+            config_subentry_id=service_data.get(CONF_SUBENTRY_ID),
             protect_free_tier=_service_protect_free_tier(service_data),
         )
         key = (
@@ -1269,6 +1275,7 @@ def _handle_transcribe_audio(
                 else _service_value(call, service_data, ATTR_PROMPT)
             ),
             service_id=service_data.get(UNIQUE_ID),
+            config_subentry_id=service_data.get(CONF_SUBENTRY_ID),
             protect_free_tier=_service_protect_free_tier(service_data),
         )
         if translate or response_format == "verbose_json":

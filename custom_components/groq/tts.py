@@ -59,6 +59,7 @@ from .repairs import (
     async_delete_ffmpeg_missing_issue,
 )
 from .runtime import async_get_runtime
+from .subentries import has_legacy_tts_config
 from .types import GroqConfigEntry
 from .vocal_directions import (
     normalize_vocal_directions,
@@ -312,7 +313,7 @@ def _tts_service_data(config_entry: GroqConfigEntry) -> list[dict[str, Any] | No
             services.append(data)
     if services:
         return services
-    if all(config_entry.data.get(key) for key in (CONF_URL, CONF_MODEL, CONF_VOICE)):
+    if has_legacy_tts_config(config_entry):
         return [None]
     return []
 
@@ -386,6 +387,20 @@ class GroqTTSEntity(TextToSpeechEntity):
             {}
         )
 
+    def _update_ffmpeg_repair(self, *, missing: bool) -> None:
+        """Report ffmpeg outcomes only while this entity's configuration is current."""
+        if (
+            isinstance(self._client, GroqApiClient)
+            and not self._client.can_update_repairs
+        ):
+            return
+        update = (
+            async_create_ffmpeg_missing_issue
+            if missing
+            else async_delete_ffmpeg_missing_issue
+        )
+        update(self.hass, self._config, self._service_data)
+
     async def _async_run_ffmpeg(
         self,
         cmd: list[str],
@@ -406,16 +421,12 @@ class GroqTTSEntity(TextToSpeechEntity):
                 "ffmpeg executable not found. Please install ffmpeg or adjust PATH."
             )
             if create_repair:
-                async_create_ffmpeg_missing_issue(
-                    self.hass, self._config, self._service_data
-                )
+                self._update_ffmpeg_repair(missing=True)
             raise translated_error("ffmpeg not found", "ffmpeg_not_found")
         except OSError as err:
             _LOGGER.error("Unable to start ffmpeg: %s", err)
             if create_repair:
-                async_create_ffmpeg_missing_issue(
-                    self.hass, self._config, self._service_data
-                )
+                self._update_ffmpeg_repair(missing=True)
             raise translated_error(
                 "ffmpeg could not start", "ffmpeg_start_failed"
             ) from err
@@ -429,9 +440,7 @@ class GroqTTSEntity(TextToSpeechEntity):
                     "ffmpeg timed out after %s seconds", FFMPEG_TIMEOUT_SECONDS
                 )
                 if create_repair:
-                    async_create_ffmpeg_missing_issue(
-                        self.hass, self._config, self._service_data
-                    )
+                    self._update_ffmpeg_repair(missing=True)
                 raise translated_error("ffmpeg timed out", "ffmpeg_timeout") from err
             if isinstance(err, OSError):
                 raise translated_error(
@@ -442,9 +451,7 @@ class GroqTTSEntity(TextToSpeechEntity):
             stderr_text = stderr.decode(errors="replace").strip()
             _LOGGER.error("ffmpeg error: %s", stderr_text or process.returncode)
             if create_repair:
-                async_create_ffmpeg_missing_issue(
-                    self.hass, self._config, self._service_data
-                )
+                self._update_ffmpeg_repair(missing=True)
             raise translated_error("ffmpeg failed", "ffmpeg_failed")
         return stdout
 
@@ -753,6 +760,7 @@ class GroqTTSEntity(TextToSpeechEntity):
                     sample_rate=sample_rate,
                     speed=speed,
                     service_id=self._service_data.get(UNIQUE_ID),
+                    config_subentry_id=self._service_data.get(CONF_SUBENTRY_ID),
                     protect_free_tier=protect_free_tier,
                     cache_max=cache_max,
                 )
@@ -838,9 +846,7 @@ class GroqTTSEntity(TextToSpeechEntity):
                     self._ffmpeg_capabilities.discard(
                         (output_format, normalize_audio, sample_rate)
                     )
-                    async_create_ffmpeg_missing_issue(
-                        self.hass, self._config, self._service_data
-                    )
+                    self._update_ffmpeg_repair(missing=True)
                     raise
 
             if chunk_count > 1:
@@ -873,9 +879,7 @@ class GroqTTSEntity(TextToSpeechEntity):
                 if needs_ffmpeg:
                     audio_content = await convert_audio_chunk(audio_content)
             if needs_ffmpeg or not self._configured_audio_needs_ffmpeg():
-                async_delete_ffmpeg_missing_issue(
-                    self.hass, self._config, self._service_data
-                )
+                self._update_ffmpeg_repair(missing=False)
 
             postprocess_duration = (time.monotonic() - postprocess_start) * 1000
             overall_duration = (time.monotonic() - overall_start) * 1000

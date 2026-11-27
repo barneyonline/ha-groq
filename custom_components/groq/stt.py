@@ -187,6 +187,7 @@ class GroqSTTEntity(stt.SpeechToTextEntity):
                 language=language,
                 prompt=self._service_data.get(CONF_PROMPT),
                 service_id=self._service_data.get(UNIQUE_ID),
+                config_subentry_id=self._service_data.get(CONF_SUBENTRY_ID),
                 protect_free_tier=bool(
                     self._service_data.get(
                         CONF_PROTECT_FREE_TIER,
