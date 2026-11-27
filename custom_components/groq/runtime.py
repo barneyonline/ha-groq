@@ -127,6 +127,25 @@ def build_runtime(hass: HomeAssistant, entry: GroqConfigEntry) -> GroqRuntimeDat
     # A runtime reload must leave existing directories charged until cleanup.
     budgets = hass.data.setdefault(_AUDIO_SPOOL_BUDGETS, {})
     audio_spool_budget = budgets.setdefault(entry.entry_id, AudioSpoolBudget())
+    original_data, original_options = entry.data, entry.options
+    original_subentries = getattr(entry, "subentries", None)
+    original_service_data = tuple(
+        (subentry, getattr(subentry, "data", None))
+        for subentry in (original_subentries or {}).values()
+    )
+
+    def repair_context_is_current() -> bool:
+        # Core replaces these mappings synchronously before update listeners run.
+        return (
+            entry.data is original_data
+            and entry.options is original_options
+            and getattr(entry, "subentries", None) is original_subentries
+            and all(
+                getattr(subentry, "data", None) is data
+                for subentry, data in original_service_data
+            )
+        )
+
     return GroqRuntimeData(
         client=GroqApiClient(
             hass,
@@ -136,6 +155,7 @@ def build_runtime(hass: HomeAssistant, entry: GroqConfigEntry) -> GroqRuntimeDat
             rate_limiter=rate_limiter,
             audio_spool_budget=audio_spool_budget,
             auth_failure_callback=lambda: _start_runtime_reauth(hass, entry),
+            repair_context_is_current=repair_context_is_current,
         ),
         model_registry=GroqModelRegistry(),
         feature_registry=GroqFeatureRegistry(enabled_features),

@@ -250,11 +250,16 @@ request body options.
 - Local image or audio file fails: direct paths and media-source inputs require an administrator, and direct paths must also be allowed by Home Assistant `allowlist_external_dirs`.
 - Diagnostics: download diagnostics from the integration page. API keys, endpoint URLs, and prompt fields are redacted.
 
-Repair notices retain their ignored status across account reloads. Request-time
-failures remain until a matching request succeeds or the affected service/model
-configuration is removed. Disabling an account hides its notices, and removing
-the account deletes them. Existing notices gain account ownership when Groq
-loads, even if their account is disabled or Groq cannot reach the provider.
+Repair notices for configured services and models retain their ignored status
+across account reloads. A matching successful request or removal of the affected
+configuration clears the notice. During account setup or reload, Groq also
+clears model access notices when a request override differs from the service's
+configured model. Groq clears an account-level notice if the model is absent
+from the account configuration. On Home Assistant 2026.12, deleting a service
+also removes repairs linked to that service. Groq checks stored repairs for deleted
+services at startup, even when the provider is offline. Disabling an account hides
+its notices, and removing the account deletes them. Existing notices gain
+ownership when Groq loads, including notices for disabled accounts.
 When every account is already disabled at startup, Home Assistant skips loading
 Groq. Legacy notices then gain ownership the next time Groq loads.
 

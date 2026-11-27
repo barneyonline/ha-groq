@@ -129,6 +129,7 @@ class TextGenerationRequest:
     api_key: str | None = None
     service_id: str | None = None
     protect_free_tier: bool = True
+    config_subentry_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,6 +162,7 @@ class SpeechRequest:
     service_id: str | None = None
     protect_free_tier: bool = True
     cache_max: int = 256
+    config_subentry_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -539,6 +541,7 @@ class GroqApiClient:
         auth_failure_callback: Callable[[], None] | None = None,
         entry_id: str | None = None,
         audio_spool_budget: AudioSpoolBudget | None = None,
+        repair_context_is_current: Callable[[], bool] | None = None,
     ) -> None:
         self._hass = hass
         self.usage = GroqUsage()
@@ -552,6 +555,7 @@ class GroqApiClient:
         self._request_timeout = request_timeout or JSON_REQUEST_TIMEOUT
         self._stream_timeout = stream_timeout or STREAM_REQUEST_TIMEOUT
         self._auth_failure_callback = auth_failure_callback
+        self._repair_context_is_current = repair_context_is_current
         self._available = True
         self._unavailable_reason: str | None = None
         self._speech_caches: dict[
@@ -606,7 +610,7 @@ class GroqApiClient:
 
     def _authentication_failed(self) -> ConfigEntryAuthFailed:
         """Notify the config entry and return an authentication failure."""
-        if self._auth_failure_callback is not None:
+        if self._auth_failure_callback is not None and self.can_update_repairs:
             self._auth_failure_callback()
         return ConfigEntryAuthFailed("Authentication failed for Groq API")
 
@@ -619,6 +623,13 @@ class GroqApiClient:
     def available(self) -> bool:
         """Return whether the last Groq API interaction succeeded."""
         return self._available
+
+    @property
+    def can_update_repairs(self) -> bool:
+        """Allow repair updates only for the client's current configuration."""
+        return not self._closed and (
+            self._repair_context_is_current is None or self._repair_context_is_current()
+        )
 
     async def async_list_models(self, *, hydrate: bool = True) -> list[GroqModel]:
         """Return available models, sharing overlapping detail refreshes."""
@@ -747,6 +758,7 @@ class GroqApiClient:
             api_key=request.api_key,
             guard_key=self._guard_key(request),
             repair_service_id=request.service_id,
+            repair_subentry_id=request.config_subentry_id,
         )
         return self._chat_result(payload, request.service_id)
 
@@ -787,6 +799,7 @@ class GroqApiClient:
                 api_key=request.api_key,
                 guard_key=self._guard_key(request),
                 repair_service_id=request.service_id,
+                repair_subentry_id=request.config_subentry_id,
             )
         ) as events:
             async for event in events:
@@ -814,6 +827,7 @@ class GroqApiClient:
             api_key=request.api_key,
             guard_key=self._guard_key(request),
             repair_service_id=request.service_id,
+            repair_subentry_id=request.config_subentry_id,
         )
         result = self._chat_result(payload, request.service_id)
         try:
@@ -846,6 +860,7 @@ class GroqApiClient:
             api_key=request.api_key,
             guard_key=self._guard_key(request),
             repair_service_id=request.service_id,
+            repair_subentry_id=request.config_subentry_id,
         )
         return self._chat_result(payload, request.service_id)
 
@@ -859,6 +874,7 @@ class GroqApiClient:
         prompt: str | None = None,
         api_key: str | None = None,
         service_id: str | None = None,
+        config_subentry_id: str | None = None,
         protect_free_tier: bool = True,
     ) -> str:
         """Transcribe audio with Groq's OpenAI-compatible audio endpoint."""
@@ -870,6 +886,7 @@ class GroqApiClient:
             prompt=prompt,
             api_key=api_key,
             service_id=service_id,
+            config_subentry_id=config_subentry_id,
             protect_free_tier=protect_free_tier,
         )
         return str(result["text"])
@@ -884,6 +901,7 @@ class GroqApiClient:
         prompt: str | None = None,
         api_key: str | None = None,
         service_id: str | None = None,
+        config_subentry_id: str | None = None,
         protect_free_tier: bool = True,
         response_format: str = "json",
         timestamp_granularities: list[str] | None = None,
@@ -927,6 +945,7 @@ class GroqApiClient:
             content_type=None,
             guard_key=service_id if protect_free_tier else None,
             repair_service_id=service_id,
+            repair_subentry_id=config_subentry_id,
             repair_model=model,
         )
         if not isinstance(payload.get("text"), str):
@@ -1006,6 +1025,7 @@ class GroqApiClient:
             api_key=request.api_key,
             guard_key=guard_key,
             repair_service_id=request.service_id,
+            repair_subentry_id=request.config_subentry_id,
             before_attempt=record_attempt,
         )
         api_duration = (time.monotonic() - api_start) * 1000
@@ -1125,6 +1145,7 @@ class GroqApiClient:
         content_type: str | None = "application/json",
         guard_key: str | None = None,
         repair_service_id: str | None = None,
+        repair_subentry_id: str | None = None,
         repair_model: str | None = None,
     ) -> dict[str, Any]:
         """Perform a JSON request and return a JSON object."""
@@ -1168,6 +1189,7 @@ class GroqApiClient:
                     body,
                     repair_payload,
                     repair_service_id,
+                    repair_subentry_id,
                 )
                 payload = await async_decode_json_body(
                     self._hass, self._decode_json, body
@@ -1176,7 +1198,9 @@ class GroqApiClient:
                     self._mark_unavailable("Groq API returned non-object JSON")
                     raise GroqResponseError("Groq API returned non-object JSON")
                 self._mark_available()
-                self._clear_model_access_issue(repair_payload, repair_service_id)
+                self._clear_model_access_issue(
+                    repair_payload, repair_service_id, repair_subentry_id
+                )
                 return payload
         except CancelledError:
             raise
@@ -1195,6 +1219,7 @@ class GroqApiClient:
         api_key: str | None = None,
         guard_key: str | None = None,
         repair_service_id: str | None = None,
+        repair_subentry_id: str | None = None,
     ) -> AsyncGenerator[dict[str, Any]]:
         """Perform an SSE request and yield decoded JSON events."""
         session = self._session or async_get_clientsession(self._hass)
@@ -1229,6 +1254,7 @@ class GroqApiClient:
                         body,
                         json_payload,
                         repair_service_id,
+                        repair_subentry_id,
                     )
 
                 self._mark_available()
@@ -1286,7 +1312,9 @@ class GroqApiClient:
                             yield event
                 if not completed:
                     raise GroqResponseError("Groq stream ended before completion")
-                self._clear_model_access_issue(json_payload, repair_service_id)
+                self._clear_model_access_issue(
+                    json_payload, repair_service_id, repair_subentry_id
+                )
         except CancelledError:
             raise
         except (GroqApiError, ConfigEntryAuthFailed):
@@ -1304,6 +1332,7 @@ class GroqApiClient:
         api_key: str | None = None,
         guard_key: str | None = None,
         repair_service_id: str | None = None,
+        repair_subentry_id: str | None = None,
         before_attempt: Callable[[], None] | None = None,
     ) -> bytes:
         """Perform an audio request and return audio bytes."""
@@ -1337,6 +1366,7 @@ class GroqApiClient:
                         body,
                         json_payload,
                         repair_service_id,
+                        repair_subentry_id,
                     )
 
                     if content_type.startswith("application/json"):
@@ -1355,7 +1385,9 @@ class GroqApiClient:
                             f"Unexpected content-type from Groq API: {content_type}"
                         )
                     self._mark_available()
-                    self._clear_model_access_issue(json_payload, repair_service_id)
+                    self._clear_model_access_issue(
+                        json_payload, repair_service_id, repair_subentry_id
+                    )
                     return body
             except CancelledError:
                 raise
@@ -1411,6 +1443,7 @@ class GroqApiClient:
         body: bytes,
         json_payload: dict[str, Any] | None,
         service_id: str | None,
+        subentry_id: str | None,
     ) -> None:
         """Classify bounded error responses consistently across transports."""
         if 200 <= status < 300:
@@ -1425,17 +1458,26 @@ class GroqApiClient:
         if status == 403 and not _payload_mentions_model_access(payload):
             raise self._authentication_failed()
         self._handle_http_unavailable(status, payload)
-        self._create_model_access_issue(status, payload, json_payload, service_id)
+        self._create_model_access_issue(
+            status, payload, json_payload, service_id, subentry_id
+        )
         raise self._api_error(status, payload)
 
     def _clear_model_access_issue(
-        self, json_payload: dict[str, Any] | None, service_id: str | None
+        self,
+        json_payload: dict[str, Any] | None,
+        service_id: str | None,
+        subentry_id: str | None,
     ) -> None:
         """Clear only the issue associated with a successful inference model."""
         model = json_payload.get("model") if json_payload else None
-        if isinstance(model, str):
+        if isinstance(model, str) and self.can_update_repairs:
             async_delete_model_access_issue(
-                self._hass, model, service_id, entry_id=self._entry_id
+                self._hass,
+                model,
+                service_id,
+                entry_id=self._entry_id,
+                subentry_id=subentry_id,
             )
 
     def _handle_http_unavailable(
@@ -1471,9 +1513,10 @@ class GroqApiClient:
         payload: dict[str, Any] | list[Any],
         json_payload: dict[str, Any] | None,
         service_id: str | None = None,
+        subentry_id: str | None = None,
     ) -> None:
         """Create a repair for model errors that require user action."""
-        if status not in (400, 403, 404):
+        if status not in (400, 403, 404) or not self.can_update_repairs:
             return
         model = json_payload.get("model") if isinstance(json_payload, dict) else None
         if not isinstance(model, str) or not _payload_mentions_model_access(payload):
@@ -1483,6 +1526,7 @@ class GroqApiClient:
             model,
             service_id,
             entry_id=self._entry_id,
+            subentry_id=subentry_id,
             reason="permissions" if status == 403 else None,
         )
 

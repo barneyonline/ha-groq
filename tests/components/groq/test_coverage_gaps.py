@@ -712,6 +712,8 @@ def test_free_tier_toggle_strings_are_user_facing():
 
 
 class DummyClient:
+    can_update_repairs = True
+
     def __init__(self):
         self.requests = []
         self.text = "plain text"
@@ -1355,25 +1357,31 @@ def test_repair_issue_helpers_create_sanitized_issues(monkeypatch):
         lambda *args, **kwargs: deleted.append((args, kwargs)),
     )
     entry = DummyEntry()
+    entry.subentries["service-uid"] = SimpleNamespace(
+        subentry_id="service-uid",
+        data={"service_type": "image_recognition", "model": "vision-model"},
+    )
+    hass = DummyHass([entry])
+    monkeypatch.setattr(
+        repairs_module.ir,
+        "async_get",
+        lambda _hass: SimpleNamespace(async_get_issue=lambda *_: None),
+    )
 
-    repairs_module.async_create_ffmpeg_missing_issue(DummyHass(), entry)
+    repairs_module.async_create_ffmpeg_missing_issue(hass, entry)
     repairs_module.async_create_model_access_issue(
-        DummyHass(),
+        hass,
         "m" * 200,
         service_id="svc",
     )
     repairs_module.async_create_model_configuration_issue(
-        DummyHass(),
+        hass,
         entry,
         {UNIQUE_ID: "service-uid"},
         "vision-model",
         "image recognition",
     )
-    repairs_module.async_delete_ffmpeg_missing_issue(
-        DummyHass(),
-        entry,
-        {UNIQUE_ID: "service-uid"},
-    )
+    repairs_module.async_delete_ffmpeg_missing_issue(hass, entry)
 
     assert [kwargs["translation_key"] for _args, kwargs in created] == [
         repairs_module.ISSUE_FFMPEG_MISSING,

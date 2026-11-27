@@ -111,7 +111,11 @@ class Session:
 
 
 async def perform(client, transport, *, service_id="service"):
-    kwargs = {"json_payload": {"model": "model"}, "repair_service_id": service_id}
+    kwargs = {
+        "json_payload": {"model": "model"},
+        "repair_service_id": service_id,
+        "repair_subentry_id": "subentry",
+    }
     if transport == "stream":
         return [
             event
@@ -162,7 +166,12 @@ async def test_permission_failure_is_model_scoped_not_reauth(transport, code):
         "error": {"type": "permissions_error", "code": code}
     }
     create.assert_called_once_with(
-        client._hass, "model", "service", entry_id="account", reason="permissions"
+        client._hass,
+        "model",
+        "service",
+        entry_id="account",
+        subentry_id="subentry",
+        reason="permissions",
     )
     assert not reauth
     assert response.closed
@@ -231,7 +240,9 @@ async def test_stream_finish_reason_and_matching_repair_recovery():
     )
     with patch.object(api, "async_delete_model_access_issue") as clear:
         assert len(await perform(client, "stream")) == 1
-    clear.assert_called_once_with(client._hass, "model", "service", entry_id="account")
+    clear.assert_called_once_with(
+        client._hass, "model", "service", entry_id="account", subentry_id="subentry"
+    )
 
 
 @pytest.mark.asyncio
@@ -929,10 +940,16 @@ async def test_stt_permission_error_has_model_and_account_context():
             filename="audio.wav",
             model="whisper",
             service_id="stt-service",
+            config_subentry_id="stt-subentry",
             protect_free_tier=False,
         )
     create.assert_called_once_with(
-        client._hass, "whisper", "stt-service", entry_id="account", reason="permissions"
+        client._hass,
+        "whisper",
+        "stt-service",
+        entry_id="account",
+        subentry_id="stt-subentry",
+        reason="permissions",
     )
 
 
@@ -948,12 +965,17 @@ async def test_stt_success_clears_repair_without_adding_json_to_multipart():
                 filename="audio.wav",
                 model="whisper",
                 service_id="stt-service",
+                config_subentry_id="stt-subentry",
                 protect_free_tier=False,
             )
             == "transcribed"
         )
     clear.assert_called_once_with(
-        client._hass, "whisper", "stt-service", entry_id="account"
+        client._hass,
+        "whisper",
+        "stt-service",
+        entry_id="account",
+        subentry_id="stt-subentry",
     )
     assert "json" not in session.calls[0][1]
     assert "data" in session.calls[0][1]

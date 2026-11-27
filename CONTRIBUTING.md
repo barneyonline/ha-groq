@@ -114,18 +114,18 @@ measures warmed local overhead with mocked provider I/O; it is not live latency.
 
 ## Warnings And CI Logs
 
-Pytest treats Python warnings as errors. The only exception in `pytest.ini` is
-the exact aiohttp `NotAppKeyWarning` payload, including its documentation link,
-from
-`homeassistant.components.http.server`: pinned Home Assistant 2026.11.0 retains
-the `app["hass"]` string key for backward compatibility. Review this exception
-when updating Core. The same warning from Groq or any other module still fails
-tests, as do other warning messages and categories. The import-time check also
-rejects integration deprecations. Avoid `-W always` on normal verification runs;
-it overrides this policy and is useful only when auditing filtered warnings.
+Pytest treats Python warnings as errors. The filters in `pytest.ini` match
+specific upstream messages and modules. Home Assistant 2026.11.0 still uses
+the `app["hass"]` string key, which triggers an aiohttp `NotAppKeyWarning`.
+The 2026.12 beta test helper imports Home Assistant's HTTP server and
+`backoff`, which emit deprecations during pytest startup. Recheck these filters
+when updating the corresponding Core pin. Warnings from Groq still fail tests,
+and the import-time check also rejects integration deprecations. Use
+`-W always` only to audit filtered warnings because it overrides this policy.
 
 Python warnings and logging records are separate. CI retains WARNING-level
-runtime logs for both Home Assistant profiles, including failed test runs.
+runtime logs for the primary, minimum-version and compatibility profiles,
+including failed test runs.
 Keep production error logs visible. Tests that exercise API failures, oversized
 audio, or missing ffmpeg should assert the expected records with `caplog`.
 Unit tests that isolate API or audio behavior must explicitly model the repair
@@ -151,7 +151,7 @@ than optional host-side coverage collectors. Workflow runner versions are pinned
 to the verified Ubuntu 26.04 baseline; update them deliberately alongside the
 verification environment.
 
-Both PR test profiles check out the PR head SHA so their reports and reporting
+All PR test profiles check out the PR head SHA so their reports and reporting
 attribution refer to the same source. Coverage.py stores relative file paths.
 The isolated default-branch reporter fetches Git metadata and loads the verified
 commit into Git's index with `git read-tree`, without checking out candidate

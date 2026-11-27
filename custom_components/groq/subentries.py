@@ -4,8 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from .const import CONF_SERVICE_TYPE, CONF_SUBENTRY_ID, UNIQUE_ID
+from .const import (
+    CONF_MODEL,
+    CONF_SERVICE_TYPE,
+    CONF_SUBENTRY_ID,
+    CONF_URL,
+    CONF_VOICE,
+    UNIQUE_ID,
+)
 from .types import GroqConfigEntry
+
+
+def has_legacy_tts_config(entry: GroqConfigEntry) -> bool:
+    """Check for the settings required by the flat account TTS entity."""
+    return all(entry.data.get(key) for key in (CONF_URL, CONF_MODEL, CONF_VOICE))
 
 
 def service_data_by_type(

@@ -13,6 +13,7 @@ import pytest
 from homeassistant import data_entry_flow
 from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.setup import async_setup_component
 
 import custom_components.groq as integration
 from custom_components.groq import config_flow, flow_schemas, tts
@@ -2456,19 +2457,10 @@ async def test_text_generation_subentry_flow_uses_advanced_step(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_text_generation_subentry_flow_stores_llm_hass_api(monkeypatch):
+async def test_text_generation_subentry_flow_stores_llm_hass_api(hass, monkeypatch):
+    assert await async_setup_component(hass, "llm", {})
     flow = config_flow.GroqServiceSubentryFlow()
-    _patch_flow_common(monkeypatch, flow)
-    monkeypatch.setattr(
-        config_flow.llm,
-        "async_get_apis",
-        lambda _hass: [
-            SimpleNamespace(id="assist", name="Device control", requires_admin=False),
-            SimpleNamespace(
-                id="homeassistant", name="Home Assistant", requires_admin=True
-            ),
-        ],
-    )
+    _patch_flow_common(monkeypatch, flow, hass)
 
     form = await flow.async_step_text_generation()
     assert form["type"] == "form"

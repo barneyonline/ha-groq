@@ -527,6 +527,7 @@ async def test_reasoning_false_override_uses_effective_options(hass, monkeypatch
     entry = MockConfigEntry(domain="groq")
     entry.add_to_hass(hass)
     client = SimpleNamespace(
+        can_update_repairs=True,
         async_generate_text=AsyncMock(
             return_value=SimpleNamespace(
                 text="ok",
@@ -536,7 +537,7 @@ async def test_reasoning_false_override_uses_effective_options(hass, monkeypatch
                 model="llama-3.1-8b-instant",
                 usage={},
             )
-        )
+        ),
     )
     data = {
         "unique_id": "text",

@@ -1,16 +1,25 @@
 """Regression tests across real Home Assistant configuration and registry boundaries."""
 
+import asyncio
 from copy import deepcopy
 from datetime import timedelta
 from types import MappingProxyType
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from homeassistant.components.conversation import ChatLog, ConversationInput
 from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
+from homeassistant.const import CONF_LLM_HASS_API
+from homeassistant.core import Context
 from homeassistant.data_entry_flow import InvalidData
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    HomeAssistantError,
+)
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.intent import IntentResponseType
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant.common import (
@@ -29,6 +38,7 @@ from custom_components.groq.config_flow import (
     async_get_model_registry,
 )
 from custom_components.groq.const import enabled_features_from_entry
+from custom_components.groq.conversation import GroqConversationEntity
 from custom_components.groq.diagnostics import async_get_config_entry_diagnostics
 from custom_components.groq.errors import GroqApiError
 from custom_components.groq.feature_registry import GroqFeature
@@ -39,14 +49,22 @@ from custom_components.groq.model_registry import (
     GroqModelRegistry,
 )
 from custom_components.groq.repairs import (
+    _hashed_issue_id,
     async_create_ffmpeg_missing_issue,
     async_create_model_access_issue,
     async_create_model_configuration_issue,
+    async_delete_ffmpeg_missing_issue,
     async_delete_model_access_issue,
     async_delete_model_configuration_issue,
     async_reconcile_entry_issues,
+    async_reconcile_startup_issues,
 )
+from custom_components.groq.runtime import build_runtime
+from custom_components.groq.services import _ensure_model
+from custom_components.groq.stt import _stt_service_data
 from custom_components.groq.subentries import service_data_for_type
+from custom_components.groq.text_generation import service_unique_id
+from custom_components.groq.tts import GroqTTSEntity
 
 from .test_foundation import DummyResponse, DummySession
 
@@ -106,12 +124,51 @@ def text_service(*, model=TEXT_MODEL):
     }
 
 
+def voice_service():
+    return {
+        "subentry_id": "voice",
+        "subentry_type": "text_to_speech",
+        "title": "Voice",
+        "unique_id": None,
+        "data": {"service_type": "text_to_speech", "model": TTS_MODEL, "voice": "troy"},
+    }
+
+
 def own_issues(hass):
     return {
         key: value
         for key, value in ir.async_get(hass).issues.items()
         if key[0] == "groq"
     }
+
+
+@pytest.mark.parametrize("signed_in", [False, True])
+async def test_mixed_assist_tool_sets_require_an_admin(
+    hass, hass_read_only_user, signed_in
+):
+    """Core rejects the entire set before asking Groq for a response."""
+    assert await async_setup_component(hass, "llm", {})
+    stored_service = text_service()
+    stored_service["data"][CONF_LLM_HASS_API] = ["assist", "homeassistant"]
+    entry = account(hass, services=[stored_service])
+    service = service_data_for_type(entry, "text_generation")[0]
+    client = Mock(spec=GroqApiClient)
+    agent = GroqConversationEntity(hass, entry, service, client)
+    log = ChatLog(hass, "shared-assist")
+    user_input = ConversationInput(
+        text="Turn on the light",
+        context=Context(user_id=hass_read_only_user.id if signed_in else None),
+        conversation_id=log.conversation_id,
+        device_id=None,
+        satellite_id=None,
+        language="en",
+        agent_id="conversation.groq",
+    )
+
+    result = await agent._async_handle_message(user_input, log)
+
+    assert result.response.response_type is IntentResponseType.ERROR
+    assert not client.mock_calls
 
 
 class LifecycleSession:
@@ -173,6 +230,62 @@ async def test_setup_retry_recovers_through_home_assistant(hass):
         )
         assert response.text == "Available"
         assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize("old_credentials_rejected", [False, True])
+async def test_edit_during_setup_loads_the_current_runtime(
+    hass, old_credentials_rejected
+):
+    """A setup-time credential update supersedes the in-flight provider result."""
+    entry = account(hass, services=[text_service()])
+    entered, released = asyncio.Event(), asyncio.Event()
+    clients = []
+
+    async def list_models(client, **_kwargs):
+        clients.append(client)
+        if len(clients) == 1:
+            entered.set()
+            await released.wait()
+            if old_credentials_rejected:
+                raise ConfigEntryAuthFailed("old credential")
+        return list(BUILT_IN_MODELS.values())
+
+    with patch.object(
+        GroqApiClient, "async_list_models", autospec=True, side_effect=list_models
+    ):
+        setup = asyncio.create_task(hass.config_entries.async_setup(entry.entry_id))
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=5)
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, "api_key": "updated-key"}
+            )
+        finally:
+            released.set()
+        await setup
+        await hass.async_block_till_done()
+
+    assert len(clients) == 2
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.runtime_data.client is clients[1]
+    assert entry.runtime_data.client.can_update_repairs
+    assert not hass.config_entries.flow.async_progress()
+
+
+async def test_setup_authentication_error_for_current_credentials_starts_reauth(hass):
+    """Preserve Home Assistant's normal reauth path for the current snapshot."""
+    entry = account(hass)
+    with patch.object(
+        GroqApiClient,
+        "async_list_models",
+        side_effect=ConfigEntryAuthFailed("current key"),
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert any(
+        flow["context"]["source"] == "reauth"
+        for flow in hass.config_entries.flow.async_progress()
+    )
 
 
 async def test_failed_platform_unload_preserves_runtime_and_descriptions(hass):
@@ -720,6 +833,627 @@ async def test_model_access_repairs_are_owned_and_clear_after_matching_success(h
     assert not own_issues(hass)
 
 
+@pytest.mark.parametrize("status", [200, 403])
+@pytest.mark.parametrize("changed", ["shutdown", "account", "options", "service"])
+async def test_old_client_cannot_change_repairs_after_configuration_changes(
+    hass, status, changed
+):
+    """A late response cannot mutate repairs once the request context is obsolete."""
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    payload = (
+        {"choices": [{"message": {"content": "old result"}}]}
+        if status == 200
+        else {"error": {"code": "model_permission_blocked_org"}}
+    )
+
+    class PendingResponse(DummyResponse):
+        async def __aenter__(self):
+            entered.set()
+            await release.wait()
+            return self
+
+    entry = account(hass, services=[text_service()])
+    client = build_runtime(hass, entry).client
+    client._session = DummySession(PendingResponse(status, {}, payload))
+    task = asyncio.create_task(
+        client.async_generate_text(
+            TextGenerationRequest(
+                prompt="Hello", model=TEXT_MODEL, service_id="text-service"
+            )
+        )
+    )
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    try:
+        if changed == "shutdown":
+            await client.async_shutdown()
+            if status == 403:
+                hass.config_entries.async_remove_subentry(entry, "text-service")
+        elif changed == "account":
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, "api_key": "new-key"}
+            )
+        elif changed == "options":
+            hass.config_entries.async_update_entry(entry, options={"cache_size": 2})
+        else:
+            service = entry.subentries["text-service"]
+            hass.config_entries.async_update_subentry(
+                entry, service, data={**service.data, "temperature": 0.1}
+            )
+        if status == 200:
+            async_create_model_access_issue(
+                hass, TEXT_MODEL, "text-service", entry_id=entry.entry_id
+            )
+        expected = own_issues(hass)
+        assert len(expected) == (1 if status == 200 else 0)
+    finally:
+        release.set()
+
+    if status == 403:
+        with pytest.raises(GroqApiError):
+            await task
+    else:
+        assert (await task).text == "old result"
+    assert own_issues(hass) == expected
+
+
+async def test_ffmpeg_failure_for_changed_profile_does_not_create_repair(hass):
+    """An ffmpeg subprocess can finish after its entity's configuration changes."""
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fail_to_spawn(*_args, **_kwargs):
+        entered.set()
+        await release.wait()
+        raise FileNotFoundError("ffmpeg")
+
+    stored_service = {
+        "subentry_id": "voice",
+        "subentry_type": "text_to_speech",
+        "title": "Voice",
+        "unique_id": None,
+        "data": {
+            "service_type": "text_to_speech",
+            "model": TTS_MODEL,
+            "normalize_audio": True,
+        },
+    }
+    entry = account(hass, services=[stored_service])
+    service_data = service_data_for_type(entry, "text_to_speech")[0]
+    voice = GroqTTSEntity(hass, entry, build_runtime(hass, entry).client, service_data)
+    with patch(
+        "custom_components.groq.tts.asyncio.create_subprocess_exec",
+        side_effect=fail_to_spawn,
+    ):
+        task = asyncio.create_task(voice._async_run_ffmpeg(["ffmpeg"]))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        try:
+            service = entry.subentries["voice"]
+            hass.config_entries.async_update_subentry(
+                entry, service, data={**service.data, "normalize_audio": False}
+            )
+        finally:
+            release.set()
+        with pytest.raises(HomeAssistantError, match="ffmpeg not found"):
+            await task
+
+    assert not own_issues(hass)
+
+
+@pytest.mark.parametrize("has_metadata", [False, True])
+async def test_ffmpeg_repair_uses_actual_subentry_despite_other_service_alias(
+    hass, has_metadata
+):
+    """An unrelated stored alias cannot suppress an identified voice repair."""
+    text = text_service()
+    text["data"]["unique_id"] = "voice"
+    entry = account(hass, services=[voice_service(), text])
+    (service_data,) = service_data_for_type(entry, "text_to_speech")
+    issue_id = _hashed_issue_id("ffmpeg_missing", entry.entry_id, "voice")
+    ir.async_create_issue(
+        hass,
+        "groq",
+        issue_id,
+        config_entry_id=entry.entry_id if has_metadata else None,
+        data=(
+            {"entry_id": entry.entry_id, "service_id": "voice"}
+            if has_metadata
+            else None
+        ),
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="ffmpeg_missing",
+    )
+    ir.async_ignore_issue(hass, "groq", issue_id, True)
+    ignored = own_issues(hass)[("groq", issue_id)].dismissed_version
+    async_reconcile_startup_issues(hass)
+    async_reconcile_entry_issues(hass, entry)
+    entity = GroqTTSEntity(hass, entry, build_runtime(hass, entry).client, service_data)
+    with (
+        patch(
+            "custom_components.groq.tts.asyncio.create_subprocess_exec",
+            side_effect=FileNotFoundError,
+        ),
+        pytest.raises(HomeAssistantError, match="ffmpeg not found"),
+    ):
+        await entity._async_run_ffmpeg(["ffmpeg"])
+    (issue,) = own_issues(hass).values()
+    assert issue.issue_id == issue_id
+    assert issue.dismissed_version == ignored
+    assert issue.data["subentry_id"] == "voice"
+    assert getattr(issue, "config_subentry_id", "voice") == "voice"
+
+    hass.config_entries.async_remove_subentry(entry, "text-service")
+    async_reconcile_entry_issues(hass, entry)
+    async_create_ffmpeg_missing_issue(hass, entry, service_data)
+    assert {candidate.issue_id for candidate in own_issues(hass).values()} == {
+        issue.issue_id
+    }
+    async_delete_ffmpeg_missing_issue(hass, entry, service_data)
+    assert not own_issues(hass)
+
+
+async def test_http_repairs_keep_colliding_named_services_separate(hass):
+    """Two services with the same historical key can fail and recover independently."""
+    first = text_service()
+    first["data"]["unique_id"] = "other-service"
+    second = {**text_service(), "subentry_id": "other-service"}
+    entry = account(hass, services=[first, second])
+    runtime = build_runtime(hass, entry)
+    response = DummyResponse(
+        403, {}, {"error": {"code": "model_permission_blocked_org"}}
+    )
+    runtime.client._session = DummySession(response)
+    requests = [
+        TextGenerationRequest(
+            prompt="Hello",
+            model=TEXT_MODEL,
+            service_id="other-service",
+            config_subentry_id=subentry_id,
+        )
+        for subentry_id in ("text-service", "other-service")
+    ]
+    for request in requests:
+        with pytest.raises(GroqApiError):
+            await runtime.client.async_generate_text(request)
+    assert {issue.data["subentry_id"] for issue in own_issues(hass).values()} == {
+        "text-service",
+        "other-service",
+    }
+
+    runtime.client._session = DummySession(
+        DummyResponse(200, {}, {"choices": [{"message": {"content": "ok"}}]})
+    )
+    await runtime.client.async_generate_text(requests[0])
+    assert [issue.data["subentry_id"] for issue in own_issues(hass).values()] == [
+        "other-service"
+    ]
+
+
+def store_legacy_model_repair(hass, entry, service_id, model=TEXT_MODEL, owner=None):
+    """Seed a persistent repair with the previous integration's key shape."""
+    issue_id = _hashed_issue_id("model_access", entry.entry_id, model, service_id)
+    data = {"entry_id": entry.entry_id, "service_id": service_id, "model": model}
+    if owner is not None:
+        data["subentry_id"] = owner
+    ir.async_create_issue(
+        hass,
+        "groq",
+        issue_id,
+        config_entry_id=entry.entry_id,
+        data=data,
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="model_access",
+    )
+    return issue_id
+
+
+@pytest.mark.parametrize("has_named_tts", [False, True])
+@pytest.mark.parametrize("has_metadata", [False, True])
+async def test_startup_adopts_legacy_ffmpeg_only_for_active_flat_tts(
+    hass, has_named_tts, has_metadata
+):
+    entry = account(
+        hass,
+        services=[voice_service()] if has_named_tts else [],
+        data={
+            "name": "Legacy Groq",
+            "url": "https://api.groq.com",
+            "model": TTS_MODEL,
+            "voice": "troy",
+            "api_key": "test-key",
+        },
+    )
+    issue_id = _hashed_issue_id("ffmpeg_missing", entry.entry_id, None)
+    ir.async_create_issue(
+        hass,
+        "groq",
+        issue_id,
+        config_entry_id=entry.entry_id if has_metadata else None,
+        data={"entry_id": entry.entry_id} if has_metadata else None,
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="ffmpeg_missing",
+    )
+    ir.async_ignore_issue(hass, "groq", issue_id, True)
+    original = own_issues(hass)[("groq", issue_id)]
+    async_reconcile_startup_issues(hass)
+
+    if has_named_tts:
+        assert not any(issue.active for issue in own_issues(hass).values())
+    else:
+        (issue,) = own_issues(hass).values()
+        assert issue.config_entry_id == entry.entry_id
+        assert issue.issue_id == issue_id
+        assert issue.dismissed_version == original.dismissed_version
+
+
+@pytest.mark.parametrize("kind", ["model_access", "model_configuration"])
+async def test_startup_repair_adoption_requires_a_verifiable_historical_key(hass, kind):
+    entry = account(hass, services=[text_service()])
+    issue_id = _hashed_issue_id(
+        kind, "removed-account", "text-service", TEXT_MODEL, "reasoning"
+    )
+    ir.async_create_issue(
+        hass,
+        "groq",
+        issue_id,
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key=kind,
+        translation_placeholders={"model": TEXT_MODEL, "feature": "reasoning"},
+    )
+
+    async_reconcile_startup_issues(hass)
+    assert own_issues(hass)[("groq", issue_id)].config_entry_id is None
+    async_reconcile_entry_issues(hass, entry)
+    assert not own_issues(hass)
+
+
+async def test_attributed_recovery_clears_unowned_historical_collision(hass):
+    first = text_service()
+    first["data"]["unique_id"] = "other-service"
+    entry = account(
+        hass, services=[first, {**text_service(), "subentry_id": "other-service"}]
+    )
+    store_legacy_model_repair(hass, entry, "other-service")
+    async_reconcile_entry_issues(hass, entry)
+    for subentry_id in ("text-service", "other-service"):
+        async_delete_model_access_issue(
+            hass,
+            TEXT_MODEL,
+            "other-service",
+            entry_id=entry.entry_id,
+            subentry_id=subentry_id,
+        )
+    assert not own_issues(hass)
+
+
+@pytest.mark.parametrize("action", [False, True])
+async def test_text_service_with_null_legacy_id_preserves_historical_repairs(
+    hass, action
+):
+    stored = text_service()
+    stored["data"]["unique_id"] = None
+    entry = account(hass, services=[stored])
+    service = service_data_for_type(entry, "text_generation")[0]
+    historical_id = service_unique_id(entry, service)
+    issue_id = store_legacy_model_repair(hass, entry, None if action else historical_id)
+    ir.async_ignore_issue(hass, "groq", issue_id, True)
+    original = own_issues(hass)[("groq", issue_id)]
+    async_reconcile_entry_issues(hass, entry)
+    async_create_model_access_issue(
+        hass,
+        TEXT_MODEL,
+        historical_id,
+        entry_id=entry.entry_id,
+        subentry_id="text-service",
+    )
+    (issue,) = own_issues(hass).values()
+    assert issue.issue_id == issue_id
+    assert issue.dismissed_version == original.dismissed_version
+    assert issue.data["subentry_id"] == "text-service"
+    async_delete_model_access_issue(
+        hass,
+        TEXT_MODEL,
+        historical_id,
+        entry_id=entry.entry_id,
+        subentry_id="text-service",
+    )
+    assert not own_issues(hass)
+
+
+@pytest.mark.parametrize("has_named_tts", [False, True])
+async def test_blank_account_repair_is_not_claimed_by_an_idless_text_action(
+    hass, has_named_tts
+):
+    repair_model = "canopylabs/orpheus-arabic-saudi" if has_named_tts else TTS_MODEL
+    stored = text_service(model=repair_model)
+    stored["data"]["unique_id"] = None
+    entry = account(
+        hass,
+        services=[stored, voice_service()] if has_named_tts else [stored],
+        data={
+            "name": "Legacy Groq",
+            "url": "https://api.groq.com",
+            "model": TTS_MODEL,
+            "voice": "troy",
+            "api_key": "test-key",
+        },
+    )
+    issue_id = store_legacy_model_repair(hass, entry, None, repair_model)
+    original = own_issues(hass)[("groq", issue_id)]
+    async_reconcile_entry_issues(hass, entry)
+    async_delete_model_access_issue(
+        hass, repair_model, entry_id=entry.entry_id, subentry_id="text-service"
+    )
+    assert own_issues(hass)[("groq", issue_id)] is original
+
+
+async def test_flat_tts_model_override_repair_survives_unrelated_subentry_removal(hass):
+    override_model = "canopylabs/orpheus-arabic-saudi"
+    stored = text_service()
+    stored["data"]["unique_id"] = None
+    entry = account(
+        hass,
+        services=[stored],
+        data={
+            "name": "Legacy Groq",
+            "url": "https://api.groq.com",
+            "model": TTS_MODEL,
+            "voice": "troy",
+            "api_key": "test-key",
+        },
+    )
+    runtime = build_runtime(hass, entry)
+    runtime.client._session = DummySession(
+        DummyResponse(403, {}, {"error": {"code": "model_permission_blocked_org"}})
+    )
+    entity = GroqTTSEntity(hass, entry, runtime.client)
+    assert await entity.async_get_tts_audio(
+        "Hello", "en", {"model": override_model, "voice": "fahad"}
+    ) == (None, None)
+    ((key, issue),) = own_issues(hass).items()
+    assert issue.data["model"] == override_model
+    ir.async_ignore_issue(hass, *key, True)
+    original = own_issues(hass)[key]
+
+    hass.config_entries.async_update_entry(
+        entry,
+        data={field: value for field, value in entry.data.items() if field != "voice"},
+    )
+    async_delete_model_access_issue(
+        hass, override_model, entry_id=entry.entry_id, subentry_id="text-service"
+    )
+    async_reconcile_startup_issues(hass)
+    hass.config_entries.async_remove_subentry(entry, "text-service")
+    assert own_issues(hass)[key] is original
+
+
+async def test_model_access_repair_ignores_ids_unused_by_other_historical_producers(
+    hass,
+):
+    first = text_service()
+    first["data"]["unique_id"] = "first-historical-alias"
+    second = {**text_service(), "subentry_id": "second-physical-id"}
+    second["data"]["unique_id"] = "text-service"
+    tts = voice_service()
+    tts["data"]["unique_id"] = "text-service"
+    entry = account(hass, services=[first, second, tts])
+    issue_id = store_legacy_model_repair(hass, entry, "text-service")
+    ir.async_ignore_issue(hass, "groq", issue_id, True)
+    original = own_issues(hass)[("groq", issue_id)]
+    async_create_model_access_issue(
+        hass,
+        TEXT_MODEL,
+        "first-historical-alias",
+        entry_id=entry.entry_id,
+        subentry_id="text-service",
+    )
+    assert own_issues(hass)[("groq", issue_id)] is original
+    async_delete_model_access_issue(
+        hass,
+        TEXT_MODEL,
+        "first-historical-alias",
+        entry_id=entry.entry_id,
+        subentry_id="text-service",
+    )
+    async_reconcile_entry_issues(hass, entry)
+    async_create_model_access_issue(
+        hass,
+        TEXT_MODEL,
+        "text-service",
+        entry_id=entry.entry_id,
+        subentry_id="second-physical-id",
+    )
+    (issue,) = own_issues(hass).values()
+    assert issue.issue_id == issue_id
+    assert issue.dismissed_version == original.dismissed_version
+    assert issue.data["subentry_id"] == "second-physical-id"
+
+
+async def test_stt_entity_and_action_share_historic_model_repair(hass):
+    model = "whisper-large-v3"
+    entry = account(
+        hass,
+        services=[
+            {
+                "subentry_id": "speech",
+                "subentry_type": "speech_to_text",
+                "title": "Speech",
+                "unique_id": None,
+                "data": {
+                    "service_type": "speech_to_text",
+                    "model": model,
+                    "unique_id": "legacy",
+                },
+            }
+        ],
+    )
+    (entity_service,) = _stt_service_data(entry)
+    (action_service,) = service_data_for_type(entry, "speech_to_text")
+    issue_id = store_legacy_model_repair(
+        hass, entry, action_service["unique_id"], model
+    )
+    ir.async_ignore_issue(hass, "groq", issue_id, True)
+    dismissed = own_issues(hass)[("groq", issue_id)].dismissed_version
+    for service in (entity_service, action_service):
+        async_create_model_access_issue(
+            hass,
+            model,
+            service["unique_id"],
+            entry_id=entry.entry_id,
+            subentry_id=service["subentry_id"],
+        )
+    (retained,) = own_issues(hass).values()
+    assert retained.issue_id == issue_id
+    assert retained.dismissed_version == dismissed
+    async_delete_model_access_issue(
+        hass,
+        model,
+        entity_service["unique_id"],
+        entry_id=entry.entry_id,
+        subentry_id=entity_service["subentry_id"],
+    )
+    assert not own_issues(hass)
+
+
+async def test_historical_key_owned_by_another_service_is_not_reused(hass):
+    first = text_service()
+    first["data"]["unique_id"] = "other-service"
+    entry = account(
+        hass, services=[first, {**text_service(), "subentry_id": "other-service"}]
+    )
+    issue_id = store_legacy_model_repair(
+        hass, entry, "other-service", owner="text-service"
+    )
+    original = own_issues(hass)[("groq", issue_id)]
+    async_create_model_access_issue(
+        hass,
+        TEXT_MODEL,
+        "other-service",
+        entry_id=entry.entry_id,
+        subentry_id="other-service",
+    )
+    assert own_issues(hass)[("groq", issue_id)] is original
+    assert {issue.data["subentry_id"] for issue in own_issues(hass).values()} == {
+        "text-service",
+        "other-service",
+    }
+
+
+@pytest.mark.parametrize("has_metadata", [False, True])
+async def test_configuration_repair_uses_recorded_feature_to_resolve_alias(
+    hass, has_metadata
+):
+    first = text_service()
+    first["data"]["unique_id"] = "vision"
+    vision = {
+        "subentry_id": "vision",
+        "subentry_type": "image_recognition",
+        "title": "Vision",
+        "unique_id": None,
+        "data": {"service_type": "image_recognition", "model": "vision-model"},
+    }
+    entry = account(hass, services=[first, vision])
+    issue_id = _hashed_issue_id(
+        "model_configuration", entry.entry_id, "vision", "vision-model", "ocr"
+    )
+    ir.async_create_issue(
+        hass,
+        "groq",
+        issue_id,
+        config_entry_id=entry.entry_id if has_metadata else None,
+        data=(
+            {
+                "entry_id": entry.entry_id,
+                "service_id": "vision",
+                "model": "vision-model",
+                "feature": "ocr",
+            }
+            if has_metadata
+            else None
+        ),
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="model_configuration",
+        translation_placeholders={"model": "vision-model", "feature": "ocr"},
+    )
+    ir.async_ignore_issue(hass, "groq", issue_id, True)
+    original = own_issues(hass)[("groq", issue_id)]
+    async_reconcile_startup_issues(hass)
+    async_reconcile_entry_issues(hass, entry)
+    (service,) = service_data_for_type(entry, "image_recognition")
+    async_create_model_configuration_issue(hass, entry, service, "vision-model", "ocr")
+    (retained,) = own_issues(hass).values()
+    assert retained.issue_id == issue_id
+    assert retained.dismissed_version == original.dismissed_version
+    assert retained.data["subentry_id"] == "vision"
+
+
+async def test_configuration_repair_distinguishes_legacy_aliases_by_model(hass):
+    first = text_service(model="different-model")
+    first["data"]["unique_id"] = "legacy"
+    second = {**text_service(), "subentry_id": "second"}
+    second["data"]["unique_id"] = "legacy"
+    entry = account(hass, services=[first, second])
+    issue_id = _hashed_issue_id(
+        "model_configuration", entry.entry_id, "legacy", TEXT_MODEL, "reasoning"
+    )
+    ir.async_create_issue(
+        hass,
+        "groq",
+        issue_id,
+        config_entry_id=entry.entry_id,
+        data={
+            "entry_id": entry.entry_id,
+            "service_id": "legacy",
+            "model": TEXT_MODEL,
+            "feature": "reasoning",
+        },
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="model_configuration",
+    )
+    ir.async_ignore_issue(hass, "groq", issue_id, True)
+    original = own_issues(hass)[("groq", issue_id)]
+    async_reconcile_entry_issues(hass, entry)
+    service = next(
+        data
+        for data in service_data_for_type(entry, "text_generation")
+        if data["subentry_id"] == "second"
+    )
+    async_create_model_configuration_issue(
+        hass, entry, service, TEXT_MODEL, "reasoning"
+    )
+    (retained,) = own_issues(hass).values()
+    assert retained.issue_id == issue_id
+    assert retained.dismissed_version == original.dismissed_version
+    assert retained.data["subentry_id"] == "second"
+
+
+async def test_old_account_credentials_do_not_start_reauthentication(hass):
+    """An obsolete request still fails without starting a new reauth flow."""
+    entry = account(hass)
+    client = build_runtime(hass, entry).client
+    with patch.object(client, "_auth_failure_callback") as reauth:
+        assert isinstance(client._authentication_failed(), ConfigEntryAuthFailed)
+        reauth.assert_called_once_with()
+        reauth.reset_mock()
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, "api_key": "new-key"}
+        )
+        assert isinstance(client._authentication_failed(), ConfigEntryAuthFailed)
+        reauth.assert_not_called()
+
+
 async def test_model_configuration_repair_recovers_and_tracks_service_changes(hass):
     entry = account(hass, services=[text_service()])
     service = service_data_for_type(entry, "text_generation")[0]
@@ -748,11 +1482,54 @@ async def test_model_configuration_repair_recovers_and_tracks_service_changes(ha
     assert not own_issues(hass)
 
 
+@pytest.mark.parametrize("supports_model", [False, True])
+async def test_action_with_stale_runtime_does_not_mutate_model_repair(
+    hass, supports_model
+):
+    """A pending reload can leave service actions using the former runtime."""
+    entry = account(hass, services=[text_service()])
+    runtime = build_runtime(hass, entry)
+    service = entry.subentries["text-service"]
+    service_data = service_data_for_type(entry, "text_generation")[0]
+    hass.config_entries.async_update_subentry(
+        entry, service, data={**service.data, "temperature": 0.1}
+    )
+    if supports_model:
+        async_create_model_configuration_issue(
+            hass, entry, service_data, TEXT_MODEL, "text_generation"
+        )
+    expected = own_issues(hass)
+    with patch.object(runtime.model_registry, "supports", return_value=supports_model):
+        if supports_model:
+            _ensure_model(
+                runtime,
+                TEXT_MODEL,
+                GroqFeature.TEXT_GENERATION,
+                hass=hass,
+                entry=entry,
+                service_data=service_data,
+            )
+        else:
+            with pytest.raises(HomeAssistantError):
+                _ensure_model(
+                    runtime,
+                    TEXT_MODEL,
+                    GroqFeature.TEXT_GENERATION,
+                    hass=hass,
+                    entry=entry,
+                    service_data=service_data,
+                )
+
+    assert own_issues(hass) == expected
+
+
 async def test_repair_removal_preserves_unrelated_issues(hass):
     entry = account(hass, services=[text_service()])
     account(hass, entry_id="other-account")
     service = service_data_for_type(entry, "text_generation")[0]
-    async_create_ffmpeg_missing_issue(hass, entry, service)
+    async_create_model_configuration_issue(
+        hass, entry, service, TEXT_MODEL, "text_generation"
+    )
     async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
     async_create_model_access_issue(hass, TEXT_MODEL, entry_id="other-account")
     ir.async_create_issue(
@@ -978,8 +1755,9 @@ async def test_native_repair_creation_links_every_entry_issue(
     """Exercise both Core ownership APIs and resolve legacy service identifiers."""
     stored_service = text_service()
     stored_service["data"]["unique_id"] = "legacy-text-service"
-    entry = account(hass, services=[stored_service])
+    entry = account(hass, services=[stored_service, voice_service()])
     service = service_data_for_type(entry, "text_generation")[0]
+    voice = service_data_for_type(entry, "text_to_speech")[0]
     create = Mock()
     if supports_subentry:
         monkeypatch.setattr(ir.IssueEntry, "config_subentry_id", None, raising=False)
@@ -987,7 +1765,7 @@ async def test_native_repair_creation_links_every_entry_issue(
         monkeypatch.delattr(ir.IssueEntry, "config_subentry_id", raising=False)
     monkeypatch.setattr(ir, "async_refresh_issues", MagicMock(), raising=False)
     monkeypatch.setattr(ir, "async_create_issue", create)
-    async_create_ffmpeg_missing_issue(hass, entry, service)
+    async_create_ffmpeg_missing_issue(hass, entry, voice)
     async_create_model_access_issue(
         hass, TEXT_MODEL, "text-service", entry_id=entry.entry_id
     )
@@ -996,22 +1774,120 @@ async def test_native_repair_creation_links_every_entry_issue(
     )
     async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
     async_create_ffmpeg_missing_issue(hass, entry, {"unique_id": "removed-service"})
+    async_create_model_access_issue(
+        hass,
+        TEXT_MODEL,
+        "text-service",
+        entry_id="removed-account",
+        subentry_id="text-service",
+    )
     service_issues, account_issues = (
         create.call_args_list[:3],
         create.call_args_list[3:],
     )
     assert len(service_issues) == 3
-    assert len(account_issues) == 2
+    assert len(account_issues) == 1
     assert all(
         call.kwargs["config_entry_id"] == entry.entry_id
         for call in create.call_args_list
     )
-    for call in service_issues:
+    for call, owner in zip(
+        service_issues, ("voice", "text-service", "text-service"), strict=True
+    ):
         if supports_subentry:
-            assert call.kwargs["config_subentry_id"] == "text-service"
+            assert call.kwargs["config_subentry_id"] == owner
         else:
             assert "config_subentry_id" not in call.kwargs
     assert all("config_subentry_id" not in call.kwargs for call in account_issues)
+
+
+@pytest.mark.parametrize("after_removal", ["reconcile", "failure", "success"])
+async def test_ambiguous_legacy_service_id_cannot_pass_its_dismissal_to_another_service(
+    hass, after_removal
+):
+    """The shared issue ID cannot prove which former service was dismissed."""
+    first = text_service()
+    first["data"]["unique_id"] = "other-service"
+    second = {**text_service(), "subentry_id": "other-service"}
+    entry = account(hass, services=[first, second])
+    key = (
+        "groq",
+        _hashed_issue_id("model_access", entry.entry_id, TEXT_MODEL, "other-service"),
+    )
+    ir.async_create_issue(
+        hass,
+        *key,
+        config_entry_id=entry.entry_id,
+        data={
+            "entry_id": entry.entry_id,
+            "service_id": "other-service",
+            "model": TEXT_MODEL,
+        },
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="model_access",
+    )
+    ir.async_ignore_issue(hass, *key, True)
+    original = own_issues(hass)[key]
+    async_create_model_access_issue(
+        hass, TEXT_MODEL, "other-service", entry_id=entry.entry_id
+    )
+    assert own_issues(hass) == {key: original}
+
+    async_reconcile_entry_issues(hass, entry)
+    assert own_issues(hass)[key].dismissed_version == original.dismissed_version
+    hass.config_entries.async_remove_subentry(entry, "other-service")
+    if after_removal == "reconcile":
+        async_reconcile_entry_issues(hass, entry)
+    elif after_removal == "success":
+        async_delete_model_access_issue(
+            hass, TEXT_MODEL, "other-service", entry_id=entry.entry_id
+        )
+    else:
+        async_create_model_access_issue(
+            hass, TEXT_MODEL, "other-service", entry_id=entry.entry_id
+        )
+        (current_issue,) = own_issues(hass).values()
+        assert current_issue.dismissed_version is None
+        assert (
+            getattr(current_issue, "config_subentry_id", "text-service")
+            == "text-service"
+        )
+        return
+    assert not own_issues(hass)
+
+
+async def test_reconcile_drops_repair_when_owned_service_loses_legacy_id(hass):
+    """The service's new requests use its canonical ID and cannot clear the old key."""
+    stored_service = text_service()
+    stored_service["data"]["unique_id"] = "old-id"
+    entry = account(hass, services=[stored_service])
+    ir.async_create_issue(
+        hass,
+        "groq",
+        _hashed_issue_id("model_access", entry.entry_id, TEXT_MODEL, "old-id"),
+        config_entry_id=entry.entry_id,
+        data={
+            "entry_id": entry.entry_id,
+            "service_id": "old-id",
+            "subentry_id": "text-service",
+            "model": TEXT_MODEL,
+        },
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="model_access",
+    )
+    assert len(own_issues(hass)) == 1
+    service = entry.subentries["text-service"]
+    hass.config_entries.async_update_subentry(
+        entry, service, data=text_service()["data"]
+    )
+
+    async_reconcile_entry_issues(hass, entry)
+
+    assert not own_issues(hass)
 
 
 @pytest.mark.skipif(
@@ -1092,7 +1968,17 @@ async def test_ignored_repairs_survive_reload_and_clear_only_after_recovery(
     """Neither reload nor configuration reconciliation rechecks failed requests."""
     if legacy:
         monkeypatch.delattr(ir, "async_refresh_issues", raising=False)
-    entry = account(hass, services=[text_service()])
+    entry = account(
+        hass,
+        services=[text_service()],
+        data={
+            "name": "Legacy Groq",
+            "url": "https://api.groq.com",
+            "model": TTS_MODEL,
+            "voice": "troy",
+            "api_key": "test-key",
+        },
+    )
     service = service_data_for_type(entry, "text_generation")[0]
     with patch(
         "custom_components.groq.api.GroqApiClient.async_list_models",
@@ -1103,7 +1989,7 @@ async def test_ignored_repairs_survive_reload_and_clear_only_after_recovery(
         async_create_model_access_issue(
             hass, TEXT_MODEL, service["unique_id"], entry_id=entry.entry_id
         )
-        async_create_ffmpeg_missing_issue(hass, entry, service)
+        async_create_ffmpeg_missing_issue(hass, entry)
         registry = ir.async_get(hass)
         for _, issue_id in own_issues(hass):
             ir.async_ignore_issue(hass, "groq", issue_id, True)
@@ -1117,9 +2003,7 @@ async def test_ignored_repairs_survive_reload_and_clear_only_after_recovery(
             hass, TEXT_MODEL, service["unique_id"], entry_id=entry.entry_id
         )
         assert len(own_issues(hass)) == 1
-        from custom_components.groq.repairs import async_delete_ffmpeg_missing_issue
-
-        async_delete_ffmpeg_missing_issue(hass, entry, service)
+        async_delete_ffmpeg_missing_issue(hass, entry)
         assert not own_issues(hass)
         assert await hass.config_entries.async_unload(entry.entry_id)
 
@@ -1129,14 +2013,16 @@ async def test_ignored_repairs_survive_reload_and_clear_only_after_recovery(
 )
 async def test_native_repair_refresh_and_config_entry_ownership(hass):
     """Exercise actual Core refresh, ownership, disabled visibility and removal."""
-    first = account(hass, services=[text_service()])
+    first = account(hass, services=[text_service(), voice_service()])
     second = account(hass, entry_id="account-b")
     service = service_data_for_type(first, "text_generation")[0]
     async_create_model_access_issue(hass, TEXT_MODEL, entry_id=second.entry_id)
     async_create_model_access_issue(
         hass, TEXT_MODEL, service["unique_id"], entry_id=first.entry_id
     )
-    async_create_ffmpeg_missing_issue(hass, first, service)
+    async_create_ffmpeg_missing_issue(
+        hass, first, service_data_for_type(first, "text_to_speech")[0]
+    )
     registry = ir.async_get(hass)
     for issue in own_issues(hass).values():
         assert issue.config_entry_id == issue.data["entry_id"]
@@ -1157,6 +2043,7 @@ async def test_native_repair_refresh_and_config_entry_ownership(hass):
         await hass.async_block_till_done()
     assert all(not registry.async_is_hidden(i) for i in first_issues)
     hass.config_entries.async_remove_subentry(first, "text-service")
+    hass.config_entries.async_remove_subentry(first, "voice")
     async_reconcile_entry_issues(hass, first)
     remaining = list(own_issues(hass).values())
     assert len(remaining) == 1
@@ -1216,6 +2103,45 @@ async def test_startup_adopts_legacy_repairs_before_account_setup(
             assert registry.async_is_hidden(issue) == (
                 issue.config_entry_id == disabled.entry_id
             )
+
+
+async def test_startup_clears_stored_repairs_for_removed_services_while_offline(hass):
+    """Repair reconciliation uses local configuration before model discovery."""
+    entry = account(hass)
+    ir.async_create_issue(
+        hass,
+        "groq",
+        "ffmpeg_missing_removed_service",
+        config_entry_id=entry.entry_id,
+        data={"entry_id": entry.entry_id, "service_id": "removed-service"},
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="ffmpeg_missing",
+    )
+    async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
+    for domain, issue_id in (("other", "unrelated"), ("groq", "model_access_unowned")):
+        ir.async_create_issue(
+            hass,
+            domain,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="unrelated",
+        )
+
+    with patch.object(
+        GroqApiClient, "async_list_models", side_effect=GroqApiError("offline")
+    ):
+        assert await async_setup_component(hass, "groq", {})
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert sorted(issue.translation_key for issue in own_issues(hass).values()) == [
+        "model_access",
+        "unrelated",
+    ]
+    assert ir.async_get(hass).async_get_issue("other", "unrelated") is not None
 
 
 async def test_usage_sensor_registry_rename_keeps_subscription_until_unload(hass):
@@ -1370,7 +2296,17 @@ async def test_native_refresh_cancels_stale_deletes_if_reconciliation_fails(
 ):
     """A partially checked issue set must survive an unexpected registry failure."""
     entry = account(hass, services=[text_service()])
-    async_create_ffmpeg_missing_issue(hass, entry, {"unique_id": "removed-service"})
+    ir.async_create_issue(
+        hass,
+        "groq",
+        "ffmpeg_missing_removed_service",
+        config_entry_id=entry.entry_id,
+        data={"entry_id": entry.entry_id, "service_id": "removed-service"},
+        is_fixable=False,
+        is_persistent=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="ffmpeg_missing",
+    )
     service = service_data_for_type(entry, "text_generation")[0]
     async_create_model_configuration_issue(
         hass, entry, service, TEXT_MODEL, "text_generation"

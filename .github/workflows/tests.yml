@@ -231,7 +231,18 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Check compatibility with Home Assistant 2026.12
-        run: scripts/test --compatibility python -m pytest tests/components/groq -q
+        id: pytest
+        run: >
+          scripts/test --compatibility python -m pytest tests/components/groq -q
+          --log-file=.test-cache/compatibility-test-runtime.log
+          --log-file-level=WARNING
+      - name: Upload compatibility warning and error logs
+        if: ${{ always() && (steps.pytest.outcome == 'success' || steps.pytest.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: compatibility-test-runtime-logs
+          path: .test-cache/compatibility-test-runtime.log
+          if-no-files-found: ignore
 
   repository-checks:
     name: Repository checks

@@ -115,7 +115,7 @@
                         "temperature": "A válaszváltoztatást szabályozza. Az alacsonyabb értékek kiszámíthatóbbak; a magasabb értékek kreatívabbak.",
                         "advanced_options": "További vezérlőket nyit meg a kevésbé gyakori Groq csevegési kérési lehetőségekhez.",
                         "protect_free_tier": "Amikor a Groq azt jelenti, hogy ez a szolgáltatás elérte a kérések vagy token korlátot, a Home Assistant csak ezt a szolgáltatást szünetelteti a Groq visszaállítási idejéig, mielőtt további kéréseket küldene.",
-                        "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access."
+                        "llm_hass_api": "A megosztott Assist hangfolyamatokhoz válassza a Device control eszközkészletet. A Home Assistant (admin only) eszközöket külön, rendszergazdáknak fenntartott ügynökhöz adja hozzá. Ha mindkét készletet kiválasztja, az egész ügynököt csak rendszergazdák használhatják. A Home Assistant eszközeinek letiltásához hagyja üresen a mezőt."
                     }
                 },
                 "text_generation_advanced": {

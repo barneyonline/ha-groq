@@ -141,6 +141,8 @@ class DummyHass:
 
 
 class DummyTextClient:
+    can_update_repairs = True
+
     def __init__(self, text: str, stream_chunks: list[str] | None = None):
         self.text = text
         self.stream_chunks = stream_chunks or []
