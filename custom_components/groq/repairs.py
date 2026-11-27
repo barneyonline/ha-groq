@@ -12,7 +12,14 @@ from homeassistant.components.repairs.models import RepairsFlow, RepairsFlowResu
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
-from .const import CONF_MODEL, CONF_NAME, DOMAIN, UNIQUE_ID, entry_value
+from .const import (
+    CONF_MODEL,
+    CONF_NAME,
+    CONF_SUBENTRY_ID,
+    DOMAIN,
+    UNIQUE_ID,
+    entry_value,
+)
 from .feature_registry import GroqFeature
 from .model_registry import GroqModelRegistry
 from .subentries import service_data_by_type
@@ -70,6 +77,36 @@ def _update_issue(operation: Callable[[], None]) -> None:
         _LOGGER.exception("Could not update the Groq repair registry")
 
 
+def _service_subentry_id(entry: GroqConfigEntry, service_id: str) -> str | None:
+    """Resolve the stored service identifier to an actual config subentry ID."""
+    if service_id in entry.subentries:
+        return service_id
+    matches = [
+        subentry_id
+        for subentry_id, subentry in entry.subentries.items()
+        if subentry.data.get(UNIQUE_ID) == service_id
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _issue_ownership(
+    hass: HomeAssistant, entry_id: str | None, service_id: str | int | float | None
+) -> dict[str, Any]:
+    """Use native subentry ownership where Core supports it."""
+    if not hasattr(ir, "async_refresh_issues"):
+        return {}
+    ownership = {"config_entry_id": entry_id}
+    if (
+        hasattr(ir.IssueEntry, "config_subentry_id")
+        and entry_id is not None
+        and isinstance(service_id, str)
+        and (entry := hass.config_entries.async_get_entry(entry_id)) is not None
+        and (subentry_id := _service_subentry_id(entry, service_id)) is not None
+    ):
+        ownership["config_subentry_id"] = subentry_id
+    return ownership
+
+
 def _create_issue(
     hass: HomeAssistant,
     issue_type: str,
@@ -83,17 +120,12 @@ def _create_issue(
     reason: str | None = None,
 ) -> None:
     """Create an issue with nonsecret ownership metadata for later reconciliation."""
-    # Native ownership and refresh landed together in Core 2026.11. Keep the
-    # advertised 2026.10 minimum working until the owner raises it.
-    ownership: dict[str, Any] = (
-        {"config_entry_id": entry_id} if hasattr(ir, "async_refresh_issues") else {}
-    )
     _update_issue(
         lambda: ir.async_create_issue(
             hass,
             DOMAIN,
             issue_id,
-            **ownership,
+            **_issue_ownership(hass, entry_id, service_id),
             is_fixable=False,
             is_persistent=True,
             issue_domain=DOMAIN,
@@ -235,19 +267,25 @@ def async_delete_model_configuration_issue(
     )
 
 
-def _adopt_legacy_issue(
+def _adopt_issue_ownership(
     hass: HomeAssistant, issue_id: str, issue: ir.IssueEntry, entry_id: str
 ) -> bool:
-    """Link an active legacy repair in place, preserving its dismissal."""
+    """Link an active repair in place, preserving its dismissal."""
+    current_entry_id = getattr(issue, "config_entry_id", None)
     if (
-        getattr(issue, "config_entry_id", None) is not None
+        current_entry_id not in (None, entry_id)
         or not issue.active
         or issue.is_fixable is None
         or issue.severity is None
         or issue.translation_key is None
     ):
         return False
-    ownership: dict[str, Any] = {"config_entry_id": entry_id}
+    ownership = _issue_ownership(hass, entry_id, (issue.data or {}).get("service_id"))
+    if current_entry_id == entry_id and (
+        "config_subentry_id" not in ownership
+        or getattr(issue, "config_subentry_id", None) is not None
+    ):
+        return False
     ir.async_create_issue(
         hass,
         DOMAIN,
@@ -277,14 +315,16 @@ def async_reconcile_startup_issues(hass: HomeAssistant) -> None:
         }
         registry = ir.async_get(hass)
         for (domain, issue_id), issue in list(registry.issues.items()):
-            entry_id = (issue.data or {}).get("entry_id")
+            entry_id = getattr(issue, "config_entry_id", None) or (
+                issue.data or {}
+            ).get("entry_id")
             if (
                 domain == DOMAIN
                 and issue_id.startswith(tuple(f"{kind}_" for kind in _ISSUE_TYPES))
                 and isinstance(entry_id, str)
                 and entry_id in entry_ids
             ):
-                _adopt_legacy_issue(hass, issue_id, issue, entry_id)
+                _adopt_issue_ownership(hass, issue_id, issue, entry_id)
 
     _update_issue(adopt)
 
@@ -301,9 +341,11 @@ def async_reconcile_entry_issues(
     def reconcile() -> None:
         registry = ir.async_get(hass)
         services = {
-            data.get(UNIQUE_ID): data
+            service_id: data
             for group in service_data_by_type(entry).values()
             for data in group
+            for service_id in (data.get(UNIQUE_ID), data.get(CONF_SUBENTRY_ID))
+            if service_id is not None
         }
         configured_models = {data.get(CONF_MODEL) for data in services.values()}
         configured_models.add(entry_value(entry, CONF_MODEL))
@@ -367,7 +409,7 @@ def async_reconcile_entry_issues(
                     if refresh is None:
                         ir.async_delete_issue(hass, DOMAIN, issue_id)
                     continue
-                if refresh is not None and not _adopt_legacy_issue(
+                if refresh is not None and not _adopt_issue_ownership(
                     hass, issue_id, issue, entry.entry_id
                 ):
                     refresh.async_keep([issue_id])

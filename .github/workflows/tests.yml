@@ -218,10 +218,25 @@ jobs:
           path: .test-cache/minimum-test-runtime.log
           if-no-files-found: ignore
 
+  homeassistant-compatibility:
+    name: Home Assistant 2026.12 compatibility
+    needs: changes
+    if: needs.changes.outputs.tests == 'true'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Check compatibility with Home Assistant 2026.12
+        run: scripts/test --compatibility python -m pytest tests/components/groq -q
+
   repository-checks:
     name: Repository checks
     if: ${{ always() }}
-    needs: [changes, checks, minimum-homeassistant]
+    needs: [changes, checks, minimum-homeassistant, homeassistant-compatibility]
     runs-on: ubuntu-26.04
     permissions: {}
     steps:

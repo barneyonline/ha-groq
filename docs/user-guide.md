@@ -111,11 +111,26 @@ Include Reasoning appears when Reasoning Format is set to **Model default**. Sel
 
 Local response caching is opt-in per configured service. Disabling it for one service remains effective when another service enables caching. Responses expire and share a 16 MiB serialized-content budget per account. Speech audio caches share a separate 64 MiB account budget in addition to their configured item limits. These caches are local to Home Assistant and are distinct from Groq's provider-side prompt caching.
 
-Explicit action arguments override service defaults; omitted structured-output fields inherit the configured schema name and strictness. Structured results are validated locally before being returned or cached, including JSON fallback for models without native schema output. Clearing the Assist control selection disables those Home Assistant tools without discarding other advanced settings.
+Explicit action arguments override service defaults; omitted structured-output fields inherit the configured schema name and strictness. Structured results are validated locally before being returned or cached, including JSON fallback for models without native schema output.
 
 Compound built-in tools are opt-in. For `groq/compound` and `groq/compound-mini`, the integration sends an explicit empty built-in tool allow-list unless you enable tools such as web search, visit website, browser automation, code execution, or Wolfram Alpha in the service's additional options. Enabling these tools allows Groq to run server-side tools and inspect external content for the request.
 
 You can add more than one Groq account. The integration prevents adding the same API key twice.
+
+### Home Assistant tools in Assist
+
+In the Text Generation service, choose which tool sets its Assist agent can use.
+
+- **Device control** lets Assist control exposed entities. Use it for shared
+  pipelines, including voice satellites and non-admin users.
+- **Home Assistant (admin only)** adds management tools for setup and
+  troubleshooting. Use it on a dedicated agent that you access as an
+  administrator. Selecting it alongside **Device control** requires an
+  administrator for the entire agent. A voice satellite without a signed-in
+  user or a non-admin user will get a conversation error.
+
+Clear the selection to disable Home Assistant tools and keep the other Text
+Generation settings.
 
 ## Speech transcription and translation
 

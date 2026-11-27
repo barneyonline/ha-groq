@@ -2462,29 +2462,38 @@ async def test_text_generation_subentry_flow_stores_llm_hass_api(monkeypatch):
     monkeypatch.setattr(
         config_flow.llm,
         "async_get_apis",
-        lambda _hass: [SimpleNamespace(id="assist", name="Assist")],
+        lambda _hass: [
+            SimpleNamespace(id="assist", name="Device control", requires_admin=False),
+            SimpleNamespace(
+                id="homeassistant", name="Home Assistant", requires_admin=True
+            ),
+        ],
     )
 
     form = await flow.async_step_text_generation()
     assert form["type"] == "form"
+    assert _selector_config(form["data_schema"], CONF_LLM_HASS_API)["options"] == [
+        {"value": "assist", "label": "Device control"},
+        {"value": "homeassistant", "label": "Home Assistant (admin only)"},
+    ]
     assert form["data_schema"](
         {
             "name": "Text Service",
             "model": "llama-3.1-8b-instant",
-            CONF_LLM_HASS_API: ["assist"],
+            CONF_LLM_HASS_API: ["assist", "homeassistant"],
         }
-    )[CONF_LLM_HASS_API] == ["assist"]
+    )[CONF_LLM_HASS_API] == ["assist", "homeassistant"]
 
     result = await flow.async_step_text_generation(
         {
             "name": "Text Service",
             "model": "llama-3.1-8b-instant",
-            CONF_LLM_HASS_API: ["assist"],
+            CONF_LLM_HASS_API: ["assist", "homeassistant"],
         }
     )
 
     assert result["type"] == "create_entry"
-    assert result["data"][CONF_LLM_HASS_API] == ["assist"]
+    assert result["data"][CONF_LLM_HASS_API] == ["assist", "homeassistant"]
 
 
 @pytest.mark.asyncio

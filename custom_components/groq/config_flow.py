@@ -204,7 +204,13 @@ def _llm_api_select_options(hass: HomeAssistant) -> list[dict[str, str]]:
         apis = llm.async_get_apis(hass)
     except (AttributeError, KeyError, TypeError):
         return []
-    return [{"label": api.name, "value": api.id} for api in apis]
+    return [
+        {
+            "label": f"{api.name} (admin only)" if api.requires_admin else api.name,
+            "value": api.id,
+        }
+        for api in apis
+    ]
 
 
 async def async_validate_api_key(hass: HomeAssistant, api_key: str) -> str | None:

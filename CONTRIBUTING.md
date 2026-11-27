@@ -69,12 +69,15 @@ scripts/test python -m pytest -q
 
 The primary harness uses Home Assistant 2026.11.0. Verify the advertised minimum
 separately with `scripts/test --minimum python -m pytest tests/components/groq -q`.
-Both environments verify the actual Core/helper versions and run dependency checks
+Run the Home Assistant 2026.12 compatibility job locally with
+`scripts/test --compatibility python -m pytest tests/components/groq -q`.
+Each environment verifies the actual Core and helper versions and runs dependency checks
 when built. The test image uses digest-pinned Python 3.14 and installs only Core,
 the matching helper, and the component dependencies needed by Groq. `HA_VERSION`
 overrides must match the helper dependency; incompatible versions fail before
-tests. `PYTHON_IMAGE` overrides the interpreter image. Stop the minimum container
-with `scripts/test --minimum --stop`. The old `HA_IMAGE` override is rejected;
+tests. `PYTHON_IMAGE` overrides the interpreter image. Stop the minimum or
+compatibility container with `scripts/test --minimum --stop` or
+`scripts/test --compatibility --stop`. The old `HA_IMAGE` override is rejected;
 use `HA_VERSION` for Core and `PYTHON_IMAGE` for the interpreter image instead.
 
 ### Managed cloud environment

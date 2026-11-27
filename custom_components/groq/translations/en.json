@@ -112,7 +112,7 @@
                         "name": "A friendly name for this text generation service. Home Assistant uses this for Assist and AI task entities.",
                         "model": "The Groq chat model used for text responses, Assist conversations, and data generation tasks.",
                         "system_prompt": "Instructions that guide the model. The default matches Home Assistant's AI task prompt.",
-                        "llm_hass_api": "Home Assistant LLM APIs that this Assist agent may use for tool calls. Leave empty to disable Home Assistant tool access.",
+                        "llm_hass_api": "Use Device control for shared Assist pipelines. Selecting Home Assistant (admin only) requires an administrator for the entire agent, even when Device control is also selected. Leave empty to disable Home Assistant tool access.",
                         "temperature": "Controls response variation. Lower values are more predictable; higher values are more creative.",
                         "advanced_options": "Opens additional controls for less common Groq chat request options.",
                         "protect_free_tier": "When Groq reports that this service has reached a request or token limit, Home Assistant pauses only this service until Groq's reset time before sending more requests."

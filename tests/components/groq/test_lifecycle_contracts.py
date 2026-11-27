@@ -971,23 +971,92 @@ async def test_repair_refresh_adopts_ignored_legacy_issue_in_place(hass, monkeyp
     assert retained.translation_placeholders == original.translation_placeholders
 
 
-async def test_native_repair_creation_links_every_entry_issue(hass, monkeypatch):
-    """Exercise the new keyword without requiring it in the minimum Core API."""
-    entry = account(hass, services=[text_service()])
+@pytest.mark.parametrize("supports_subentry", [False, True])
+async def test_native_repair_creation_links_every_entry_issue(
+    hass, monkeypatch, supports_subentry
+):
+    """Exercise both Core ownership APIs and resolve legacy service identifiers."""
+    stored_service = text_service()
+    stored_service["data"]["unique_id"] = "legacy-text-service"
+    entry = account(hass, services=[stored_service])
     service = service_data_for_type(entry, "text_generation")[0]
     create = Mock()
+    if supports_subentry:
+        monkeypatch.setattr(ir.IssueEntry, "config_subentry_id", None, raising=False)
+    else:
+        monkeypatch.delattr(ir.IssueEntry, "config_subentry_id", raising=False)
     monkeypatch.setattr(ir, "async_refresh_issues", MagicMock(), raising=False)
     monkeypatch.setattr(ir, "async_create_issue", create)
     async_create_ffmpeg_missing_issue(hass, entry, service)
-    async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
+    async_create_model_access_issue(
+        hass, TEXT_MODEL, "text-service", entry_id=entry.entry_id
+    )
     async_create_model_configuration_issue(
         hass, entry, service, TEXT_MODEL, "text_generation"
     )
-    assert len(create.call_args_list) == 3
+    async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
+    async_create_ffmpeg_missing_issue(hass, entry, {"unique_id": "removed-service"})
+    service_issues, account_issues = (
+        create.call_args_list[:3],
+        create.call_args_list[3:],
+    )
+    assert len(service_issues) == 3
+    assert len(account_issues) == 2
     assert all(
         call.kwargs["config_entry_id"] == entry.entry_id
         for call in create.call_args_list
     )
+    for call in service_issues:
+        if supports_subentry:
+            assert call.kwargs["config_subentry_id"] == "text-service"
+        else:
+            assert "config_subentry_id" not in call.kwargs
+    assert all("config_subentry_id" not in call.kwargs for call in account_issues)
+
+
+@pytest.mark.skipif(
+    not hasattr(ir.IssueEntry, "config_subentry_id"),
+    reason="Requires Core 2026.12 issue API",
+)
+async def test_existing_service_repair_adopts_subentry_and_keeps_dismissal(
+    hass, monkeypatch
+):
+    """Promote a 2026.11 repair in place and let Core clear it on service removal."""
+    entry = account(hass, services=[text_service()])
+    create_issue = ir.async_create_issue
+
+    def create_account_owned_issue(*args, **kwargs):
+        kwargs.pop("config_subentry_id", None)
+        create_issue(*args, **kwargs)
+
+    with monkeypatch.context() as context:
+        context.setattr(ir, "async_create_issue", create_account_owned_issue)
+        async_create_model_access_issue(
+            hass, TEXT_MODEL, "text-service", entry_id=entry.entry_id
+        )
+    async_create_model_access_issue(hass, TEXT_MODEL, entry_id=entry.entry_id)
+    key, original = next(
+        (key, issue)
+        for key, issue in own_issues(hass).items()
+        if issue.data["service_id"]
+    )
+    assert original.config_subentry_id is None
+    ir.async_ignore_issue(hass, *key, True)
+    dismissed = own_issues(hass)[key]
+
+    async_reconcile_entry_issues(hass, entry)
+
+    adopted = own_issues(hass)[key]
+    assert adopted.config_subentry_id == "text-service"
+    assert adopted.dismissed_version == dismissed.dismissed_version
+    assert adopted.created == original.created
+    assert adopted.data == original.data
+
+    hass.config_entries.async_remove_subentry(entry, "text-service")
+    assert key not in own_issues(hass)
+    (unrelated,) = own_issues(hass).values()
+    assert unrelated.config_entry_id == entry.entry_id
+    assert unrelated.config_subentry_id is None
 
 
 async def test_sensor_rename_calls_parent_without_resubscribing(hass):
