@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from .const import MAX_TOOL_ARGUMENT_CHARS, MAX_TOOL_CALLS_PER_ROUND
 from .errors import GroqResponseError
 
 
@@ -38,6 +39,7 @@ class ChatStream:
         self.content: list[str] = []
         self.reasoning: list[str] = []
         self.calls: dict[int, _ToolCallFragments] = {}
+        self.tool_argument_chars = 0
         self.usage: dict[str, Any] = {}
         self.metadata: dict[str, Any] = {}
         self.finish_reason: str | None = None
@@ -93,7 +95,7 @@ class ChatStream:
         if not isinstance(delta, dict):
             raise GroqResponseError("Groq returned an invalid tool delta")
         index = delta.get("index")
-        if type(index) is not int or not 0 <= index < 64:
+        if type(index) is not int or not 0 <= index < MAX_TOOL_CALLS_PER_ROUND:
             raise GroqResponseError("Groq returned an invalid tool index")
         call = self.calls.get(index)
         if call is None:
@@ -116,6 +118,12 @@ class ChatStream:
                 if function[key]:
                     fragments = call.name if key == "name" else call.arguments
                     fragments.append(function[key])
+                    if key == "arguments":
+                        self.tool_argument_chars += len(function[key])
+                        if self.tool_argument_chars > MAX_TOOL_ARGUMENT_CHARS:
+                            raise GroqResponseError(
+                                "Groq tool arguments exceeded the size limit"
+                            )
 
     def result(
         self, *, parsed_arguments: dict[str, dict[str, Any]] | None = None

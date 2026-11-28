@@ -8,6 +8,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+import voluptuous as vol
 from homeassistant.components import conversation
 from homeassistant.components.ai_task import GenDataTask
 from homeassistant.core import Context, HomeAssistant
@@ -18,7 +19,7 @@ from custom_components.groq.ai_task import GroqAITaskEntity
 from custom_components.groq.api import GroqApiClient, TextGenerationRequest
 from custom_components.groq.chat import MAX_TOOL_ITERATIONS, prepare_tool_round
 from custom_components.groq.conversation import GroqConversationEntity
-from custom_components.groq.errors import GroqResponseError
+from custom_components.groq.errors import GroqApiError, GroqResponseError
 from custom_components.groq.tool_tasks import async_add_tool_batch
 
 from .test_foundation import DummyEntry
@@ -30,10 +31,13 @@ PLATFORMS = ("assist", "assist_stream", "ai_task")
 class ToolSession:
     """Supply batches of synthetic local tool calls, then optional final text."""
 
-    def __init__(self, batch_width, *, final_round=None, final_text="Done."):
+    def __init__(
+        self, batch_width, *, final_round=None, final_text="Done.", arguments="{}"
+    ):
         self.batch_width = batch_width
         self.final_round = final_round
         self.final_text = final_text
+        self.arguments = arguments
         self.requests = []
         self.responses = []
 
@@ -46,7 +50,7 @@ class ToolSession:
             {
                 "id": f"{round_number}-{index}",
                 "type": "function",
-                "function": {"name": "Fixture", "arguments": "{}"},
+                "function": {"name": "Fixture", "arguments": self.arguments},
             }
             for index in range(batch_width)
         ]
@@ -89,6 +93,7 @@ def fixture_tool_api(
     class FixtureTool(llm.Tool):
         name = "Fixture"
         description = "A deterministic test tool"
+        parameters = vol.Schema({vol.Optional("unused"): str})
 
         async def async_call(self, hass, tool_input, llm_context):
             return await run_tool(tool_input)
@@ -114,9 +119,12 @@ def tool_turn(
     fixture_id: str = "fixture",
     browser_search: bool = False,
     expose_tool: bool = True,
+    client: GroqApiClient | None = None,
+    prompt: str = "Fixture",
 ) -> tuple[Callable[[], Awaitable[object]], conversation.ChatLog]:
     """Construct a generation turn that uses the real Home Assistant ChatLog."""
-    client = GroqApiClient(hass, api_key="fake", session=session)
+    if client is None:
+        client = GroqApiClient(hass, api_key="fake", session=session)
     api = fixture_tool_api(hass, fixture_id, run_tool, expose_tool=expose_tool)
     model = "openai/gpt-oss-20b"
     config = {
@@ -125,9 +133,9 @@ def tool_turn(
         "browser_search": browser_search,
     }
     log = conversation.ChatLog(hass, fixture_id)
-    log.async_add_user_content(conversation.UserContent(content="Fixture"))
+    log.async_add_user_content(conversation.UserContent(content=prompt))
     user_input = conversation.ConversationInput(
-        text="Fixture",
+        text=prompt,
         context=Context(),
         conversation_id=log.conversation_id,
         device_id=None,
@@ -143,9 +151,9 @@ def tool_turn(
             )
             entity = GroqAITaskEntity(hass, DummyEntry(), config, client)
             return await entity._async_generate_text_with_tools(
-                GenDataTask(name="fixture", instructions="Fixture", llm_api=api),
+                GenDataTask(name="fixture", instructions=prompt, llm_api=api),
                 log,
-                "Fixture",
+                prompt,
                 [{"type": "function", "function": {"name": "Fixture"}}],
             )
 
@@ -395,7 +403,9 @@ async def test_cancelled_consumer_stops_before_deferred_tool_creation(hass):
 
     log = DeferredChatLog(hass, "deferred")
     task = asyncio.create_task(
-        async_add_tool_batch(log, conversation.AssistantContent(agent_id="groq"))
+        async_add_tool_batch(
+            log, conversation.AssistantContent(agent_id="groq"), lambda: None
+        )
     )
     async with asyncio.timeout(3):
         await preparing.wait()
@@ -422,3 +432,183 @@ async def test_assist_rejects_stream_adapter_without_final_result(hass):
             TextGenerationRequest(prompt="fixture", model="model"),
         )
     assert len(log.content) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", PLATFORMS)
+async def test_wide_tool_batch_is_rejected_before_dispatch(hass, platform):
+    invoked = []
+
+    async def run_tool(tool_input):
+        invoked.append(tool_input.id)
+        return llm.ToolResult(data={"ok": True})
+
+    session = ToolSession(65, final_round=2)
+    turn, log = tool_turn(hass, platform, session, run_tool)
+    with pytest.raises(GroqResponseError):
+        await turn()
+    assert not invoked
+    assert not any(item.role == "tool_result" for item in log.content)
+    assert len(session.responses) == 1 and session.responses[0].closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", PLATFORMS)
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_tool_batch_limits_running_calls_and_preserves_results(
+    hass, platform, cancel
+):
+    release = asyncio.Event()
+    release_first = asyncio.Event()
+    started = asyncio.Event()
+    invoked = []
+    stopped = []
+
+    async def run_tool(tool_input):
+        invoked.append(tool_input.id)
+        if len(invoked) == 8:
+            started.set()
+        try:
+            if cancel and tool_input.id == "1-0":
+                await release_first.wait()
+                # Cancel after the first slot is freed and before its waiter resumes.
+                asyncio.get_running_loop().call_soon(task.cancel)
+            else:
+                await release.wait()
+            return llm.ToolResult(data={"ok": True})
+        finally:
+            stopped.append(tool_input.id)
+
+    session = ToolSession(12, final_round=2)
+    independent_session = ToolSession(1, final_round=2)
+
+    class TurnSession:
+        def request(self, method, url, **kwargs):
+            message = next(
+                message
+                for message in kwargs["json"]["messages"]
+                if message["role"] == "user"
+            )
+            target = (
+                independent_session if message["content"] == "Independent" else session
+            )
+            return target.request(method, url, **kwargs)
+
+    async def run_independent_tool(tool_input):
+        return llm.ToolResult(data={"independent": tool_input.id})
+
+    client = GroqApiClient(hass, api_key="fake", session=TurnSession())
+    turn, log = tool_turn(hass, platform, session, run_tool, client=client)
+    independent, independent_log = tool_turn(
+        hass,
+        platform,
+        independent_session,
+        run_independent_tool,
+        client=client,
+        fixture_id="independent",
+        prompt="Independent",
+    )
+    task = asyncio.create_task(turn())
+    try:
+        async with asyncio.timeout(3):
+            await started.wait()
+            await asyncio.sleep(0)
+            assert len(invoked) == 8
+            if cancel:
+                release_first.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+                assert set(stopped) == set(invoked)
+                assert len(invoked) == 8
+                assert len(session.requests) == 1
+            else:
+                await independent()
+                assert not task.done() and len(invoked) == 8 and not stopped
+                assert independent_log.content[-2].result.data == {"independent": "1-0"}
+                assert len(independent_session.requests) == 2
+                release.set()
+                await task
+                expected = [f"1-{index}" for index in range(12)]
+                assert invoked == expected
+                assert [
+                    item.tool_call_id
+                    for item in log.content
+                    if item.role == "tool_result"
+                ] == expected
+                assert [
+                    message["tool_call_id"]
+                    for message in session.requests[-1]["messages"]
+                    if message["role"] == "tool"
+                ] == expected
+    finally:
+        if not task.done():
+            task.cancel()
+        release_first.set()
+        release.set()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", PLATFORMS)
+@pytest.mark.parametrize("unload_at", ["response", "queued"])
+async def test_unload_prevents_new_tool_execution(hass, platform, unload_at):
+    started, release = asyncio.Event(), asyncio.Event()
+    invoked = []
+
+    class HeldResponse(Response):
+        async def iter_chunked(self, size):
+            if unload_at == "response":
+                started.set()
+                await release.wait()
+            for offset in range(0, len(self.body), size):
+                yield self.body[offset : offset + size]
+
+    class HeldSession(ToolSession):
+        def request(self, method, url, **kwargs):
+            response = super().request(method, url, **kwargs)
+            self.responses[-1] = HeldResponse(body=response.body)
+            return self.responses[-1]
+
+    async def run_tool(tool_input):
+        invoked.append(tool_input.id)
+        if len(invoked) == 8:
+            started.set()
+        await release.wait()
+        return llm.ToolResult(data={"ok": True})
+
+    session = HeldSession(12, final_round=2)
+    client = GroqApiClient(hass, api_key="fake", session=session)
+    turn, log = tool_turn(hass, platform, session, run_tool, client=client)
+    task = asyncio.create_task(turn())
+    try:
+        async with asyncio.timeout(3):
+            await started.wait()
+            await client.async_shutdown()
+            release.set()
+            with pytest.raises(GroqApiError, match="unloaded"):
+                await task
+        assert len(invoked) == (0 if unload_at == "response" else 8)
+        if unload_at == "response":
+            assert all(item.role != "tool_result" for item in log.content)
+        assert len(session.responses) == 1 and session.responses[0].closed
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", PLATFORMS)
+async def test_aggregate_tool_argument_budget_rejects_before_dispatch(hass, platform):
+    arguments = json.dumps({"unused": "x" * (1024 * 1024)})
+    session = ToolSession(2, final_round=2, arguments=arguments)
+
+    async def run_tool(tool_input):
+        pytest.fail(f"dispatched excess arguments for {tool_input.id}")
+
+    turn, log = tool_turn(hass, platform, session, run_tool)
+    with pytest.raises(GroqResponseError, match="tool arguments exceeded"):
+        await turn()
+    assert all(item.role != "tool_result" for item in log.content)
+    assert len(session.responses) == 1 and session.responses[0].closed

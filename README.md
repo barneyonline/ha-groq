@@ -22,7 +22,7 @@
 
 ## Key features
 
-- **Assist conversations:** Streaming replies, Home Assistant tools and optional browser search with citations. Each Assist or AI Task request shares a four-image, 20 MiB attachment limit across the current input and retained history.
+- **Assist conversations:** Streaming replies, Home Assistant tools and optional browser search with citations. Each Assist or AI Task request shares a four-image, 20 MiB attachment limit across the current input and retained history. Each tool round accepts up to 64 Home Assistant calls and runs up to eight at a time.
 - **AI Tasks and automations:** Generate text and validated structured output.
 - **Speech recognition:** Voice pipelines, recorded-audio transcription and translation into English.
 - **Text-to-speech:** Orpheus voices, playback options and optional Long TTS.
@@ -92,6 +92,8 @@ their dismissals when you re-enable the account.
 <summary>Compatibility and service limits</summary>
 
 Groq is a cloud service. Models and request options vary by account and can change. Long TTS uses additional CPU and API quota. Local media and audio actions retain administrator and allowed-path restrictions.
+
+Actions require a loaded Groq account. Text requests already sent to Groq can still return their results after unload, while the retired account's local usage and response cache stay cleared.
 
 TTS free-tier protection conservatively counts each attempted HTTP request, including retries after network failures before a response starts. Cached speech adds no local usage, and identical requests sharing one synthesis count once per HTTP attempt.
 

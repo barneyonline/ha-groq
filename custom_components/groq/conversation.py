@@ -25,7 +25,7 @@ from .chat import (
     _chat_log_tools,
     assistant_content_from_result,
     prepare_tool_round,
-    tool_calls_for_completion,
+    async_tool_calls_for_completion,
 )
 from .const import CONF_SUBENTRY_ID, DOMAIN
 from .entity import service_device_info
@@ -201,10 +201,12 @@ class GroqConversationEntity(ConversationEntity):
             result = await self._client.async_generate_text(request)
             text = result.text
             await async_record_chat_completion(
+                self.hass,
                 chat_log,
                 request,
                 result,
                 user_input.agent_id,
+                client=self._client,
                 final_tool_round=final_tool_round,
             )
             if not chat_log.unresponded_tool_results:
@@ -275,9 +277,11 @@ class GroqConversationEntity(ConversationEntity):
             else:
                 raise GroqResponseError("Groq stream returned no final result")
 
-        tool_calls = tool_calls_for_completion(
-            request, result, final_tool_round=final_tool_round
+        tool_calls = await async_tool_calls_for_completion(
+            chat_log.hass, request, result, final_tool_round=final_tool_round
         )
+        if tool_calls:
+            self._client.ensure_open()
         assistant_content = assistant_content_from_result(
             result, user_input.agent_id, tool_calls
         )
@@ -290,7 +294,12 @@ class GroqConversationEntity(ConversationEntity):
                 },
             )
         if tool_calls:
-            await async_add_tool_batch(chat_log, assistant_content, notify_deltas=True)
+            await async_add_tool_batch(
+                chat_log,
+                assistant_content,
+                self._client.ensure_open,
+                notify_deltas=True,
+            )
         elif (
             assistant_content.content
             or assistant_content.thinking_content

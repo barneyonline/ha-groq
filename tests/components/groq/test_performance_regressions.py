@@ -1426,3 +1426,220 @@ def test_deeply_nested_tool_arguments_keep_execution_and_trace_isolated(wire_for
     assert execution == {"area": "Kitchen"}
     execution["area"] = "kitchen_id"
     assert original == {"area": "Kitchen"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+async def test_unload_during_request_encoding_prevents_dispatch(
+    hass, monkeypatch, stream
+):
+    encoding, release = asyncio.Event(), asyncio.Event()
+
+    async def executor(job, *args):
+        encoding.set()
+        await release.wait()
+        return job(*args)
+
+    def unexpected_request(*_args, **_kwargs):
+        pytest.fail("retired client attempted to dispatch a request")
+
+    monkeypatch.setattr(hass, "async_add_executor_job", executor)
+    monkeypatch.setattr(aiohttp.ClientSession, "request", unexpected_request)
+
+    async with aiohttp.ClientSession() as session:
+        client = GroqApiClient(hass, api_key="fake", session=session)
+        request = TextGenerationRequest(prompt="x" * 65536, model="fake")
+
+        async def generate():
+            if stream:
+                async with aclosing(client.async_stream_chat(request)) as chunks:
+                    await anext(chunks)
+            else:
+                await client.async_generate_text(request)
+
+        task = asyncio.create_task(generate())
+        try:
+            async with asyncio.timeout(3):
+                await encoding.wait()
+                await client.async_shutdown()
+                release.set()
+                with pytest.raises(GroqApiError, match="unloaded"):
+                    await task
+            assert not session.closed
+        finally:
+            release.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("interruption", ["clear", "close", "replace"])
+async def test_pending_large_cache_write_cannot_restore_stale_entry(
+    hass, monkeypatch, interruption
+):
+    from custom_components.groq.prompt_cache import GroqPromptCache
+
+    encoding, release = asyncio.Event(), asyncio.Event()
+
+    async def executor(job, *args):
+        encoding.set()
+        await release.wait()
+        return job(*args)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", executor)
+    cache = GroqPromptCache()
+    cache.set("key", {"text": "original"})
+    task = asyncio.create_task(cache.async_set(hass, "key", {"text": "x" * 65536}))
+    try:
+        async with asyncio.timeout(3):
+            await encoding.wait()
+            if interruption == "clear":
+                assert cache.clear() == 1
+            elif interruption == "close":
+                cache.close()
+            else:
+                await cache.async_set(hass, "key", {"text": "replacement"})
+            release.set()
+            await task
+        if interruption == "replace":
+            assert cache.get("key") == {"text": "replacement"}
+        else:
+            assert cache.size_bytes == 0
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("newer_finishes_first", [False, True])
+async def test_overlapping_cache_writes_keep_latest_response(
+    hass, monkeypatch, newer_finishes_first
+):
+    from custom_components.groq.prompt_cache import GroqPromptCache
+
+    started = [asyncio.Event(), asyncio.Event()]
+    release = [asyncio.Event(), asyncio.Event()]
+
+    async def executor(job, value):
+        index = value["index"]
+        started[index].set()
+        await release[index].wait()
+        return job(value)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", executor)
+    cache = GroqPromptCache()
+    values = [{"index": i, "text": "x" * 65536} for i in range(2)]
+    tasks = [
+        asyncio.create_task(cache.async_set(hass, "key", value)) for value in values
+    ]
+    try:
+        async with asyncio.timeout(3):
+            await asyncio.gather(*(event.wait() for event in started))
+            first = int(newer_finishes_first)
+            release[first].set()
+            await tasks[first]
+            release[1 - first].set()
+            await tasks[1 - first]
+        assert cache.get("key") == values[1]
+    finally:
+        for event in release:
+            event.set()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("replacement", ["evicted", "oversized"])
+async def test_cache_does_not_resurrect_older_pending_response(
+    hass, monkeypatch, replacement
+):
+    from custom_components.groq.prompt_cache import GroqPromptCache
+
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def executor(job, value):
+        started.set()
+        await release.wait()
+        return job(value)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", executor)
+    cache = GroqPromptCache(max_size=1)
+    task = asyncio.create_task(cache.async_set(hass, "key", {"text": "x" * 65536}))
+    try:
+        async with asyncio.timeout(3):
+            await started.wait()
+            if replacement == "evicted":
+                cache.set("key", {"text": "new"})
+                cache.set("other", {"text": "keep"})
+            else:
+                cache.set("key", {"text": "x" * (2 * 1024 * 1024)})
+            release.set()
+            await task
+        assert cache.get("key") is None
+        assert cache.get("other") == (
+            {"text": "keep"} if replacement == "evicted" else None
+        )
+    finally:
+        release.set()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_cache_jobs_are_bounded_until_workers_finish(hass, monkeypatch):
+    from custom_components.groq.prompt_cache import GroqPromptCache
+
+    started, release = asyncio.Event(), asyncio.Event()
+    submissions = []
+
+    async def executor(job, value):
+        submissions.append(value)
+        if len(submissions) == 8:
+            started.set()
+        await release.wait()
+        return job(value)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", executor)
+    cache = GroqPromptCache()
+    value = {"text": "x" * 65536}
+    cache.set("read", value)
+    workers = [
+        asyncio.create_task(
+            cache.async_get(hass, "read")
+            if i % 2
+            else cache.async_set(hass, str(i), value)
+        )
+        for i in range(8)
+    ]
+    try:
+        async with asyncio.timeout(3):
+            await started.wait()
+            workers[0].cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await workers[0]
+            assert await cache.async_get(hass, "read") is None
+            await cache.async_set(hass, "bypassed", value)
+            assert len(submissions) == 8
+            assert cache.get("bypassed") is None
+            release.set()
+            await asyncio.gather(*workers[1:])
+            assert await cache.async_get(hass, "read") == value
+    finally:
+        release.set()
+        await asyncio.gather(*workers, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_closed_client_does_not_publish_completed_model_refresh(monkeypatch):
+    client = GroqApiClient(Hass(), api_key="fake")
+    model = GroqModelRegistry().all_models()[0]
+
+    async def complete_then_close(*, hydrate):
+        assert hydrate
+        asyncio.create_task(client.async_shutdown())
+        return [model]
+
+    monkeypatch.setattr(client, "_async_list_models", complete_then_close)
+    with pytest.raises(GroqApiError, match="unloaded"):
+        await client.async_list_models()

@@ -16,7 +16,29 @@ def estimated_json_size_exceeds(
     The conservative estimate accounts for escaping, numeric rendering and
     string conversion of values that JSON cannot encode directly.
     """
+    return _json_size_reaches(
+        payload,
+        limit,
+        non_string_cost=8,
+        use_encoded_upper_bound=use_encoded_upper_bound,
+    )
+
+
+def minimum_json_size_exceeds(payload: dict[str, Any], limit: int) -> bool:
+    """Reject only JSON whose unescaped character count already exceeds a limit."""
+    return _json_size_reaches(payload, limit + 1, non_string_cost=1)
+
+
+def _json_size_reaches(
+    payload: dict[str, Any],
+    limit: int,
+    *,
+    non_string_cost: int,
+    use_encoded_upper_bound: bool = False,
+) -> bool:
     remaining = limit
+    # A string can be followed by a comma in addition to its two quotes.
+    string_overhead = 3 if use_encoded_upper_bound else 2
     pending: list[Iterator[Any]] = [iter((payload,))]
     while pending:
         for value in pending[-1]:
@@ -24,9 +46,9 @@ def estimated_json_size_exceeds(
                 escapes = (
                     (6 if value.isascii() else 12) if use_encoded_upper_bound else 1
                 )
-                remaining -= len(value) * escapes + 2
+                remaining -= len(value) * escapes + string_overhead
             else:
-                remaining -= 8
+                remaining -= non_string_cost
                 if use_encoded_upper_bound:
                     if isinstance(value, int):
                         remaining -= (value.bit_length() + 2) // 3

@@ -404,10 +404,12 @@ class GroqAITaskEntity(AITaskEntity):
             self._raise_request_errors(request, history_cache)
             result = await self._client.async_generate_text(request)
             await async_record_chat_completion(
+                self.hass,
                 chat_log,
                 request,
                 result,
                 service_unique_id(self._config_entry, self._service_data),
+                client=self._client,
                 final_tool_round=final_tool_round,
             )
             if not chat_log.unresponded_tool_results:

@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from typing import Any
 
 DOMAIN = "groq"
+MAX_TOOL_CALLS_PER_ROUND = 64
+MAX_TOOL_ARGUMENT_CHARS = 2 * 1024 * 1024
 CONF_API_KEY = "api_key"
 CONF_MODEL = "model"
 CONF_INPUT = "input"

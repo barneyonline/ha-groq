@@ -109,7 +109,7 @@ Include Reasoning appears when Reasoning Format is set to **Model default**. Sel
 
 [View the advanced Text Generation form in Home Assistant 2026.11.](images/text-generation-advanced-ha-2026-11.png)
 
-Local response caching is opt-in per configured service. Disabling it for one service remains effective when another service enables caching. Responses expire and share a 16 MiB serialized-content budget per account. Speech audio caches share a separate 64 MiB account budget in addition to their configured item limits. These caches are local to Home Assistant and are distinct from Groq's provider-side prompt caching.
+Local response caching is opt-in per configured service. Disabling it for one service remains effective when another service enables caching. Responses expire and share a 16 MiB serialized-content budget per account. Each entry is capped at 1 MiB. Requests bypass large cache operations when the cache has eight jobs in progress. Speech audio caches share a separate 64 MiB account budget in addition to their configured item limits. These caches are local to Home Assistant and are distinct from Groq's provider-side prompt caching.
 
 Explicit action arguments override service defaults; omitted structured-output fields inherit the configured schema name and strictness. Structured results are validated locally before being returned or cached, including JSON fallback for models without native schema output.
 
@@ -209,6 +209,8 @@ the sensor or its account.
 Streaming Assist now works with Home Assistant tools enabled. Text arrives while
 Groq generates it; local tool calls execute only after the full response has
 arrived and the complete arguments and exposed tool names have been validated.
+Assist and AI Task cap each round at 64 local tool calls and 2,097,152 total
+JSON argument characters, with up to eight calls running concurrently.
 Cancelled, malformed, and incomplete tool streams do not execute pending calls.
 The last round is reserved for an answer. Provider-side browser search remains
 available on that round when enabled.

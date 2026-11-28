@@ -8,13 +8,15 @@ ENV PYTHON_VERSION=${PYTHON_VERSION}
 
 # Root installs are intentional in this disposable test image. Dependency
 # resolver warnings and the explicit pip check remain enabled.
+# Load pytest-socket before Home Assistant imports it so pytest can register
+# its teardown and remove the socket guard after each test.
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_ROOT_USER_ACTION=ignore \
     PIP_NO_COMPILE=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
-    PYTEST_PLUGINS=pytest_asyncio.plugin,pytest_homeassistant.plugins,pytest_cov.plugin \
+    PYTEST_PLUGINS=pytest_socket,pytest_asyncio.plugin,pytest_homeassistant.plugins,pytest_cov.plugin \
     PYTEST_ASYNCIO_MODE=strict \
     PYTEST_ASYNCIO_DEFAULT_FIXTURE_LOOP_SCOPE=function
 

@@ -18,7 +18,7 @@ from custom_components.groq import ai_task, api
 from custom_components.groq.errors import GroqResponseError
 
 from .test_foundation import DummyEntry
-from .test_tool_turn_lifecycle import ToolSession, fixture_tool_api
+from .test_tool_turn_lifecycle import ToolSession, fixture_tool_api, tool_turn
 from .test_transport_architecture import Response, Session
 
 
@@ -216,3 +216,117 @@ async def test_ai_task_offloads_large_fenced_json(hass, monkeypatch, use_tools, 
         assert session.requests[-1]["messages"][-1]["role"] == "tool"
     else:
         assert not tools_called
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", ["assist", "assist_stream", "ai_task"])
+@pytest.mark.parametrize("size", [4096, 65536, 1024 * 1024])
+async def test_tool_only_completion_prepares_arguments_in_size_appropriate_context(
+    hass, monkeypatch, platform, size
+):
+    content = "x" * size
+    arguments = json.dumps({"unused": content})
+    decodes = []
+    running = asyncio.get_running_loop()
+    original_loads = json.loads
+
+    def observe_decode(value, *args, **kwargs):
+        if isinstance(value, str) and value == arguments:
+            try:
+                on_loop = asyncio.get_running_loop() is running
+            except RuntimeError:
+                on_loop = False
+            decodes.append(on_loop)
+            if not on_loop:
+                checkpoint = Event()
+                running.call_soon_threadsafe(checkpoint.set)
+                assert checkpoint.wait(3)
+        return original_loads(value, *args, **kwargs)
+
+    class ArgumentSession(ToolSession):
+        def request(self, method, url, **kwargs):
+            response = super().request(method, url, **kwargs)
+            if len(self.requests) == 1:
+                if kwargs["json"].get("stream"):
+                    lines = [line for line in response.body.splitlines() if line]
+                    event = original_loads(lines[1].removeprefix(b"data: "))
+                    event["choices"][0]["delta"]["tool_calls"][0]["function"][
+                        "arguments"
+                    ] = arguments
+                    response.body = (
+                        f"data: {json.dumps(event)}\n\ndata: [DONE]\n\n".encode()
+                    )
+                    self.responses[-1] = response = BufferedResponse(body=response.body)
+                else:
+                    payload = original_loads(response.body)
+                    message = payload["choices"][0]["message"]
+                    message["content"] = None
+                    message["tool_calls"][0]["function"]["arguments"] = arguments
+                    response.body = json.dumps(payload).encode()
+            return response
+
+    async def run_tool(tool_input):
+        assert tool_input.tool_args.pop("unused") == content
+        return llm.ToolResult(data={"ok": True})
+
+    monkeypatch.setattr(json, "loads", observe_decode)
+    session = ArgumentSession(1, final_round=2)
+    turn, log = tool_turn(hass, platform, session, run_tool)
+    await turn()
+    assert decodes == [size < 65536] * 2
+    assistant = next(item for item in log.content if item.role == "assistant")
+    assert (
+        assistant.native["tool_calls"][0]["function"]["parsed_arguments"]["unused"]
+        == content
+    )
+    assert all(response.closed for response in session.responses)
+
+
+@pytest.mark.parametrize("object_form", [False, True])
+@pytest.mark.parametrize("difference", [0, 1, 10])
+def test_equivalent_tool_arguments_share_character_limit(object_form, difference):
+    overhead = len(json.dumps({"unused": ""}, separators=(",", ":")))
+    characters = api.MAX_TOOL_ARGUMENT_CHARS - overhead + difference
+    argument = {"unused": "x" * characters}
+    wire = json.dumps(argument, separators=(",", ":"))
+    payload = {
+        "choices": [
+            {
+                "message": {
+                    "tool_calls": [
+                        {
+                            "id": "call",
+                            "function": {
+                                "name": "Fixture",
+                                "arguments": argument if object_form else wire,
+                            },
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    if difference:
+        with pytest.raises(GroqResponseError, match="tool arguments exceeded"):
+            api.extract_tool_calls(payload)
+    else:
+        calls = api.extract_tool_calls(payload)
+        assert calls is not None
+        assert calls[0]["function"]["arguments"] == (argument if object_form else wire)
+
+
+@pytest.mark.parametrize("count", [24_000, 800_000])
+def test_dense_object_arguments_account_for_json_separators(count):
+    argument = {"values": [""] * count}
+    size = len(json.dumps(argument, separators=(",", ":")))
+    tool_calls = [
+        {"id": "call", "function": {"name": "Fixture", "arguments": argument}}
+    ]
+    payload = {"choices": [{"message": {"tool_calls": tool_calls}}]}
+    if size > api.MAX_TOOL_ARGUMENT_CHARS:
+        with pytest.raises(GroqResponseError, match="tool arguments exceeded"):
+            api.extract_tool_calls(payload)
+    else:
+        assert size > api.JSON_EXECUTOR_THRESHOLD
+        assert api.large_tool_arguments(tool_calls)
+        assert api.extract_tool_calls(payload) == tool_calls
