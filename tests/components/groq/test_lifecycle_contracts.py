@@ -878,7 +878,6 @@ async def test_inflight_text_success_preserves_dismissal_during_disable(
     ):
         assert await config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-        client = entry.runtime_data.client
         async_create_model_access_issue(
             hass, TEXT_MODEL, entry_id=entry.entry_id, subentry_id=subentry_id
         )
@@ -900,13 +899,12 @@ async def test_inflight_text_success_preserves_dismissal_during_disable(
             ),
         ):
             request_task = asyncio.create_task(
-                client.async_generate_text(
-                    TextGenerationRequest(
-                        prompt="Hello",
-                        model=TEXT_MODEL,
-                        service_id=subentry_id,
-                        config_subentry_id=subentry_id,
-                    )
+                hass.services.async_call(
+                    "groq",
+                    "generate_text",
+                    {"service_id": service["title"], "prompt": "Hello"},
+                    blocking=True,
+                    return_response=True,
                 )
             )
             disable_task = None
@@ -922,7 +920,8 @@ async def test_inflight_text_success_preserves_dismissal_during_disable(
                 assert not disable_task.done()
                 response.release.set()
                 result = await asyncio.wait_for(request_task, timeout=5)
-                assert result.text == "Available"
+                assert result is not None
+                assert result["text"] == "Available"
                 assert own_issues(hass) == dismissed_issues
                 assert ir.async_get(hass).async_is_hidden(issue)
             finally:
