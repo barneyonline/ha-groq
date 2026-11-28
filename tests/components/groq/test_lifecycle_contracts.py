@@ -195,6 +195,20 @@ class LifecycleSession:
         )
 
 
+class PausedProviderResponse(DummyResponse):
+    """Hold a provider response until the test releases it."""
+
+    def __init__(self, status: int, payload: dict) -> None:
+        super().__init__(status, {}, payload)
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def __aenter__(self):
+        self.started.set()
+        await self.release.wait()
+        return self
+
+
 async def test_setup_retry_recovers_through_home_assistant(hass):
     entry = account(hass, services=[text_service()])
     session = LifecycleSession()
@@ -835,14 +849,7 @@ async def test_model_access_repairs_are_owned_and_clear_after_matching_success(h
 
 async def test_inflight_text_success_preserves_dismissal_during_disable(hass):
     """Core hides the dismissed repair while the account unloads."""
-    response_started, release_response = asyncio.Event(), asyncio.Event()
     unload_started, release_unload = asyncio.Event(), asyncio.Event()
-
-    class PendingResponse(DummyResponse):
-        async def __aenter__(self):
-            response_started.set()
-            await release_response.wait()
-            return self
 
     config_entries = hass.config_entries
     unload_platforms = config_entries.async_unload_platforms
@@ -871,8 +878,8 @@ async def test_inflight_text_success_preserves_dismissal_during_disable(hass):
         issue = dismissed_issues[issue_key]
         assert issue.dismissed_version is not None
 
-        response = PendingResponse(
-            200, {}, {"choices": [{"message": {"content": "Available"}}]}
+        response = PausedProviderResponse(
+            200, {"choices": [{"message": {"content": "Available"}}]}
         )
         with (
             patch.object(session, "request", return_value=response),
@@ -894,7 +901,7 @@ async def test_inflight_text_success_preserves_dismissal_during_disable(hass):
             )
             disable_task = None
             try:
-                await asyncio.wait_for(response_started.wait(), timeout=5)
+                await asyncio.wait_for(response.started.wait(), timeout=5)
                 disable_task = asyncio.create_task(
                     config_entries.async_set_disabled_by(
                         entry.entry_id, ConfigEntryDisabler.USER
@@ -903,22 +910,23 @@ async def test_inflight_text_success_preserves_dismissal_during_disable(hass):
                 await asyncio.wait_for(unload_started.wait(), timeout=5)
                 assert entry.disabled_by is ConfigEntryDisabler.USER
                 assert not disable_task.done()
-                release_response.set()
+                response.release.set()
                 result = await asyncio.wait_for(request_task, timeout=5)
                 assert result.text == "Available"
                 assert own_issues(hass) == dismissed_issues
                 assert ir.async_get(hass).async_is_hidden(issue)
             finally:
-                release_response.set()
+                response.release.set()
                 release_unload.set()
-                await asyncio.gather(
-                    *(
-                        task
-                        for task in (request_task, disable_task)
-                        if task is not None
-                    ),
-                    return_exceptions=True,
-                )
+                async with asyncio.timeout(5):
+                    await asyncio.gather(
+                        *(
+                            task
+                            for task in (request_task, disable_task)
+                            if task is not None
+                        ),
+                        return_exceptions=True,
+                    )
 
         assert await disable_task
         assert entry.state is ConfigEntryState.NOT_LOADED
@@ -935,23 +943,16 @@ async def test_old_client_cannot_change_repairs_after_configuration_changes(
     hass, status, changed
 ):
     """A late response cannot mutate repairs once the request context is obsolete."""
-    entered = asyncio.Event()
-    release = asyncio.Event()
     payload = (
         {"choices": [{"message": {"content": "old result"}}]}
         if status == 200
         else {"error": {"code": "model_permission_blocked_org"}}
     )
 
-    class PendingResponse(DummyResponse):
-        async def __aenter__(self):
-            entered.set()
-            await release.wait()
-            return self
-
     entry = account(hass, services=[text_service()])
     client = build_runtime(hass, entry).client
-    client._session = DummySession(PendingResponse(status, {}, payload))
+    response = PausedProviderResponse(status, payload)
+    client._session = DummySession(response)
     task = asyncio.create_task(
         client.async_generate_text(
             TextGenerationRequest(
@@ -959,7 +960,7 @@ async def test_old_client_cannot_change_repairs_after_configuration_changes(
             )
         )
     )
-    await asyncio.wait_for(entered.wait(), timeout=5)
+    await asyncio.wait_for(response.started.wait(), timeout=5)
     try:
         if changed == "shutdown":
             await client.async_shutdown()
@@ -983,7 +984,7 @@ async def test_old_client_cannot_change_repairs_after_configuration_changes(
         expected = own_issues(hass)
         assert len(expected) == (1 if status == 200 else 0)
     finally:
-        release.set()
+        response.release.set()
 
     if status == 403:
         with pytest.raises(GroqApiError):
