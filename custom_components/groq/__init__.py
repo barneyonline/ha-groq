@@ -71,6 +71,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: GroqConfigEntry) -> Non
     platforms = runtime.feature_registry.enabled_platforms() if runtime else []
     await hass.config_entries.async_unload_platforms_or_raise(entry, platforms)
     if runtime is not None:
+        runtime.prompt_cache.close()
         await runtime.client.async_shutdown()
     from .services import async_update_service_descriptions
 

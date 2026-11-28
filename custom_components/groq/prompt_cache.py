@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
 from heapq import heappop, heappush
 from time import monotonic
 from typing import Any, cast
 
+from homeassistant.core import HomeAssistant
+
+from .json_utils import (
+    JSON_EXECUTOR_THRESHOLD,
+    estimated_json_size_exceeds,
+    minimum_json_size_exceeds,
+)
+
 MAX_PROMPT_CACHE_BYTES = 16 * 1024 * 1024
+MAX_PROMPT_CACHE_ENTRY_BYTES = 1024 * 1024
+MAX_PROMPT_CACHE_JOBS = 8
 
 
 @dataclass(slots=True)
@@ -41,6 +53,9 @@ class GroqPromptCache:
         self._expiry_heap: list[tuple[float, str]] = []
         self._max_bytes = max(0, max_bytes)
         self._size_bytes = 0
+        self._pending_writes: dict[str, asyncio.Future[bytes | None]] = {}
+        self._active_jobs = 0
+        self._closed = False
 
     @property
     def size_bytes(self) -> int:
@@ -56,12 +71,30 @@ class GroqPromptCache:
 
     def get(self, key: str) -> dict[str, Any] | None:
         """Return a cached response by key."""
-        self._purge_expired()
-        entry = self._entries.get(key)
+        entry = self._get_entry(key)
         if entry is None:
             return None
         self._entries.move_to_end(key)
         return cast(dict[str, Any], json.loads(entry.value))
+
+    async def async_get(self, hass: HomeAssistant, key: str) -> dict[str, Any] | None:
+        """Return an independent response, decoding large entries in the executor."""
+        entry = self._get_entry(key)
+        if entry is None:
+            return None
+        if len(entry.value) >= JSON_EXECUTOR_THRESHOLD:
+            job = self._submit_job(hass, json.loads, entry.value)
+            if job is None:
+                return None
+            self._entries.move_to_end(key)
+            return cast(dict[str, Any], await asyncio.shield(job))
+        self._entries.move_to_end(key)
+        return cast(dict[str, Any], json.loads(entry.value))
+
+    def _get_entry(self, key: str) -> PromptCacheEntry | None:
+        """Look up the cached snapshot on the event loop."""
+        self._purge_expired()
+        return self._entries.get(key)
 
     def set(
         self,
@@ -71,13 +104,82 @@ class GroqPromptCache:
         ttl: int | None = None,
     ) -> None:
         """Store a response in the cache."""
-        if self._max_size == 0 or self._max_bytes == 0:
+        if self._closed or self._max_size == 0 or self._max_bytes == 0:
             return
+        encoded = self._encode_bounded(value)
+        self._pending_writes.pop(key, None)
+        self._store(key, encoded, ttl)
+
+    async def async_set(
+        self,
+        hass: HomeAssistant,
+        key: str,
+        value: dict[str, Any],
+        *,
+        ttl: int | None = None,
+    ) -> None:
+        """Encode large responses off-loop and commit to the current cache."""
+        if self._closed or self._max_size == 0 or self._max_bytes == 0:
+            return
+        self._pending_writes.pop(key, None)
+        if any(
+            isinstance(item, str) and len(item) > MAX_PROMPT_CACHE_ENTRY_BYTES
+            for item in value.values()
+        ):
+            self._store(key, None, ttl)
+            return
+        if not estimated_json_size_exceeds(
+            value, JSON_EXECUTOR_THRESHOLD, use_encoded_upper_bound=True
+        ):
+            self._store(key, self._encode(value), ttl)
+            return
+        job = self._submit_job(hass, self._encode_bounded, value)
+        if job is None:
+            return
+        self._pending_writes[key] = job
+        try:
+            encoded = await asyncio.shield(job)
+        finally:
+            newest = self._pending_writes.get(key) is job
+            if newest:
+                del self._pending_writes[key]
+        if newest:
+            self._store(key, encoded, ttl)
+
+    def _submit_job[InputT, ResultT](
+        self, hass: HomeAssistant, work: Callable[[InputT], ResultT], value: InputT
+    ) -> asyncio.Future[ResultT] | None:
+        """Bypass a saturated cache without queuing additional codec jobs."""
+        if self._active_jobs >= MAX_PROMPT_CACHE_JOBS:
+            return None
+        job = asyncio.ensure_future(hass.async_add_executor_job(work, value))
+        self._active_jobs += 1
+        job.add_done_callback(self._job_finished)
+        return job
+
+    def _job_finished(self, job: asyncio.Future[Any]) -> None:
+        """Release admission only when the worker settles."""
+        self._active_jobs -= 1
+        if not job.cancelled():
+            job.exception()
+
+    @staticmethod
+    def _encode(value: dict[str, Any]) -> bytes:
+        return json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode()
+
+    @classmethod
+    def _encode_bounded(cls, value: dict[str, Any]) -> bytes | None:
+        if minimum_json_size_exceeds(value, MAX_PROMPT_CACHE_ENTRY_BYTES):
+            return None
+        return cls._encode(value)
+
+    def _store(self, key: str, encoded: bytes | None, ttl: int | None) -> None:
         self._purge_expired()
-        encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode()
-        size_bytes = len(encoded) + len(key.encode())
         self._remove(key)
-        if size_bytes > self._max_bytes:
+        if encoded is None:
+            return
+        size_bytes = len(encoded) + len(key.encode())
+        if size_bytes > min(self._max_bytes, MAX_PROMPT_CACHE_ENTRY_BYTES):
             return
         ttl_value = self._default_ttl if ttl is None else ttl
         now = monotonic()
@@ -101,7 +203,13 @@ class GroqPromptCache:
         self._entries.clear()
         self._expiry_heap.clear()
         self._size_bytes = 0
+        self._pending_writes.clear()
         return count
+
+    def close(self) -> None:
+        """Release this entry's cache and discard pending writes."""
+        self._closed = True
+        self.clear()
 
     def _remove(self, key: str) -> None:
         """Remove an entry and its retained content accounting."""

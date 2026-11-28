@@ -175,6 +175,9 @@ class DummyToolTextClient:
     def __init__(self):
         self.requests = []
 
+    def ensure_open(self):
+        return None
+
     async def async_generate_text(self, request):
         self.requests.append(request)
         if len(self.requests) == 1:

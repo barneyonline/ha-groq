@@ -74,9 +74,13 @@ services creates no service entities. Authentication failure raises the HA auth
 exception; temporary setup connectivity failure raises `ConfigEntryNotReady`.
 
 An unload-bound entry update listener reloads changed configuration. Unload first
-unloads the platforms, then drains owned speech tasks and refreshes service target
-descriptions. Shared HA aiohttp sessions belong to HA and are never closed by this
-integration. Account removal and service changes reconcile owned repair issues.
+unloads the platforms, then clears the local response cache, retires the
+client, drains owned speech tasks and refreshes service target descriptions.
+Text already sent to Groq can still return to its caller. Retirement clears
+usage measurements and prevents late responses from updating usage, the cache
+or repairs. New service calls require a loaded entry, and tool calls check the
+client before dispatch. Shared HA aiohttp sessions belong to HA. Account removal
+and service changes reconcile owned repair issues.
 
 Successful discovery is authoritative for the local catalogue: inactive models and
 features with no matching models are not offered as if discovery failed. Built-in

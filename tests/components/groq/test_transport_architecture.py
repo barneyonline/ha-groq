@@ -407,6 +407,16 @@ def test_expired_entries_are_removed_before_live_eviction(monkeypatch):
     assert cache.size == 2
 
 
+def test_prompt_cache_entry_cap_accounts_for_json_escaping(monkeypatch):
+    monkeypatch.setattr(prompt_cache, "MAX_PROMPT_CACHE_ENTRY_BYTES", 128)
+    cache = prompt_cache.GroqPromptCache()
+    cache.set("key", {"text": "small"})
+    assert cache.get("key") == {"text": "small"}
+    cache.set("key", {"text": "\n" * 65})
+    assert cache.get("key") is None
+    assert cache.size_bytes == 0
+
+
 @pytest.mark.parametrize("value", ["nan", float("nan"), "inf", -float("inf")])
 def test_tts_rejects_nonfinite_speed(value):
     with pytest.raises(ValueError):
@@ -1157,3 +1167,93 @@ async def test_long_tts_spools_in_order_before_synthesizing_next_chunk(
     )
     assert starts == [b"a" * 200, b"b" * 200]
     assert not temp.exists()
+
+
+def test_prompt_cache_accepts_compact_structured_response_below_cap():
+    cache = prompt_cache.GroqPromptCache()
+    data = [0] * 150_000
+    response = {"text": json.dumps(data, separators=(",", ":")), "data": data}
+    size = len(json.dumps(response, separators=(",", ":")).encode()) + len("key")
+    assert size < prompt_cache.MAX_PROMPT_CACHE_ENTRY_BYTES
+    cache.set("key", response)
+    assert cache.size_bytes == size
+    assert cache.get("key") == response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text_size", [4096, 1024 * 1024, 4 * 1024 * 1024])
+async def test_structured_response_cache_size_matrix(hass, text_size):
+    cache = prompt_cache.GroqPromptCache()
+    data = {"content": "x" * text_size}
+    response = {"text": json.dumps(data), "data": data}
+    encoded_size = len(json.dumps(response, separators=(",", ":")).encode()) + len(
+        "key"
+    )
+    await cache.async_set(hass, "key", response)
+    result = await cache.async_get(hass, "key")
+    if encoded_size <= prompt_cache.MAX_PROMPT_CACHE_ENTRY_BYTES:
+        assert cache.size_bytes == encoded_size
+        assert result == response
+        result["data"]["content"] = "mutated"
+        assert await cache.async_get(hass, "key") == response
+    else:
+        assert cache.size_bytes == 0
+        assert result is None
+
+
+@pytest.mark.asyncio
+async def test_retired_client_rejects_long_speech_after_held_ffmpeg_preflight(
+    monkeypatch,
+):
+    preflight, release = asyncio.Event(), asyncio.Event()
+    session = Session(Response())
+    hass = Hass()
+    client = GroqApiClient(hass, api_key="fake", session=session)
+    entity = tts.GroqTTSEntity(
+        hass,
+        SimpleNamespace(unique_id="test", options={}, data={}),
+        client,
+        {
+            tts.CONF_MODEL: "canopylabs/orpheus-v1-english",
+            tts.CONF_VOICE: "autumn",
+            tts.CONF_ENABLE_LONG_TTS: True,
+        },
+    )
+
+    async def held_preflight(*_args):
+        preflight.set()
+        await release.wait()
+
+    monkeypatch.setattr(entity, "_async_check_ffmpeg", held_preflight)
+    audio = asyncio.create_task(entity.async_get_tts_audio("a" * 400, "en"))
+    try:
+        async with asyncio.timeout(3):
+            await preflight.wait()
+            await client.async_shutdown()
+            release.set()
+            assert await audio == (None, None)
+        assert not client._tts_usage
+        assert not session.calls
+    finally:
+        release.set()
+        await asyncio.gather(audio, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_dense_cache_entry_uses_executor_for_json_separators(hass, monkeypatch):
+    original = hass.async_add_executor_job
+    encode_jobs = []
+
+    async def record(job, *args):
+        encode_jobs.append(job)
+        return await original(job, *args)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", record)
+    cache = prompt_cache.GroqPromptCache()
+    response = {"text": "ok", "usage": {"values": [""] * 24_000}}
+    size = len(json.dumps(response, separators=(",", ":")).encode()) + len("key")
+    assert size > prompt_cache.JSON_EXECUTOR_THRESHOLD
+    await cache.async_set(hass, "key", response)
+    assert len(encode_jobs) == 1
+    assert cache.size_bytes == size
+    assert await cache.async_get(hass, "key") == response

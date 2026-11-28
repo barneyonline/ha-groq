@@ -14,7 +14,7 @@ from homeassistant.components import conversation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import llm
 
-from .api import ChatCompletionResult, TextGenerationRequest
+from .api import ChatCompletionResult, TextGenerationRequest, large_tool_arguments
 from .attachments import (
     ImageAttachmentBudget,
     ImageAttachmentBudgetExceeded,
@@ -46,7 +46,8 @@ def prepare_tool_round(
     return replace(request, tool_choice="none"), True
 
 
-def tool_calls_for_completion(
+async def async_tool_calls_for_completion(
+    hass: HomeAssistant,
     request: TextGenerationRequest,
     result: ChatCompletionResult,
     *,
@@ -55,7 +56,11 @@ def tool_calls_for_completion(
     """Validate the tool round and allow only functions exposed in the request."""
     if final_tool_round and (result.tool_calls or not result.text.strip()):
         raise translated_error("Groq exceeded the tool-call limit", "tool_call_limit")
-    tool_calls = _result_tool_calls(result)
+    tool_calls = (
+        await hass.async_add_executor_job(_result_tool_calls, result)
+        if large_tool_arguments(result.tool_calls)
+        else _result_tool_calls(result)
+    )
     if tool_calls:
         allowed_tools = {
             tool["function"]["name"]

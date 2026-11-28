@@ -15,6 +15,7 @@ from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import aclosing, suppress
 from contextvars import copy_context
 from dataclasses import dataclass, field
+from functools import partial
 from hashlib import sha256
 from secrets import token_bytes
 from typing import Any, cast
@@ -31,9 +32,17 @@ from .compound_tools import (
     compound_builtin_tools_payload_value,
     compound_builtin_tools_require_latest,
 )
-from .const import GROQ_FREE_TIER_LIMITS
+from .const import (
+    GROQ_FREE_TIER_LIMITS,
+    MAX_TOOL_ARGUMENT_CHARS,
+    MAX_TOOL_CALLS_PER_ROUND,
+)
 from .errors import GroqApiError, GroqResponseError, safe_error_payload
-from .json_utils import JSON_EXECUTOR_THRESHOLD, estimated_json_size_exceeds
+from .json_utils import (
+    JSON_EXECUTOR_THRESHOLD,
+    estimated_json_size_exceeds,
+    minimum_json_size_exceeds,
+)
 from .model_registry import GroqModel, model_from_api
 from .rate_limit import GroqRateLimiter
 from .repairs import async_create_model_access_issue, async_delete_model_access_issue
@@ -456,7 +465,8 @@ def extract_chat_text(payload: dict[str, Any]) -> str:
                 parts.append(part["text"])
         if parts:
             return "\n".join(parts)
-    if extract_tool_calls(payload):
+    calls = message.get("tool_calls")
+    if isinstance(calls, list) and any(isinstance(call, dict) for call in calls):
         return ""
     raise GroqResponseError("Groq response did not include text content")
 
@@ -482,6 +492,10 @@ def extract_tool_calls(
     tool_calls = message.get("tool_calls")
     if not isinstance(tool_calls, list):
         return None
+    if len(tool_calls) > MAX_TOOL_CALLS_PER_ROUND:
+        raise GroqResponseError("Groq returned too many tool calls in one round")
+    if parsed_arguments is None and _tool_arguments_exceed_limit(tool_calls):
+        raise GroqResponseError("Groq tool arguments exceeded the size limit")
 
     parsed_calls: list[dict[str, Any]] = []
     for tool_call in tool_calls:
@@ -501,6 +515,57 @@ def extract_tool_calls(
             parsed_call["function"] = parsed_function
         parsed_calls.append(parsed_call)
     return parsed_calls or None
+
+
+def _tool_argument_sizes(tool_calls: list[Any]) -> tuple[int, list[dict[str, Any]]]:
+    string_chars = 0
+    object_arguments: list[dict[str, Any]] = []
+    for call in tool_calls:
+        function = call.get("function") if isinstance(call, dict) else None
+        if isinstance(function, dict):
+            value = function.get("arguments")
+            if isinstance(value, str):
+                string_chars += len(value)
+            elif isinstance(value, dict):
+                object_arguments.append(value)
+    return string_chars, object_arguments
+
+
+def _tool_arguments_exceed_limit(tool_calls: list[Any]) -> bool:
+    string_chars, object_arguments = _tool_argument_sizes(tool_calls)
+    remaining = MAX_TOOL_ARGUMENT_CHARS - string_chars
+    if remaining < 0:
+        return True
+    if not object_arguments or not estimated_json_size_exceeds(
+        {"arguments": object_arguments}, remaining + 1, use_encoded_upper_bound=True
+    ):
+        return False
+    # Object arguments have no wire string. Measure compact JSON only when the
+    # upper bound cannot establish admission.
+    for argument in object_arguments:
+        if minimum_json_size_exceeds(argument, remaining):
+            return True
+        remaining -= len(
+            json.dumps(argument, separators=(",", ":"), ensure_ascii=False)
+        )
+        if remaining < 0:
+            return True
+    return False
+
+
+def large_tool_arguments(tool_calls: Any) -> bool:
+    """Estimate whether a round's arguments require executor preparation."""
+    if not isinstance(tool_calls, list) or len(tool_calls) > MAX_TOOL_CALLS_PER_ROUND:
+        return False
+    string_chars, object_arguments = _tool_argument_sizes(tool_calls)
+    return string_chars >= JSON_EXECUTOR_THRESHOLD or (
+        bool(object_arguments)
+        and estimated_json_size_exceeds(
+            {"arguments": object_arguments},
+            JSON_EXECUTOR_THRESHOLD - string_chars,
+            use_encoded_upper_bound=True,
+        )
+    )
 
 
 def extract_executed_tools(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
@@ -579,6 +644,7 @@ class GroqApiClient:
     async def async_shutdown(self) -> None:
         """Cancel owned requests and release caches when the entry unloads."""
         self._closed = True
+        self.usage.close()
         tasks: list[asyncio.Task[Any]] = []
         for request, flight in self._speech_inflight.items():
             tasks.append(flight.task)
@@ -598,7 +664,6 @@ class GroqApiClient:
             self._speech_cache_order.clear()
             self._speech_cache_bytes = 0
             self._tts_usage.clear()
-            self.usage.clear()
 
     def _speech_finished(
         self, request: SpeechRequest, task: asyncio.Task[bytes]
@@ -613,6 +678,11 @@ class GroqApiClient:
         if self._auth_failure_callback is not None and self.can_update_repairs:
             self._auth_failure_callback()
         return ConfigEntryAuthFailed("Authentication failed for Groq API")
+
+    def ensure_open(self) -> None:
+        """Reject new work after the entry has unloaded."""
+        if self._closed:
+            raise GroqApiError("Groq config entry has been unloaded")
 
     @property
     def base_url(self) -> str:
@@ -650,7 +720,9 @@ class GroqApiClient:
                 break
             await asyncio.shield(asyncio.gather(flight.task, return_exceptions=True))
         try:
-            return list(await flight.async_wait())
+            models = await flight.async_wait()
+            self.ensure_open()
+            return list(models)
         except CancelledError:
             caller = asyncio.current_task()
             if (
@@ -760,7 +832,7 @@ class GroqApiClient:
             repair_service_id=request.service_id,
             repair_subentry_id=request.config_subentry_id,
         )
-        return self._chat_result(payload, request.service_id)
+        return await self._async_chat_result(payload, request.service_id)
 
     async def async_stream_text(
         self,
@@ -805,14 +877,20 @@ class GroqApiClient:
             async for event in events:
                 if content := stream.add(event):
                     yield content
+        parsed_arguments: dict[str, dict[str, Any]] | None = (
+            {} if collect_text else None
+        )
+        assemble = partial(stream.result, parsed_arguments=parsed_arguments)
+        result = (
+            await self._hass.async_add_executor_job(assemble)
+            if stream.tool_argument_chars >= JSON_EXECUTOR_THRESHOLD
+            else assemble()
+        )
         if collect_text:
-            parsed_arguments: dict[str, dict[str, Any]] = {}
-            result = stream.result(parsed_arguments=parsed_arguments)
-            yield self._chat_result(
+            yield await self._async_chat_result(
                 result, request.service_id, parsed_arguments=parsed_arguments
             )
         else:
-            stream.result()  # Validate tool completion even for text-only callers.
             self.usage.record(request.service_id, stream.usage)
 
     async def async_generate_structured(
@@ -829,7 +907,7 @@ class GroqApiClient:
             repair_service_id=request.service_id,
             repair_subentry_id=request.config_subentry_id,
         )
-        result = self._chat_result(payload, request.service_id)
+        result = await self._async_chat_result(payload, request.service_id)
         try:
             parsed = await async_decode_json_body(self._hass, json.loads, result.text)
         except json.JSONDecodeError as err:
@@ -862,7 +940,7 @@ class GroqApiClient:
             repair_service_id=request.service_id,
             repair_subentry_id=request.config_subentry_id,
         )
-        return self._chat_result(payload, request.service_id)
+        return await self._async_chat_result(payload, request.service_id)
 
     async def async_transcribe_audio(
         self,
@@ -1095,10 +1173,29 @@ class GroqApiClient:
         while self._speech_cache_bytes > MAX_SPEECH_CACHE_BYTES:
             self._evict_speech(*next(iter(self._speech_cache_order)))
 
-    def _chat_result(
+    async def _async_chat_result(
         self,
         payload: dict[str, Any],
-        service_id: str | None = None,
+        service_id: str | None,
+        *,
+        parsed_arguments: Mapping[str, dict[str, Any]] | None = None,
+    ) -> ChatCompletionResult:
+        """Prepare large tool traces off-loop and publish usage on the loop."""
+        message = _extract_chat_message(payload)
+        if (
+            parsed_arguments is None
+            and message
+            and large_tool_arguments(message.get("tool_calls"))
+        ):
+            result = await self._hass.async_add_executor_job(self._chat_result, payload)
+        else:
+            result = self._chat_result(payload, parsed_arguments=parsed_arguments)
+        self.usage.record(service_id, result.usage)
+        return result
+
+    @staticmethod
+    def _chat_result(
+        payload: dict[str, Any],
         *,
         parsed_arguments: Mapping[str, dict[str, Any]] | None = None,
     ) -> ChatCompletionResult:
@@ -1116,16 +1213,15 @@ class GroqApiClient:
             if isinstance(message, dict)
             else []
         )
-        text = extract_chat_text(payload)
-        self.usage.record(service_id, usage)
+        tool_calls = extract_tool_calls(payload, parsed_arguments=parsed_arguments)
         return ChatCompletionResult(
-            text=text,
+            text=extract_chat_text(payload),
             model=payload.get("model"),
             usage=usage,
             raw=payload,
             reasoning=extract_chat_reasoning(payload),
             citations=citations,
-            tool_calls=extract_tool_calls(payload, parsed_arguments=parsed_arguments),
+            tool_calls=tool_calls,
             executed_tools=extract_executed_tools(payload),
             usage_breakdown=(
                 payload.get("usage_breakdown")
@@ -1149,6 +1245,7 @@ class GroqApiClient:
         repair_model: str | None = None,
     ) -> dict[str, Any]:
         """Perform a JSON request and return a JSON object."""
+        self.ensure_open()
         session = self._session or async_get_clientsession(self._hass)
         headers = self._headers(
             api_key,
@@ -1177,7 +1274,8 @@ class GroqApiClient:
                 self._url(path),
                 **request_kwargs,
             ) as response:
-                self._rate_limiter.update_from_headers(guard_key, response.headers)
+                if not self._closed:
+                    self._rate_limiter.update_from_headers(guard_key, response.headers)
                 if response.status == 401:
                     raise self._authentication_failed()
                 body = await _read_limited_response(
@@ -1222,6 +1320,7 @@ class GroqApiClient:
         repair_subentry_id: str | None = None,
     ) -> AsyncGenerator[dict[str, Any]]:
         """Perform an SSE request and yield decoded JSON events."""
+        self.ensure_open()
         session = self._session or async_get_clientsession(self._hass)
         self._rate_limiter.raise_if_blocked(guard_key)
         try:
@@ -1241,7 +1340,8 @@ class GroqApiClient:
                 allow_redirects=False,
                 **request_body,
             ) as response:
-                self._rate_limiter.update_from_headers(guard_key, response.headers)
+                if not self._closed:
+                    self._rate_limiter.update_from_headers(guard_key, response.headers)
                 if response.status == 401:
                     raise self._authentication_failed()
                 if response.status < 200 or response.status >= 300:
@@ -1339,6 +1439,7 @@ class GroqApiClient:
         session = self._session or async_get_clientsession(self._hass)
         attempt = 0
         while True:
+            self.ensure_open()
             response_started = False
             self._rate_limiter.raise_if_blocked(guard_key)
             if before_attempt is not None:
@@ -1433,6 +1534,7 @@ class GroqApiClient:
             return session.json_serialize(payload).encode("utf-8")
 
         body = await self._hass.async_add_executor_job(copy_context().run, encode)
+        self.ensure_open()
         self._rate_limiter.raise_if_blocked(guard_key)
         return {"data": body}
 
@@ -1493,7 +1595,7 @@ class GroqApiClient:
 
     def _mark_unavailable(self, reason: str) -> None:
         """Log the transition to unavailable once per outage."""
-        if not self._available and self._unavailable_reason == reason:
+        if self._closed or (not self._available and self._unavailable_reason == reason):
             return
         self._available = False
         self._unavailable_reason = reason
@@ -1501,7 +1603,7 @@ class GroqApiClient:
 
     def _mark_available(self) -> None:
         """Log recovery once after an outage."""
-        if self._available:
+        if self._closed or self._available:
             return
         self._available = True
         self._unavailable_reason = None
@@ -1683,6 +1785,7 @@ class GroqApiClient:
         now: float | None = None,
     ) -> list[int]:
         """Raise before sending a TTS batch that exceeds known free-tier limits."""
+        self.ensure_open()
         token_estimates = [
             self._estimate_tts_token_usage(request.text) for request in requests
         ]

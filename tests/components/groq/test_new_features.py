@@ -16,6 +16,7 @@ from homeassistant.helpers import llm
 
 from custom_components.groq import api, flow_schemas, sensor, services
 from custom_components.groq.api import (
+    ChatCompletionResult,
     GroqApiClient,
     TextGenerationRequest,
     StructuredGenerationRequest,
@@ -821,3 +822,75 @@ async def test_structured_ai_task_rejects_browser_search_before_tools(hass):
         )
     client.async_generate_text.assert_not_called()
     client.async_generate_structured.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("size", [65536, 4 * 1024 * 1024])
+async def test_large_service_response_cache_admission(hass, monkeypatch, size):
+    from custom_components.groq.prompt_cache import GroqPromptCache
+
+    text = "x" * size
+    loop = asyncio.get_running_loop()
+    operations = []
+    original_dumps, original_loads = json.dumps, json.loads
+
+    def on_loop():
+        try:
+            return asyncio.get_running_loop() is loop
+        except RuntimeError:
+            return False
+
+    def observe_dumps(value, *args, **kwargs):
+        if isinstance(value, dict) and value.get("text") == text:
+            operations.append(("write", on_loop()))
+        return original_dumps(value, *args, **kwargs)
+
+    def observe_loads(value, *args, **kwargs):
+        if isinstance(value, bytes) and len(value) > 65536:
+            operations.append(("read", on_loop()))
+        return original_loads(value, *args, **kwargs)
+
+    generate = AsyncMock(
+        return_value=ChatCompletionResult(text=text, model=MODEL, usage={}, raw={})
+    )
+    client = GroqApiClient(hass, api_key="fake")
+    monkeypatch.setattr(client, "async_generate_text", generate)
+    data = {"unique_id": "text", "model": MODEL, "prompt_caching": True}
+    runtime = SimpleNamespace(
+        client=client,
+        model_registry=GroqModelRegistry(),
+        feature_registry=GroqFeatureRegistry(
+            [GroqFeature.TEXT_GENERATION, GroqFeature.PROMPT_CACHING]
+        ),
+        services_by_type={"text_generation": (data,)},
+        prompt_cache=GroqPromptCache(),
+    )
+    monkeypatch.setattr(
+        services, "_runtime_from_call", AsyncMock(return_value=(DummyEntry(), runtime))
+    )
+    monkeypatch.setattr(json, "dumps", observe_dumps)
+    monkeypatch.setattr(json, "loads", observe_loads)
+    hass.services.async_register(
+        "groq",
+        "generate_text",
+        services._handle_generate_text(hass),
+        schema=services.GENERATE_TEXT_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    admitted = size == 65536
+    for expected_hit in (False, admitted):
+        result = await hass.services.async_call(
+            "groq",
+            "generate_text",
+            {"service_id": "text", "prompt": "Write"},
+            blocking=True,
+            return_response=True,
+        )
+        assert result["text"] == text and result["cached"] is expected_hit
+    if admitted:
+        assert generate.await_count == 1
+        assert operations == [("write", False), ("read", False)]
+    else:
+        assert generate.await_count == 2
+        assert not operations
+        assert runtime.prompt_cache.size_bytes == 0

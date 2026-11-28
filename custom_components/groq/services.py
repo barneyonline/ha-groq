@@ -353,6 +353,10 @@ def _entry_from_call(
                 f"Groq config entry not found: {entry_id}",
                 entry_id=entry_id,
             )
+        if not _entry_state_matches(entry):
+            raise _service_error(
+                "no_loaded_config_entry", "No loaded Groq config entry found"
+            )
         return entry
 
     entries = _loaded_entries(hass)
@@ -653,7 +657,8 @@ def _prompt_cache_allowed(runtime: GroqRuntimeData, model: str) -> bool:
     ) and runtime.model_registry.supports(model, GroqFeature.PROMPT_CACHING)
 
 
-def _cache_get(
+async def _cache_get(
+    hass: HomeAssistant,
     runtime: GroqRuntimeData,
     model: str,
     key: str | None,
@@ -661,14 +666,15 @@ def _cache_get(
     """Return a cached response when local response caching is enabled."""
     if key is None or not _prompt_cache_allowed(runtime, model):
         return None
-    cached = runtime.prompt_cache.get(key)
+    cached = await runtime.prompt_cache.async_get(hass, key)
     if cached is None:
         return None
     cached["cached"] = True
     return cached
 
 
-def _cache_set(
+async def _cache_set(
+    hass: HomeAssistant,
     runtime: GroqRuntimeData,
     model: str,
     key: str | None,
@@ -676,7 +682,7 @@ def _cache_set(
 ) -> None:
     """Store a response when local response caching is enabled."""
     if key is not None and _prompt_cache_allowed(runtime, model):
-        runtime.prompt_cache.set(key, response)
+        await runtime.prompt_cache.async_set(hass, key, response)
 
 
 def _image_data_url(content: bytes, content_type: str | None) -> str:
@@ -1116,7 +1122,7 @@ def _handle_generate_text(
             and _prompt_cache_allowed(runtime, request.model)
             else None
         )
-        if cached := _cache_get(runtime, request.model, key):
+        if cached := await _cache_get(hass, runtime, request.model, key):
             return cached
 
         if isinstance(request, StructuredGenerationRequest):
@@ -1133,7 +1139,7 @@ def _handle_generate_text(
                 "usage": result.usage,
                 "cached": False,
             }
-        _cache_set(runtime, request.model, key, response)
+        await _cache_set(hass, runtime, request.model, key, response)
         return response
 
     return handler
@@ -1189,7 +1195,7 @@ def _handle_vision(
             and _prompt_cache_allowed(runtime, request.model)
             else None
         )
-        if cached := _cache_get(runtime, request.model, key):
+        if cached := await _cache_get(hass, runtime, request.model, key):
             return cached
 
         result = await runtime.client.async_analyze_image(request)
@@ -1199,7 +1205,7 @@ def _handle_vision(
             "usage": result.usage,
             "cached": False,
         }
-        _cache_set(runtime, request.model, key, response)
+        await _cache_set(hass, runtime, request.model, key, response)
         return response
 
     return handler

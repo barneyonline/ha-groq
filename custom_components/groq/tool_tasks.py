@@ -3,46 +3,74 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from contextlib import aclosing
 
 from homeassistant.components.conversation import AssistantContent, ChatLog
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import llm
 
-from .api import ChatCompletionResult, TextGenerationRequest
+from .api import ChatCompletionResult, GroqApiClient, TextGenerationRequest
 from .async_utils import async_await_owned
-from .chat import assistant_content_from_result, tool_calls_for_completion
+from .chat import assistant_content_from_result, async_tool_calls_for_completion
+
+MAX_CONCURRENT_TOOL_CALLS = 8
 
 
 async def async_record_chat_completion(
+    hass: HomeAssistant,
     chat_log: ChatLog,
     request: TextGenerationRequest,
     result: ChatCompletionResult,
     agent_id: str,
     *,
+    client: GroqApiClient,
     final_tool_round: bool,
 ) -> None:
     """Record a non-streaming completion and dispatch only permitted rounds."""
-    tool_calls = tool_calls_for_completion(
-        request, result, final_tool_round=final_tool_round
+    tool_calls = await async_tool_calls_for_completion(
+        hass, request, result, final_tool_round=final_tool_round
     )
     content = assistant_content_from_result(result, agent_id, tool_calls)
     if tool_calls:
-        await async_add_tool_batch(chat_log, content)
+        await async_add_tool_batch(chat_log, content, client.ensure_open)
     else:
         chat_log.async_add_assistant_content_without_tools(content)
 
 
 async def async_add_tool_batch(
-    chat_log: ChatLog, content: AssistantContent, *, notify_deltas: bool = False
+    chat_log: ChatLog,
+    content: AssistantContent,
+    ensure_open: Callable[[], None],
+    *,
+    notify_deltas: bool = False,
 ) -> None:
     """Record a batch through ChatLog and cancel its tasks together on exit."""
     tasks: dict[str, asyncio.Task[llm.ToolResult]] = {}
+    slots = asyncio.Semaphore(MAX_CONCURRENT_TOOL_CALLS)
+
+    async def run_tool(api: llm.APIInstance, tool: llm.ToolInput) -> llm.ToolResult:
+        async with slots:
+            if completion.cancelled():
+                raise asyncio.CancelledError
+            ensure_open()
+            return await api.async_call_tool(tool)
 
     async def record_results() -> None:
         # Cancellation can reach the shield before its owner resumes. Do not
         # give ChatLog pending tool calls if the turn has already been cancelled.
         if completion.cancelled():
             return
+        ensure_open()
+        if (tool_api := chat_log.llm_api) is not None:
+            for tool in content.tool_calls or ():
+                if not tool.external:
+                    # Let ChatLog publish the assistant item before any tool runs.
+                    tasks[tool.id] = chat_log.hass.async_create_task(
+                        run_tool(tool_api, tool),
+                        name=f"llm_tool_{tool.id}",
+                        eager_start=False,
+                    )
         async with aclosing(
             chat_log.async_add_assistant_content(content, tool_call_tasks=tasks)
         ) as results:

@@ -2831,9 +2831,9 @@ async def test_services_handlers_and_registration_cover_remaining_paths(
     )
 
     key = _cache_key("ns", {"b": 2, "a": 1})
-    _cache_set(runtime, "openai/gpt-oss-20b", key, {"text": "cached"})
-    assert _cache_get(runtime, "openai/gpt-oss-20b", key)["cached"] is True
-    assert _cache_get(runtime, "llama-3.1-8b-instant", "missing") is None
+    await _cache_set(hass, runtime, "openai/gpt-oss-20b", key, {"text": "cached"})
+    assert (await _cache_get(hass, runtime, "openai/gpt-oss-20b", key))["cached"]
+    assert await _cache_get(hass, runtime, "llama-3.1-8b-instant", "missing") is None
 
     structured = await _handle_generate_structured(hass)(
         service_call(

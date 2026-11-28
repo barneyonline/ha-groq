@@ -22,6 +22,7 @@ from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
     HomeAssistantError,
+    ServiceValidationError,
 )
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
@@ -73,6 +74,7 @@ from custom_components.groq.text_generation import service_unique_id
 from custom_components.groq.tts import GroqTTSEntity
 
 from .test_foundation import DummyResponse, DummySession
+from .test_transport_architecture import Response
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -2427,3 +2429,85 @@ async def test_native_refresh_cancels_stale_deletes_if_reconciliation_fails(
     assert not ir.async_get(hass)._refreshes
     async_reconcile_entry_issues(hass, entry, model_registry=model_registry)
     assert not own_issues(hass)
+
+
+async def test_inflight_text_finishes_without_restoring_unloaded_runtime(
+    hass, monkeypatch
+):
+    started, release = asyncio.Event(), asyncio.Event()
+    closed = asyncio.Event()
+
+    class HeldResponse(Response):
+        async def iter_chunked(self, size):
+            started.set()
+            await release.wait()
+            async for chunk in super().iter_chunked(size):
+                yield chunk
+
+        async def __aexit__(self, *_):
+            closed.set()
+
+    class HeldSession(LifecycleSession):
+        def request(self, method, url, **kwargs):
+            if url.endswith("/chat/completions"):
+                self.requests.append((url, kwargs))
+                return HeldResponse(body=b'{"choices":[{"message":{"content":"ok"}}]}')
+            return super().request(method, url, **kwargs)
+
+    service = text_service(model="openai/gpt-oss-20b")
+    service["data"]["prompt_caching"] = True
+    entry = account(hass, services=[service])
+    session = HeldSession()
+    monkeypatch.setattr(
+        "custom_components.groq.api.async_get_clientsession", lambda _: session
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    runtime = entry.runtime_data
+    runtime.prompt_cache.set("seed", {"text": "retired"})
+    action = asyncio.create_task(
+        hass.services.async_call(
+            "groq",
+            "generate_text",
+            {"service_id": "text-service", "prompt": "Return ok"},
+            blocking=True,
+            return_response=True,
+        )
+    )
+    try:
+        async with asyncio.timeout(3):
+            await started.wait()
+            assert await hass.config_entries.async_unload(entry.entry_id)
+            assert not action.done()
+            assert runtime.prompt_cache.size == 0
+            release.set()
+            assert (await action)["text"] == "ok"
+        assert closed.is_set()
+        assert not runtime.client.usage.values
+        assert runtime.prompt_cache.size == 0
+        with pytest.raises(GroqApiError, match="unloaded"):
+            await runtime.client.async_generate_text(
+                TextGenerationRequest(prompt="new", model=TEXT_MODEL)
+            )
+        with pytest.raises(ServiceValidationError) as err:
+            await hass.services.async_call(
+                "groq",
+                "generate_text",
+                {
+                    "config_entry_id": entry.entry_id,
+                    "service_id": "text-service",
+                    "prompt": "Do not dispatch",
+                },
+                blocking=True,
+                return_response=True,
+            )
+        assert err.value.translation_key == "no_loaded_config_entry"
+        assert getattr(entry, "runtime_data", None) is None
+        assert (
+            sum(url.endswith("/chat/completions") for url, _ in session.requests) == 1
+        )
+    finally:
+        release.set()
+        if not action.done():
+            action.cancel()
+        await asyncio.gather(action, return_exceptions=True)

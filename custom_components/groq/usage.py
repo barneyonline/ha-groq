@@ -20,6 +20,7 @@ class GroqUsage:
     def __init__(self) -> None:
         self.values: dict[str, dict[str, float | None]] = {}
         self._listeners: set[Callable[[], None]] = set()
+        self._closed = False
 
     def subscribe(self, listener: Callable[[], None]) -> Callable[[], None]:
         """Subscribe until the entity is removed."""
@@ -28,7 +29,7 @@ class GroqUsage:
 
     def record(self, service_id: str | None, usage: dict[str, Any]) -> None:
         """Replace latest metrics; never carry missing values across requests."""
-        if not service_id:
+        if self._closed or not service_id:
             return
         details = usage.get("prompt_tokens_details")
         cached = (
@@ -55,3 +56,8 @@ class GroqUsage:
         """Release measurements and callbacks when the client unloads."""
         self.values.clear()
         self._listeners.clear()
+
+    def close(self) -> None:
+        """Retire these measurements while already-admitted requests finish."""
+        self._closed = True
+        self.clear()
