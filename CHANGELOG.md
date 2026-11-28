@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - Label admin-only Home Assistant tool sets in Groq's Assist configuration.
 - Link service-specific repairs to their Groq service in Home Assistant 2026.12.
+- Preserve model-access repair dismissals when an in-flight request succeeds while a Groq account is being disabled.
 
 ## v2.3.1 - 2026-11-27
 

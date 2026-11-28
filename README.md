@@ -85,6 +85,9 @@ Requires **Home Assistant 2026.11.0+**, a Groq API key and internet access. Some
 
 Full configuration, action examples, limitations and removal: **[Groq user guide](docs/user-guide.md)**.
 
+Home Assistant hides model-access repairs for disabled Groq accounts and keeps
+their dismissals when you re-enable the account.
+
 <details>
 <summary>Compatibility and service limits</summary>
 

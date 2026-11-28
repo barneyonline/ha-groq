@@ -135,9 +135,11 @@ def build_runtime(hass: HomeAssistant, entry: GroqConfigEntry) -> GroqRuntimeDat
     )
 
     def repair_context_is_current() -> bool:
-        # Core replaces these mappings synchronously before update listeners run.
+        # Core marks the entry disabled before awaiting platform unload and
+        # replaces configuration mappings before update listeners run.
         return (
-            entry.data is original_data
+            getattr(entry, "disabled_by", None) is None
+            and entry.data is original_data
             and entry.options is original_options
             and getattr(entry, "subentries", None) is original_subentries
             and all(
