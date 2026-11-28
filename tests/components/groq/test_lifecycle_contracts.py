@@ -1,16 +1,22 @@
 """Regression tests across real Home Assistant configuration and registry boundaries."""
 
 import asyncio
+from collections.abc import Iterable
 from copy import deepcopy
 from datetime import timedelta
 from types import MappingProxyType
+from typing import Any, Self
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from homeassistant.components.conversation import ChatLog, ConversationInput
-from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
-from homeassistant.const import CONF_LLM_HASS_API
-from homeassistant.core import Context
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigEntryDisabler,
+    ConfigEntryState,
+)
+from homeassistant.const import CONF_LLM_HASS_API, Platform
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.data_entry_flow import InvalidData
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -198,12 +204,12 @@ class LifecycleSession:
 class PausedProviderResponse(DummyResponse):
     """Hold a provider response until the test releases it."""
 
-    def __init__(self, status: int, payload: dict) -> None:
+    def __init__(self, status: int, payload: dict[str, Any]) -> None:
         super().__init__(status, {}, payload)
         self.started = asyncio.Event()
         self.release = asyncio.Event()
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Self:
         self.started.set()
         await self.release.wait()
         return self
@@ -847,14 +853,18 @@ async def test_model_access_repairs_are_owned_and_clear_after_matching_success(h
     assert not own_issues(hass)
 
 
-async def test_inflight_text_success_preserves_dismissal_during_disable(hass):
+async def test_inflight_text_success_preserves_dismissal_during_disable(
+    hass: HomeAssistant,
+) -> None:
     """Core hides the dismissed repair while the account unloads."""
     unload_started, release_unload = asyncio.Event(), asyncio.Event()
 
     config_entries = hass.config_entries
     unload_platforms = config_entries.async_unload_platforms
 
-    async def pause_platform_unload(entry, platforms):
+    async def pause_platform_unload(
+        entry: ConfigEntry, platforms: Iterable[Platform | str]
+    ) -> bool:
         unload_started.set()
         await release_unload.wait()
         return await unload_platforms(entry, platforms)
