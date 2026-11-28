@@ -4,9 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- Label admin-only Home Assistant tool sets in Groq's Assist configuration.
-- Link service-specific repairs to their Groq service in Home Assistant 2026.12.
-- Preserve model-access repair dismissals when an in-flight request succeeds while a Groq account is being disabled.
+## v2.4.0 - 2026-11-28
+
+### 🚧 Breaking changes
+
+- Limit each Assist and AI Task round to 64 Home Assistant tool calls and 2,097,152 total JSON argument characters. Run up to eight tool calls concurrently. (#96)
+
+### ✨ New features
+
+- Link service-specific model-access repairs to their Groq service in Home Assistant 2026.12. Deleting the service clears its repairs. (#94)
+
+### 🐛 Bug fixes
+
+- Preserve dismissed model-access repairs when an in-flight request succeeds while its Groq account is being disabled. (#95)
+- Require a loaded account for Groq actions. Let text requests already sent to Groq finish after unload and keep their late results from updating local usage, caches, or repairs. (#96)
+
+### 🔧 Improvements
+
+- Label the admin-only Home Assistant tool set in Assist configuration and document which tool sets work in shared voice pipelines. (#94)
+- Move large tool arguments and response-cache work off the event loop. Cap individual cached responses at 1 MiB and bypass large cache operations when eight are in progress. (#96)
+
+### 🔄 Other changes
+
+- Add compatibility testing for Home Assistant 2026.12 while retaining the 2026.11.0 minimum. (#94)
+- Bump the integration manifest version to `2.4.0`.
 
 ## v2.3.1 - 2026-11-27
 
